@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iHIM</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Bottom Status Bar -->
+    <div id="bottom-bar" class="bottom-bar">
+        <!-- System Monitor -->
+        <div class="bar-widget" id="system-monitor">
+            <span class="bar-label">CPU</span>
+            <span id="cpu-value" class="bar-value">--</span>
+            <span class="bar-sep">|</span>
+            <span class="bar-label">RAM</span>
+            <span id="ram-value" class="bar-value">--</span>
+        </div>
+
+        <div class="bar-spacer"></div>
+
+        <!-- Agent Scores -->
+        <div class="bar-widget bar-clickable" id="agent-metrics" onclick="openMetricsModal()">
+            <span class="bar-label">Score</span>
+            <span id="metrics-overall-score" class="bar-score">--</span>
+            <span class="bar-cats">
+                <span title="Completion">C:<span id="cat-completion">--</span></span>
+                <span title="Quality">Q:<span id="cat-quality">--</span></span>
+                <span title="Efficiency">E:<span id="cat-efficiency">--</span></span>
+                <span title="Collaboration">T:<span id="cat-collaboration">--</span></span>
+            </span>
+        </div>
+    </div>
+
+    <!-- Metrics Modal -->
+    <div id="metrics-modal" class="modal">
+        <div class="modal-content metrics-modal-content">
+            <div class="modal-header">
+                <h2>Agent Performance Scores</h2>
+                <button class="close-btn" onclick="closeMetricsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Overall Score -->
+                <div class="score-hero">
+                    <div class="score-circle">
+                        <span id="modal-overall-score" class="score-big">--</span>
+                    </div>
+                    <div class="score-label">Overall Score</div>
+                    <div id="modal-agent-count" class="score-subtitle">-- agents</div>
+                </div>
+
+                <!-- Category Scores -->
+                <div class="category-scores">
+                    <div class="category-row">
+                        <span class="category-name">Completion</span>
+                        <div class="category-bar-bg">
+                            <div id="bar-completion" class="category-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="score-completion" class="category-value">--</span>
+                    </div>
+                    <div class="category-row">
+                        <span class="category-name">Quality</span>
+                        <div class="category-bar-bg">
+                            <div id="bar-quality" class="category-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="score-quality" class="category-value">--</span>
+                    </div>
+                    <div class="category-row">
+                        <span class="category-name">Efficiency</span>
+                        <div class="category-bar-bg">
+                            <div id="bar-efficiency" class="category-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="score-efficiency" class="category-value">--</span>
+                    </div>
+                    <div class="category-row">
+                        <span class="category-name">Collaboration</span>
+                        <div class="category-bar-bg">
+                            <div id="bar-collaboration" class="category-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="score-collaboration" class="category-value">--</span>
+                    </div>
+                </div>
+
+                <!-- Per-Agent Breakdown -->
+                <div class="agent-breakdown">
+                    <h3>Per-Agent Scores</h3>
+                    <div id="agent-score-list" class="agent-score-list">
+                        <div class="no-agents">No agent data yet</div>
+                    </div>
+                </div>
+
+                <!-- Learnings & Blockers -->
+                <div class="insights-grid">
+                    <div class="insights-section">
+                        <h3>Top Learnings</h3>
+                        <ul id="metric-learnings" class="learnings-list">
+                            <li>No learnings yet</li>
+                        </ul>
+                    </div>
+                    <div class="insights-section">
+                        <h3>Common Blockers</h3>
+                        <ul id="metric-blockers" class="blockers-list">
+                            <li>No blockers recorded</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <span id="metrics-last-updated">Last updated: --</span>
+                <button class="refresh-btn" onclick="loadMetrics()">Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>iHIM</h1>
+            <p class="subtitle">Command Center</p>
+        </header>
+
+        <main id="actions-grid">
+            <!-- Actions loaded dynamically -->
+        </main>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <!-- Team Modal -->
+    <div id="team-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Feature Builder</h2>
+                <button class="close-btn" onclick="closeTeamModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc">Enter your task. It will be morphed into 5 tailored prompts for each specialist.</p>
+                <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow"></textarea>
+                <div class="team-agents">
+                    <span class="agent-badge">Frontend</span>
+                    <span class="agent-badge">Backend</span>
+                    <span class="agent-badge">DevOps</span>
+                    <span class="agent-badge">QA</span>
+                    <span class="agent-badge">Security</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="spawn-btn" onclick="spawnTeam()">Spawn Team</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Notes Modal -->
+    <div id="notes-modal" class="modal">
+        <div class="modal-content notes-modal-content">
+            <div class="modal-header">
+                <h2>Quick Notes</h2>
+                <button class="close-btn" onclick="closeNotesModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="notes-input-row">
+                    <textarea id="new-note-input" placeholder="Jot down a quick note..."></textarea>
+                    <button class="add-note-btn" onclick="addNote()">Save</button>
+                </div>
+                <div id="notes-list" class="notes-list">
+                    <!-- Notes loaded dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer notes-footer">
+                <span id="notes-count">0 notes</span>
+                <button class="clear-btn" onclick="clearAllNotes()">Clear All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Note Modal -->
+    <div id="edit-note-modal" class="modal">
+        <div class="modal-content edit-note-modal-content">
+            <div class="modal-header">
+                <h2>Edit Note</h2>
+                <button class="close-btn" onclick="closeEditNoteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <textarea id="edit-note-input" placeholder="Edit your note..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="save-note-btn" onclick="saveEditedNote()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flight Path Modal -->
+    <div id="flightpath-modal" class="modal">
+        <div class="modal-content flightpath-modal-content">
+            <div class="modal-header">
+                <h2>Flight Path</h2>
+                <div class="flightpath-controls">
+                    <button class="fp-control-btn" onclick="flightPath.zoomIn()" title="Zoom In">+</button>
+                    <button class="fp-control-btn" onclick="flightPath.zoomOut()" title="Zoom Out">−</button>
+                    <button class="fp-control-btn" onclick="flightPath.resetView()" title="Reset View">⟲</button>
+                    <button class="fp-control-btn" onclick="flightPath.toggleLayout()" title="Toggle Layout">⊞</button>
+                </div>
+                <button class="close-btn" onclick="closeFlightPathModal()">&times;</button>
+            </div>
+            <div class="modal-body flightpath-body">
+                <div class="flightpath-sidebar">
+                    <div class="fp-breadcrumb" id="fp-breadcrumb">
+                        <span class="fp-crumb active">iHIM</span>
+                    </div>
+                    <div class="fp-legend">
+                        <div class="fp-legend-section">
+                            <div class="fp-legend-title">Components</div>
+                            <div class="fp-legend-item"><span class="fp-dot fp-dot-api"></span>API</div>
+                            <div class="fp-legend-item"><span class="fp-dot fp-dot-team"></span>Team</div>
+                            <div class="fp-legend-item"><span class="fp-dot fp-dot-data"></span>Data</div>
+                            <div class="fp-legend-item"><span class="fp-dot fp-dot-feedback"></span>Feedback</div>
+                            <div class="fp-legend-item"><span class="fp-dot fp-dot-sanity"></span>Sanity</div>
+                            <div class="fp-legend-item"><span class="fp-dot fp-dot-ui"></span>UI</div>
+                        </div>
+                        <div class="fp-legend-section">
+                            <div class="fp-legend-title">Health</div>
+                            <div class="fp-legend-item"><span class="fp-ring fp-ring-healthy"></span>Healthy</div>
+                            <div class="fp-legend-item"><span class="fp-ring fp-ring-degraded"></span>Degraded</div>
+                            <div class="fp-legend-item"><span class="fp-ring fp-ring-error"></span>Error</div>
+                            <div class="fp-legend-item"><span class="fp-ring fp-ring-inactive"></span>Inactive</div>
+                        </div>
+                    </div>
+                    <div class="fp-node-info" id="fp-node-info">
+                        <div class="fp-info-placeholder">Click a node to see details</div>
+                    </div>
+                </div>
+                <div class="flightpath-canvas-container">
+                    <canvas id="flightpath-canvas"></canvas>
+                </div>
+            </div>
+            <div class="modal-footer flightpath-footer">
+                <span id="fp-status">Drag to pan • Scroll to zoom • Click node for details</span>
+                <button class="fp-action-btn" onclick="flightPath.loadProjectStructure()">Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slash Command Center Modal -->
+    <div id="slash-modal" class="modal">
+        <div class="modal-content slash-modal-content">
+            <div class="modal-header">
+                <h2>/ Command Center</h2>
+                <button class="close-btn" onclick="closeSlashModal()">&times;</button>
+            </div>
+            <div class="modal-body slash-body">
+                <p class="slash-intro">the agent harness commands for workspace. Click to copy, then paste in the agent harness.</p>
+
+                <div class="slash-search-row">
+                    <input type="text" id="slash-search" placeholder="Search commands..." oninput="filterSlashCommands()">
+                </div>
+
+                <div id="slash-list" class="slash-list">
+                    <!-- Commands loaded dynamically -->
+                </div>
+
+                <div class="slash-brainstorm">
+                    <h3>Brainstorm New Commands</h3>
+                    <div class="brainstorm-input-row">
+                        <textarea id="brainstorm-input" placeholder="Describe a commands idea...&#10;e.g., '/standup - Generate a daily standup summary from git commits and task list'"></textarea>
+                        <button class="save-idea-btn" onclick="saveSlashIdea()">Save Idea</button>
+                    </div>
+                    <div id="slash-ideas" class="slash-ideas">
+                        <!-- Saved ideas loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer slash-footer">
+                <span id="slash-count">0 commands</span>
+                <span class="slash-hint">Tip: Commands can auto-trigger via hooks</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task List Modal -->
+    <div id="task-modal" class="modal">
+        <div class="modal-content task-modal-content">
+            <div class="modal-header">
+                <h2>Task List</h2>
+                <button class="close-btn" onclick="closeTaskModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="task-input-row">
+                    <input type="text" id="new-task-input" placeholder="Add a new task..." onkeypress="if(event.key==='Enter')addTask()">
+                    <select id="new-task-priority">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                    <button class="add-task-btn" onclick="addTask()">+</button>
+                </div>
+                <div id="task-list" class="task-list">
+                    <!-- Tasks loaded dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer task-footer">
+                <span id="task-count">0 tasks</span>
+                <button class="clear-btn" onclick="clearCompleted()">Clear Completed</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '';
+
+        async function loadActions() {
+            const res = await fetch(`${API}/api/actions`);
+            const data = await res.json();
+            renderActions(data.actions);
+        }
+
+        function renderActions(actions) {
+            const grid = document.getElementById('actions-grid');
+            grid.innerHTML = '';
+
+            // Group by category
+            const categories = {};
+            for (const [id, action] of Object.entries(actions)) {
+                const cat = action.category || 'other';
+                if (!categories[cat]) categories[cat] = [];
+                categories[cat].push({ id, ...action });
+            }
+
+            for (const [category, items] of Object.entries(categories)) {
+                const section = document.createElement('section');
+                section.className = 'category';
+                section.innerHTML = `<h2>${category.toUpperCase()}</h2>`;
+
+                const buttons = document.createElement('div');
+                buttons.className = 'buttons';
+
+                for (const action of items) {
+                    const btn = document.createElement('button');
+                    btn.className = 'action-btn';
+                    btn.innerHTML = `
+                        <span class="icon">${getIcon(action.icon)}</span>
+                        <span class="name">${action.name}</span>
+                        <span class="desc">${action.description}</span>
+                    `;
+                    btn.onclick = () => runAction(action.id);
+                    buttons.appendChild(btn);
+                }
+
+                section.appendChild(buttons);
+                grid.appendChild(section);
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            setTimeout(() => {
+                status.className = 'status';
+            }, 3000);
+        }
+
+        function getIcon(icon) {
+            const icons = {
+                'cli': '❯',
+                'rocket': '🚀',
+                'terminal': '⌘',
+                'folder': '📁',
+                'play': '▶',
+                'code': '💻',
+                'team': '👥',
+                'x': '✕',
+                'checklist': '☑',
+                'note': '📝',
+                'flightpath': '🗺️',
+                'map': '🗺️',
+                'slash': '⌘',
+                'default': '⚡'
+            };
+            return icons[icon] || icons['default'];
+        }
+
+        // Team Modal Functions
+        function openTeamModal() {
+            document.getElementById('team-modal').classList.add('active');
+            document.getElementById('team-prompt').focus();
+        }
+
+        function closeTeamModal() {
+            document.getElementById('team-modal').classList.remove('active');
+            document.getElementById('team-prompt').value = '';
+        }
+
+        async function spawnTeam() {
+            const prompt = document.getElementById('team-prompt').value.trim();
+            if (!prompt) {
+                showStatus('Please enter a task description', 'error');
+                return;
+            }
+
+            showStatus('Spawning team...', 'pending');
+            closeTeamModal();
+
+            try {
+                const res = await fetch(`${API}/api/team/spawn`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, project: 'workspace' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showStatus(data.message, 'success');
+                } else {
+                    showStatus(data.message, 'error');
+                }
+            } catch (err) {
+                showStatus('Failed to spawn team', 'error');
+            }
+        }
+
+        // Override runAction to handle modals
+        async function runAction(actionId) {
+            if (actionId === 'software_dev_team') {
+                openTeamModal();
+                return;
+            }
+            if (actionId === 'task_list') {
+                openTaskModal();
+                return;
+            }
+            if (actionId === 'quick_notes') {
+                openNotesModal();
+                return;
+            }
+            if (actionId === 'flight_path') {
+                openFlightPathModal();
+                return;
+            }
+            if (actionId === 'slash_commands') {
+                openSlashModal();
+                return;
+            }
+
+            showStatus('Running...', 'pending');
+            try {
+                const res = await fetch(`${API}/api/actions/${actionId}`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showStatus(data.message, 'success');
+                } else {
+                    showStatus(data.message, 'error');
+                }
+            } catch (err) {
+                showStatus('Failed to execute action', 'error');
+            }
+        }
+
+        // =====================
+        // Task List Functions
+        // =====================
+        let tasks = [];
+
+        function openTaskModal() {
+            document.getElementById('task-modal').classList.add('active');
+            loadTasks();
+            document.getElementById('new-task-input').focus();
+        }
+
+        function closeTaskModal() {
+            document.getElementById('task-modal').classList.remove('active');
+        }
+
+        async function loadTasks() {
+            try {
+                const res = await fetch(`${API}/api/tasks`);
+                const data = await res.json();
+                tasks = data.tasks || [];
+                renderTasks();
+            } catch (err) {
+                console.error('Failed to load tasks:', err);
+            }
+        }
+
+        function renderTasks() {
+            const list = document.getElementById('task-list');
+            const countEl = document.getElementById('task-count');
+
+            if (tasks.length === 0) {
+                list.innerHTML = '<div class="no-tasks">No tasks yet. Add one above!</div>';
+                countEl.textContent = '0 tasks';
+                return;
+            }
+
+            // Sort: incomplete first, then by priority (high > medium > low)
+            const priorityOrder = { high: 0, medium: 1, low: 2 };
+            const sorted = [...tasks].sort((a, b) => {
+                if (a.completed !== b.completed) return a.completed ? 1 : -1;
+                return priorityOrder[a.priority] - priorityOrder[b.priority];
+            });
+
+            list.innerHTML = sorted.map(task => `
+                <div class="task-item ${task.completed ? 'completed' : ''}" data-id="${task.id}">
+                    <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask('${task.id}')">
+                    <span class="task-text">${escapeHtml(task.text)}</span>
+                    <select class="task-priority priority-${task.priority}" onchange="updatePriority('${task.id}', this.value)">
+                        <option value="low" ${task.priority === 'low' ? 'selected' : ''}>Low</option>
+                        <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>Med</option>
+                        <option value="high" ${task.priority === 'high' ? 'selected' : ''}>High</option>
+                    </select>
+                    <button class="delete-task-btn" onclick="deleteTask('${task.id}')">×</button>
+                </div>
+            `).join('');
+
+            const incomplete = tasks.filter(t => !t.completed).length;
+            countEl.textContent = `${incomplete} of ${tasks.length} remaining`;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function addTask() {
+            const input = document.getElementById('new-task-input');
+            const priority = document.getElementById('new-task-priority').value;
+            const text = input.value.trim();
+
+            if (!text) return;
+
+            try {
+                const res = await fetch(`${API}/api/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, priority })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    tasks.push(data.task);
+                    renderTasks();
+                    input.value = '';
+                }
+            } catch (err) {
+                console.error('Failed to add task:', err);
+            }
+        }
+
+        async function toggleTask(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            try {
+                await fetch(`${API}/api/tasks/${taskId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ completed: !task.completed })
+                });
+                task.completed = !task.completed;
+                renderTasks();
+            } catch (err) {
+                console.error('Failed to toggle task:', err);
+            }
+        }
+
+        async function updatePriority(taskId, priority) {
+            try {
+                await fetch(`${API}/api/tasks/${taskId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ priority })
+                });
+                const task = tasks.find(t => t.id === taskId);
+                if (task) task.priority = priority;
+                renderTasks();
+            } catch (err) {
+                console.error('Failed to update priority:', err);
+            }
+        }
+
+        async function deleteTask(taskId) {
+            try {
+                await fetch(`${API}/api/tasks/${taskId}`, { method: 'DELETE' });
+                tasks = tasks.filter(t => t.id !== taskId);
+                renderTasks();
+            } catch (err) {
+                console.error('Failed to delete task:', err);
+            }
+        }
+
+        async function clearCompleted() {
+            try {
+                await fetch(`${API}/api/tasks/clear-completed`, { method: 'POST' });
+                tasks = tasks.filter(t => !t.completed);
+                renderTasks();
+            } catch (err) {
+                console.error('Failed to clear completed:', err);
+            }
+        }
+
+        // Close task modal on outside click
+        document.getElementById('task-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeTaskModal();
+            }
+        });
+
+        // Close modal on outside click
+        document.getElementById('team-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeTeamModal();
+            }
+        });
+
+        // =====================
+        // Quick Notes Functions (localStorage)
+        // =====================
+        let notes = [];
+        let editingNoteId = null;
+
+        function loadNotesFromStorage() {
+            try {
+                const stored = localStorage.getItem('ihim_notes');
+                notes = stored ? JSON.parse(stored) : [];
+            } catch (err) {
+                console.error('Failed to load notes from localStorage:', err);
+                notes = [];
+            }
+        }
+
+        function saveNotesToStorage() {
+            try {
+                localStorage.setItem('ihim_notes', JSON.stringify(notes));
+            } catch (err) {
+                console.error('Failed to save notes to localStorage:', err);
+            }
+        }
+
+        function openNotesModal() {
+            document.getElementById('notes-modal').classList.add('active');
+            loadNotesFromStorage();
+            renderNotes();
+            document.getElementById('new-note-input').focus();
+        }
+
+        function closeNotesModal() {
+            document.getElementById('notes-modal').classList.remove('active');
+            document.getElementById('new-note-input').value = '';
+        }
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+
+            // Less than 1 minute ago
+            if (diff < 60000) return 'Just now';
+            // Less than 1 hour ago
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            // Less than 24 hours ago
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+            // Same year
+            if (date.getFullYear() === now.getFullYear()) {
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        function renderNotes() {
+            const list = document.getElementById('notes-list');
+            const countEl = document.getElementById('notes-count');
+
+            if (notes.length === 0) {
+                list.innerHTML = '<div class="no-notes">No notes yet. Write one above!</div>';
+                countEl.textContent = '0 notes';
+                return;
+            }
+
+            // Sort by timestamp, newest first
+            const sorted = [...notes].sort((a, b) => b.timestamp - a.timestamp);
+
+            list.innerHTML = sorted.map(note => `
+                <div class="note-item" data-id="${note.id}">
+                    <div class="note-content">
+                        <div class="note-text">${escapeHtml(note.text)}</div>
+                        <div class="note-timestamp">${formatTimestamp(note.timestamp)}</div>
+                    </div>
+                    <div class="note-actions">
+                        <button class="edit-note-btn" onclick="openEditNote('${note.id}')" title="Edit">✎</button>
+                        <button class="delete-note-btn" onclick="deleteNote('${note.id}')" title="Delete">×</button>
+                    </div>
+                </div>
+            `).join('');
+
+            countEl.textContent = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+        }
+
+        function generateId() {
+            return 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function addNote() {
+            const input = document.getElementById('new-note-input');
+            const text = input.value.trim();
+
+            if (!text) {
+                showStatus('Please enter a note', 'error');
+                return;
+            }
+
+            const note = {
+                id: generateId(),
+                text: text,
+                timestamp: Date.now()
+            };
+
+            notes.push(note);
+            saveNotesToStorage();
+            renderNotes();
+            input.value = '';
+            input.focus();
+            showStatus('Note saved', 'success');
+        }
+
+        function openEditNote(noteId) {
+            const note = notes.find(n => n.id === noteId);
+            if (!note) return;
+
+            editingNoteId = noteId;
+            document.getElementById('edit-note-input').value = note.text;
+            document.getElementById('edit-note-modal').classList.add('active');
+            document.getElementById('edit-note-input').focus();
+        }
+
+        function closeEditNoteModal() {
+            document.getElementById('edit-note-modal').classList.remove('active');
+            document.getElementById('edit-note-input').value = '';
+            editingNoteId = null;
+        }
+
+        function saveEditedNote() {
+            if (!editingNoteId) return;
+
+            const input = document.getElementById('edit-note-input');
+            const text = input.value.trim();
+
+            if (!text) {
+                showStatus('Note cannot be empty', 'error');
+                return;
+            }
+
+            const note = notes.find(n => n.id === editingNoteId);
+            if (note) {
+                note.text = text;
+                note.updatedAt = Date.now();
+                saveNotesToStorage();
+                renderNotes();
+                showStatus('Note updated', 'success');
+            }
+
+            closeEditNoteModal();
+        }
+
+        function deleteNote(noteId) {
+            notes = notes.filter(n => n.id !== noteId);
+            saveNotesToStorage();
+            renderNotes();
+            showStatus('Note deleted', 'success');
+        }
+
+        function clearAllNotes() {
+            if (notes.length === 0) return;
+
+            if (confirm('Delete all notes? This cannot be undone.')) {
+                notes = [];
+                saveNotesToStorage();
+                renderNotes();
+                showStatus('All notes cleared', 'success');
+            }
+        }
+
+        // Close notes modal on outside click
+        document.getElementById('notes-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeNotesModal();
+            }
+        });
+
+        // Close edit note modal on outside click
+        document.getElementById('edit-note-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeEditNoteModal();
+            }
+        });
+
+        // Handle Ctrl+Enter to save note
+        document.getElementById('new-note-input').addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                addNote();
+            }
+        });
+
+        document.getElementById('edit-note-input').addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                saveEditedNote();
+            }
+        });
+
+        // =====================
+        // System Monitor
+        // =====================
+        async function updateSystemMonitor() {
+            try {
+                const res = await fetch(`${API}/api/system/stats`);
+                const data = await res.json();
+                document.getElementById('cpu-value').textContent = data.cpu?.percent || '--';
+                document.getElementById('ram-value').textContent = data.memory?.percent || '--';
+            } catch (err) {
+                // Silently fail - widget just shows '--'
+            }
+        }
+
+        // Poll every 2 seconds
+        setInterval(updateSystemMonitor, 2000);
+
+        // =====================
+        // Agent Metrics
+        // =====================
+        async function loadMetrics() {
+            try {
+                const res = await fetch(`${API}/api/feedback/metrics`);
+                const data = await res.json();
+
+                if (data.error) {
+                    // Feedback system not available
+                    document.getElementById('metrics-overall-score').textContent = '--';
+                    return;
+                }
+
+                // Get scores from response
+                const scores = data.scores || {};
+
+                // Update widget - overall score
+                const overall = scores.overall || 0;
+                document.getElementById('metrics-overall-score').textContent = Math.round(overall);
+
+                // Update widget - category scores
+                document.getElementById('cat-completion').textContent = Math.round(scores.completion || 0);
+                document.getElementById('cat-quality').textContent = Math.round(scores.quality || 0);
+                document.getElementById('cat-efficiency').textContent = Math.round(scores.efficiency || 0);
+                document.getElementById('cat-collaboration').textContent = Math.round(scores.collaboration || 0);
+
+                // Update modal if open
+                updateMetricsModal(data);
+
+            } catch (err) {
+                console.error('Failed to load metrics:', err);
+            }
+        }
+
+        function getScoreColor(score) {
+            if (score >= 80) return '#22c55e'; // Green
+            if (score >= 60) return '#3d6f9a'; // Blue
+            if (score >= 40) return '#f59e0b'; // Amber
+            return '#ef4444'; // Red
+        }
+
+        function updateMetricsModal(data) {
+            const scores = data.scores || {};
+            const agentScores = data.agent_scores || {};
+
+            // Overall score in hero
+            const overall = scores.overall || 0;
+            document.getElementById('modal-overall-score').textContent = Math.round(overall);
+            document.getElementById('modal-agent-count').textContent = `${data.agent_count || 0} agents`;
+
+            // Category bars
+            ['completion', 'quality', 'efficiency', 'collaboration'].forEach(cat => {
+                const val = scores[cat] || 0;
+                document.getElementById(`score-${cat}`).textContent = Math.round(val);
+                const bar = document.getElementById(`bar-${cat}`);
+                bar.style.width = `${val}%`;
+                bar.style.backgroundColor = getScoreColor(val);
+            });
+
+            // Per-agent breakdown
+            const agentList = document.getElementById('agent-score-list');
+            const agents = Object.entries(agentScores);
+            if (agents.length > 0) {
+                agentList.innerHTML = agents.map(([name, s]) => `
+                    <div class="agent-score-row">
+                        <span class="agent-name">${escapeHtml(name)}</span>
+                        <span class="agent-overall" style="color: ${getScoreColor(s.overall)}">${Math.round(s.overall)}</span>
+                        <span class="agent-cats">
+                            C:${Math.round(s.completion)} Q:${Math.round(s.quality)} E:${Math.round(s.efficiency)} T:${Math.round(s.collaboration)}
+                        </span>
+                    </div>
+                `).join('');
+            } else {
+                agentList.innerHTML = '<div class="no-agents">No agent data yet</div>';
+            }
+
+            // Learnings
+            const learningsEl = document.getElementById('metric-learnings');
+            const learnings = data.top_learnings || [];
+            if (learnings.length > 0) {
+                learningsEl.innerHTML = learnings.map(l => `<li>${escapeHtml(l)}</li>`).join('');
+            } else {
+                learningsEl.innerHTML = '<li class="empty">No learnings yet</li>';
+            }
+
+            // Blockers
+            const blockersEl = document.getElementById('metric-blockers');
+            const blockers = data.common_blockers || [];
+            if (blockers.length > 0) {
+                blockersEl.innerHTML = blockers.map(b => `<li>${escapeHtml(b)}</li>`).join('');
+            } else {
+                blockersEl.innerHTML = '<li class="empty">No blockers recorded</li>';
+            }
+
+            // Last updated
+            if (data.last_updated) {
+                document.getElementById('metrics-last-updated').textContent =
+                    'Last updated: ' + new Date(data.last_updated).toLocaleString();
+            }
+        }
+
+        function openMetricsModal() {
+            document.getElementById('metrics-modal').classList.add('active');
+            loadMetrics();
+        }
+
+        function closeMetricsModal() {
+            document.getElementById('metrics-modal').classList.remove('active');
+        }
+
+        // Close metrics modal on outside click
+        document.getElementById('metrics-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeMetricsModal();
+            }
+        });
+
+        // Poll metrics every 30 seconds
+        setInterval(loadMetrics, 30000);
+
+        // Load on start
+        loadActions();
+        updateSystemMonitor();
+        loadMetrics();
+
+        // =====================
+        // Flight Path Visualization
+        // =====================
+        const flightPath = {
+            canvas: null,
+            ctx: null,
+            nodes: [],
+            edges: [],
+            selectedNode: null,
+            hoveredNode: null,
+
+            // View state
+            zoom: 1,
+            panX: 0,
+            panY: 0,
+            isDragging: false,
+            dragStart: { x: 0, y: 0 },
+            lastPan: { x: 0, y: 0 },
+
+            // Layout
+            layoutMode: 'radial', // 'radial' or 'tree'
+
+            // Health data (merged from /api/system/health)
+            healthData: {},
+            healthPollInterval: null,
+
+            // Colors (C3.ai dark theme + health status)
+            colors: {
+                // Component types
+                root: '#3d6f9a',
+                api: '#3d6f9a',
+                team: '#8b5cf6',
+                data: '#06b6d4',
+                feedback: '#ec4899',
+                sanity: '#f97316',
+                ui: '#84cc16',
+                // Legacy types (fallback)
+                project: '#3d6f9a',
+                folder: '#4a8ac2',
+                file: '#666',
+                component: '#5a9f6a',
+                // Health status
+                healthy: '#22c55e',
+                degraded: '#f59e0b',
+                error: '#ef4444',
+                inactive: '#6b7280',
+                // Edges and UI
+                edge: '#333',
+                edgeActive: '#3d6f9a',
+                nodeHover: '#4a8ac2',
+                text: '#e5e5e5',
+                textDim: '#888'
+            },
+
+            init() {
+                this.canvas = document.getElementById('flightpath-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.setupEventListeners();
+                this.loadSystemTopology();
+                // Start health polling every 5 seconds
+                this.startHealthPolling();
+            },
+
+            startHealthPolling() {
+                // Clear any existing interval
+                if (this.healthPollInterval) {
+                    clearInterval(this.healthPollInterval);
+                }
+                // Poll immediately, then every 5 seconds
+                this.loadHealth();
+                this.healthPollInterval = setInterval(() => this.loadHealth(), 5000);
+            },
+
+            stopHealthPolling() {
+                if (this.healthPollInterval) {
+                    clearInterval(this.healthPollInterval);
+                    this.healthPollInterval = null;
+                }
+            },
+
+            setupEventListeners() {
+                // Mouse events
+                this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
+                this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+                this.canvas.addEventListener('mouseleave', () => this.onMouseLeave());
+                this.canvas.addEventListener('wheel', (e) => this.onWheel(e));
+                this.canvas.addEventListener('click', (e) => this.onClick(e));
+                this.canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
+
+                // Resize handler
+                window.addEventListener('resize', () => this.resizeCanvas());
+            },
+
+            resizeCanvas() {
+                const container = this.canvas.parentElement;
+                this.canvas.width = container.clientWidth;
+                this.canvas.height = container.clientHeight;
+                this.render();
+            },
+
+            async loadSystemTopology() {
+                try {
+                    const res = await fetch(`${API}/api/system/topology`);
+                    const data = await res.json();
+                    if (data.success && data.nodes) {
+                        // Transform API nodes to our format
+                        this.nodes = data.nodes.map(n => ({
+                            id: n.id,
+                            name: n.name,
+                            type: n.type,
+                            parent: n.parent,
+                            children: n.children || [],
+                            description: n.description,
+                            file_path: n.file_path,
+                            x: 0,
+                            y: 0
+                        }));
+
+                        // Transform edges
+                        this.edges = (data.edges || []).map(e => ({
+                            from: e.source,
+                            to: e.target,
+                            type: e.type
+                        }));
+
+                        this.layoutNodes();
+                        this.render();
+                    }
+                } catch (err) {
+                    console.error('Failed to load system topology:', err);
+                    // Use demo data if API not available
+                    this.loadDemoData();
+                }
+            },
+
+            async loadHealth() {
+                try {
+                    const res = await fetch(`${API}/api/system/health`);
+                    const data = await res.json();
+                    if (data.success && data.components) {
+                        // Store health data indexed by component ID
+                        this.healthData = {};
+                        data.components.forEach(c => {
+                            this.healthData[c.id] = c;
+                        });
+                        // Update status indicator
+                        const statusEl = document.getElementById('fp-status');
+                        if (statusEl) {
+                            const overall = data.overall_status || 'unknown';
+                            const dot = overall === 'healthy' ? '🟢' :
+                                        overall === 'degraded' ? '🟡' :
+                                        overall === 'error' ? '🔴' : '⚪';
+                            statusEl.textContent = `${dot} System ${overall} • ${this.layoutMode} layout • Drag to pan`;
+                        }
+                        this.render();
+                    }
+                } catch (err) {
+                    console.error('Failed to load health:', err);
+                }
+            },
+
+            // Keep for backwards compatibility / fallback
+            loadProjectStructure() {
+                this.loadSystemTopology();
+            },
+
+            loadDemoData() {
+                // Demo iHIM system structure (matches topology)
+                this.nodes = [
+                    { id: 'ihim-root', name: 'iHIM Command Center', type: 'root', x: 0, y: 0, children: ['api-server', 'team-system', 'blackboard', 'feedback-system', 'data-stores', 'sanity-check', 'ui-assets'] },
+                    { id: 'api-server', name: 'API Server', type: 'api', parent: 'ihim-root', children: ['actions-registry'] },
+                    { id: 'actions-registry', name: 'Actions Registry', type: 'api', parent: 'api-server' },
+                    { id: 'team-system', name: 'Agent Team', type: 'team', parent: 'ihim-root', children: ['team-spawner', 'team-router', 'team-state'] },
+                    { id: 'team-spawner', name: 'Spawner', type: 'team', parent: 'team-system' },
+                    { id: 'team-router', name: 'Router', type: 'team', parent: 'team-system' },
+                    { id: 'team-state', name: 'State Manager', type: 'team', parent: 'team-system' },
+                    { id: 'blackboard', name: 'Blackboard', type: 'data', parent: 'ihim-root' },
+                    { id: 'feedback-system', name: 'Feedback System', type: 'feedback', parent: 'ihim-root', children: ['feedback-processor', 'feedback-aggregator', 'feedback-optimizer', 'feedback-metrics'] },
+                    { id: 'feedback-processor', name: 'Processor', type: 'feedback', parent: 'feedback-system' },
+                    { id: 'feedback-aggregator', name: 'Aggregator', type: 'feedback', parent: 'feedback-system' },
+                    { id: 'feedback-optimizer', name: 'Optimizer', type: 'feedback', parent: 'feedback-system' },
+                    { id: 'feedback-metrics', name: 'Metrics', type: 'feedback', parent: 'feedback-system' },
+                    { id: 'data-stores', name: 'Data Stores', type: 'data', parent: 'ihim-root', children: ['data-tasks', 'data-notes', 'data-team-state'] },
+                    { id: 'data-tasks', name: 'Tasks', type: 'data', parent: 'data-stores' },
+                    { id: 'data-notes', name: 'Notes', type: 'data', parent: 'data-stores' },
+                    { id: 'data-team-state', name: 'Team State', type: 'data', parent: 'data-stores' },
+                    { id: 'sanity-check', name: 'Sanity Check', type: 'sanity', parent: 'ihim-root' },
+                    { id: 'ui-assets', name: 'UI Assets', type: 'ui', parent: 'ihim-root', children: ['ui-dashboard', 'ui-styles'] },
+                    { id: 'ui-dashboard', name: 'Dashboard', type: 'ui', parent: 'ui-assets' },
+                    { id: 'ui-styles', name: 'Styles', type: 'ui', parent: 'ui-assets' }
+                ];
+
+                // Build edges from parent relationships
+                this.edges = [];
+                this.nodes.forEach(node => {
+                    if (node.parent) {
+                        this.edges.push({ from: node.parent, to: node.id });
+                    }
+                });
+
+                this.layoutNodes();
+                this.render();
+            },
+
+            layoutNodes() {
+                if (this.layoutMode === 'radial') {
+                    this.layoutRadial();
+                } else {
+                    this.layoutTree();
+                }
+            },
+
+            layoutRadial() {
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+
+                // Find root nodes
+                const roots = this.nodes.filter(n => !n.parent);
+
+                // Position root at center
+                if (roots.length > 0) {
+                    roots[0].x = centerX;
+                    roots[0].y = centerY;
+                    this.layoutChildrenRadial(roots[0], 0, Math.PI * 2, 120);
+                }
+            },
+
+            layoutChildrenRadial(parent, startAngle, endAngle, radius) {
+                const children = this.nodes.filter(n => n.parent === parent.id);
+                if (children.length === 0) return;
+
+                const angleStep = (endAngle - startAngle) / children.length;
+                children.forEach((child, i) => {
+                    const angle = startAngle + angleStep * (i + 0.5);
+                    child.x = parent.x + Math.cos(angle) * radius;
+                    child.y = parent.y + Math.sin(angle) * radius;
+
+                    // Recursively layout grandchildren
+                    const childAngleSpread = angleStep * 0.8;
+                    this.layoutChildrenRadial(
+                        child,
+                        angle - childAngleSpread / 2,
+                        angle + childAngleSpread / 2,
+                        radius * 0.7
+                    );
+                });
+            },
+
+            layoutTree() {
+                const startX = 100;
+                const startY = 50;
+                const levelHeight = 80;
+                const nodeSpacing = 120;
+
+                const roots = this.nodes.filter(n => !n.parent);
+                let currentX = startX;
+
+                const layoutSubtree = (node, level, x) => {
+                    node.y = startY + level * levelHeight;
+
+                    const children = this.nodes.filter(n => n.parent === node.id);
+                    if (children.length === 0) {
+                        node.x = x;
+                        return x + nodeSpacing;
+                    }
+
+                    let childX = x;
+                    children.forEach(child => {
+                        childX = layoutSubtree(child, level + 1, childX);
+                    });
+
+                    // Center parent above children
+                    const firstChild = children[0];
+                    const lastChild = children[children.length - 1];
+                    node.x = (firstChild.x + lastChild.x) / 2;
+
+                    return childX;
+                };
+
+                roots.forEach(root => {
+                    currentX = layoutSubtree(root, 0, currentX);
+                });
+            },
+
+            render() {
+                if (!this.ctx) return;
+
+                const ctx = this.ctx;
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+
+                // Clear canvas
+                ctx.fillStyle = '#0a0a0a';
+                ctx.fillRect(0, 0, w, h);
+
+                // Apply transformations
+                ctx.save();
+                ctx.translate(this.panX + w/2, this.panY + h/2);
+                ctx.scale(this.zoom, this.zoom);
+                ctx.translate(-w/2, -h/2);
+
+                // Draw edges first
+                this.edges.forEach(edge => {
+                    const fromNode = this.nodes.find(n => n.id === edge.from);
+                    const toNode = this.nodes.find(n => n.id === edge.to);
+                    if (fromNode && toNode) {
+                        this.drawEdge(fromNode, toNode);
+                    }
+                });
+
+                // Draw nodes
+                this.nodes.forEach(node => {
+                    this.drawNode(node);
+                });
+
+                ctx.restore();
+            },
+
+            drawEdge(from, to) {
+                const ctx = this.ctx;
+                const isActive = this.selectedNode &&
+                    (this.selectedNode.id === from.id || this.selectedNode.id === to.id);
+
+                ctx.beginPath();
+                ctx.strokeStyle = isActive ? this.colors.edgeActive : this.colors.edge;
+                ctx.lineWidth = isActive ? 2 : 1;
+                ctx.moveTo(from.x, from.y);
+
+                // Curved line
+                const midX = (from.x + to.x) / 2;
+                const midY = (from.y + to.y) / 2 - 20;
+                ctx.quadraticCurveTo(midX, midY, to.x, to.y);
+                ctx.stroke();
+            },
+
+            drawNode(node) {
+                const ctx = this.ctx;
+                const isSelected = this.selectedNode && this.selectedNode.id === node.id;
+                const isHovered = this.hoveredNode && this.hoveredNode.id === node.id;
+
+                // Get health data for this node
+                const health = this.healthData[node.id];
+                const healthStatus = health ? health.status : 'inactive';
+
+                // Node size based on type
+                let radius = 20;
+                if (node.type === 'root') radius = 35;
+                else if (node.type === 'api' || node.type === 'team' || node.type === 'feedback') radius = 24;
+                else if (node.type === 'data' || node.type === 'sanity' || node.type === 'ui') radius = 22;
+                else if (node.type === 'project') radius = 30;
+                else if (node.type === 'folder') radius = 22;
+                else if (node.type === 'file') radius = 16;
+
+                // Node color based on type
+                let color = this.colors[node.type] || this.colors.file;
+                if (isHovered) color = this.colors.nodeHover;
+
+                // Health ring color
+                const healthColor = this.colors[healthStatus] || this.colors.inactive;
+
+                // Glow effect for selected
+                if (isSelected) {
+                    ctx.shadowColor = this.colors.project;
+                    ctx.shadowBlur = 20;
+                }
+
+                // Draw health status ring (outer ring)
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, radius + 5, 0, Math.PI * 2);
+                ctx.strokeStyle = healthColor;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Draw main circle
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                // Border
+                ctx.strokeStyle = isSelected ? '#fff' : '#444';
+                ctx.lineWidth = isSelected ? 3 : 1;
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+
+                // Health status indicator (small dot in top-right)
+                ctx.beginPath();
+                ctx.arc(node.x + radius * 0.6, node.y - radius * 0.6, 5, 0, Math.PI * 2);
+                ctx.fillStyle = healthColor;
+                ctx.fill();
+                ctx.strokeStyle = '#1a1a1a';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Label
+                ctx.fillStyle = this.colors.text;
+                ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // Truncate long names
+                let name = node.name;
+                if (name.length > 14) {
+                    name = name.substring(0, 12) + '...';
+                }
+
+                ctx.fillText(name, node.x, node.y + radius + 16);
+            },
+
+            getMousePos(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+
+                // Reverse the transformations
+                let x = e.clientX - rect.left;
+                let y = e.clientY - rect.top;
+
+                x = (x - this.panX - w/2) / this.zoom + w/2;
+                y = (y - this.panY - h/2) / this.zoom + h/2;
+
+                return { x, y };
+            },
+
+            getNodeAtPos(x, y) {
+                // Check nodes in reverse order (topmost first)
+                for (let i = this.nodes.length - 1; i >= 0; i--) {
+                    const node = this.nodes[i];
+                    let radius = 20;
+                    if (node.type === 'root') radius = 35;
+                    else if (node.type === 'api' || node.type === 'team' || node.type === 'feedback') radius = 24;
+                    else if (node.type === 'data' || node.type === 'sanity' || node.type === 'ui') radius = 22;
+                    else if (node.type === 'project') radius = 30;
+                    else if (node.type === 'folder') radius = 22;
+                    else if (node.type === 'file') radius = 16;
+
+                    const dx = x - node.x;
+                    const dy = y - node.y;
+                    // Include health ring in hit area
+                    if (dx * dx + dy * dy <= (radius + 5) * (radius + 5)) {
+                        return node;
+                    }
+                }
+                return null;
+            },
+
+            onMouseDown(e) {
+                this.isDragging = true;
+                this.dragStart = { x: e.clientX, y: e.clientY };
+                this.lastPan = { x: this.panX, y: this.panY };
+                this.canvas.style.cursor = 'grabbing';
+            },
+
+            onMouseMove(e) {
+                const pos = this.getMousePos(e);
+                const hovered = this.getNodeAtPos(pos.x, pos.y);
+
+                if (hovered !== this.hoveredNode) {
+                    this.hoveredNode = hovered;
+                    this.canvas.style.cursor = hovered ? 'pointer' : (this.isDragging ? 'grabbing' : 'grab');
+                    this.render();
+                }
+
+                if (this.isDragging) {
+                    this.panX = this.lastPan.x + (e.clientX - this.dragStart.x);
+                    this.panY = this.lastPan.y + (e.clientY - this.dragStart.y);
+                    this.render();
+                }
+            },
+
+            onMouseUp(e) {
+                this.isDragging = false;
+                this.canvas.style.cursor = this.hoveredNode ? 'pointer' : 'grab';
+            },
+
+            onMouseLeave() {
+                this.isDragging = false;
+                this.hoveredNode = null;
+                this.render();
+            },
+
+            onWheel(e) {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                this.zoom = Math.max(0.3, Math.min(3, this.zoom * delta));
+                this.render();
+            },
+
+            onClick(e) {
+                const pos = this.getMousePos(e);
+                const clicked = this.getNodeAtPos(pos.x, pos.y);
+
+                if (clicked) {
+                    this.selectNode(clicked);
+                }
+            },
+
+            onDoubleClick(e) {
+                const pos = this.getMousePos(e);
+                const clicked = this.getNodeAtPos(pos.x, pos.y);
+
+                if (clicked && clicked.children && clicked.children.length > 0) {
+                    // Drill down into this node
+                    this.drillDown(clicked);
+                }
+            },
+
+            selectNode(node) {
+                this.selectedNode = node;
+                this.updateNodeInfo(node);
+                this.render();
+            },
+
+            updateNodeInfo(node) {
+                const infoEl = document.getElementById('fp-node-info');
+                if (!node) {
+                    infoEl.innerHTML = '<div class="fp-info-placeholder">Click a node to see details</div>';
+                    return;
+                }
+
+                const childCount = this.nodes.filter(n => n.parent === node.id).length;
+                const health = this.healthData[node.id];
+
+                const typeIcon = {
+                    root: '🎛️',
+                    api: '🔌',
+                    team: '👥',
+                    data: '💾',
+                    feedback: '🔄',
+                    sanity: '✅',
+                    ui: '🖥️',
+                    project: '📦',
+                    folder: '📁',
+                    file: '📄',
+                    component: '⚙️'
+                }[node.type] || '📄';
+
+                const healthDot = {
+                    healthy: '🟢',
+                    degraded: '🟡',
+                    error: '🔴',
+                    inactive: '⚪'
+                }[health?.status] || '⚪';
+
+                const healthLabel = {
+                    healthy: 'Healthy',
+                    degraded: 'Degraded',
+                    error: 'Error',
+                    inactive: 'Inactive'
+                }[health?.status] || 'Unknown';
+
+                infoEl.innerHTML = `
+                    <div class="fp-info-header">
+                        <span class="fp-info-icon">${typeIcon}</span>
+                        <span class="fp-info-name">${node.name}</span>
+                    </div>
+
+                    <div class="fp-info-row fp-health-row">
+                        <span class="fp-info-label">Health</span>
+                        <span class="fp-info-value fp-health-${health?.status || 'inactive'}">
+                            ${healthDot} ${healthLabel}
+                        </span>
+                    </div>
+
+                    ${health?.message ? `
+                    <div class="fp-info-row">
+                        <span class="fp-info-label">Status</span>
+                        <span class="fp-info-value fp-info-message">${health.message}</span>
+                    </div>
+                    ` : ''}
+
+                    <div class="fp-info-row">
+                        <span class="fp-info-label">Type</span>
+                        <span class="fp-info-value">${node.type}</span>
+                    </div>
+
+                    ${node.description ? `
+                    <div class="fp-info-row">
+                        <span class="fp-info-label">Desc</span>
+                        <span class="fp-info-value fp-info-desc">${node.description}</span>
+                    </div>
+                    ` : ''}
+
+                    ${node.parent ? `
+                    <div class="fp-info-row">
+                        <span class="fp-info-label">Parent</span>
+                        <span class="fp-info-value">${this.nodes.find(n => n.id === node.parent)?.name || node.parent}</span>
+                    </div>
+                    ` : ''}
+
+                    ${childCount > 0 ? `
+                    <div class="fp-info-row">
+                        <span class="fp-info-label">Children</span>
+                        <span class="fp-info-value">${childCount}</span>
+                    </div>
+                    <button class="fp-drilldown-btn" onclick="flightPath.drillDown(flightPath.selectedNode)">
+                        Drill Down →
+                    </button>
+                    ` : ''}
+
+                    ${health?.last_check ? `
+                    <div class="fp-info-row fp-info-timestamp">
+                        <span class="fp-info-label">Checked</span>
+                        <span class="fp-info-value">${new Date(health.last_check).toLocaleTimeString()}</span>
+                    </div>
+                    ` : ''}
+                `;
+            },
+
+            drillDown(node) {
+                // Center view on this node and zoom in
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+
+                this.panX = -(node.x - w/2);
+                this.panY = -(node.y - h/2);
+                this.zoom = Math.min(2, this.zoom * 1.5);
+
+                // Update breadcrumb
+                this.updateBreadcrumb(node);
+                this.render();
+            },
+
+            updateBreadcrumb(node) {
+                const breadcrumb = document.getElementById('fp-breadcrumb');
+                const path = [];
+                let current = node;
+
+                while (current) {
+                    path.unshift(current);
+                    current = this.nodes.find(n => n.id === current.parent);
+                }
+
+                breadcrumb.innerHTML = path.map((n, i) =>
+                    `<span class="fp-crumb ${i === path.length - 1 ? 'active' : ''}"
+                          onclick="flightPath.navigateTo('${n.id}')">${n.name}</span>`
+                ).join('<span class="fp-crumb-sep">›</span>');
+            },
+
+            navigateTo(nodeId) {
+                const node = this.nodes.find(n => n.id === nodeId);
+                if (node) {
+                    this.selectNode(node);
+                    this.drillDown(node);
+                }
+            },
+
+            zoomIn() {
+                this.zoom = Math.min(3, this.zoom * 1.2);
+                this.render();
+            },
+
+            zoomOut() {
+                this.zoom = Math.max(0.3, this.zoom / 1.2);
+                this.render();
+            },
+
+            resetView() {
+                this.zoom = 1;
+                this.panX = 0;
+                this.panY = 0;
+                this.selectedNode = null;
+                this.updateNodeInfo(null);
+                document.getElementById('fp-breadcrumb').innerHTML = '<span class="fp-crumb active">iHIM</span>';
+                this.render();
+            },
+
+            toggleLayout() {
+                this.layoutMode = this.layoutMode === 'radial' ? 'tree' : 'radial';
+                this.layoutNodes();
+                this.render();
+                document.getElementById('fp-status').textContent =
+                    `Layout: ${this.layoutMode} • Drag to pan • Scroll to zoom`;
+            }
+        };
+
+        function openFlightPathModal() {
+            document.getElementById('flightpath-modal').classList.add('active');
+            setTimeout(() => {
+                flightPath.init();
+                flightPath.resizeCanvas();
+            }, 50);
+        }
+
+        function closeFlightPathModal() {
+            document.getElementById('flightpath-modal').classList.remove('active');
+            // Stop health polling when modal is closed
+            flightPath.stopHealthPolling();
+        }
+
+        // Close flightpath modal on outside click
+        document.getElementById('flightpath-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeFlightPathModal();
+            }
+        });
+
+        // =====================
+        // Slash Command Center
+        // =====================
+        const slashCommands = [
+            {
+                id: 'save',
+                name: '/save',
+                title: 'Save (Quick Checkpoint)',
+                description: 'Mid-session checkpoint with workspace-wide sanity check. Fast save, keep working. Runs sanity check, syncs skills, updates BOTH memories (the agent + the operator).',
+                category: 'session',
+                autoTrigger: false,
+                tags: ['checkpoint', 'memory', 'sanity']
+            },
+            {
+                id: 'endsession',
+                name: '/endsession',
+                title: 'End Session',
+                description: 'Full session close-out. Runs sanity check, captures the operator\'s prompts to NOTES.md, updates the agent\'s MEMORY.md, appends to archive, syncs skills. CRITICAL for memory continuity.',
+                category: 'session',
+                autoTrigger: false,
+                tags: ['end', 'memory', 'archive', 'critical']
+            },
+            {
+                id: 'audit',
+                name: '/audit',
+                title: 'Self-Audit',
+                description: 'Critical self-reflection after completing significant work. Audits understanding, pattern-following, verification, and communication. Identifies issues and captures learnings.',
+                category: 'quality',
+                autoTrigger: false,
+                tags: ['reflection', 'improvement', 'learnings']
+            },
+            {
+                id: 'push-workspace',
+                name: '/push-workspace',
+                title: 'Push to workspace',
+                description: 'Commit and push all changes to workspace GitHub repository. Shows changes, asks for commit message, stages, commits with attribution, and pushes. Never force pushes.',
+                category: 'git',
+                autoTrigger: false,
+                tags: ['git', 'commit', 'push', 'github']
+            },
+            {
+                id: 'meeting-prep',
+                name: '/meeting-prep',
+                title: 'Meeting Prep',
+                description: 'Adaptive meeting preparation that learns from past meetings. Reads Meeting Topics/ for history, asks context questions, pulls relevant docs, generates talking points, creates archive file.',
+                category: 'productivity',
+                autoTrigger: false,
+                tags: ['meetings', 'prep', 'adaptive', 'learning']
+            }
+        ];
+
+        let slashIdeas = [];
+
+        function loadSlashIdeasFromStorage() {
+            try {
+                const stored = localStorage.getItem('ihim_slash_ideas');
+                slashIdeas = stored ? JSON.parse(stored) : [];
+            } catch (err) {
+                console.error('Failed to load slash ideas:', err);
+                slashIdeas = [];
+            }
+        }
+
+        function saveSlashIdeasToStorage() {
+            try {
+                localStorage.setItem('ihim_slash_ideas', JSON.stringify(slashIdeas));
+            } catch (err) {
+                console.error('Failed to save slash ideas:', err);
+            }
+        }
+
+        function openSlashModal() {
+            document.getElementById('slash-modal').classList.add('active');
+            loadSlashIdeasFromStorage();
+            renderSlashCommands();
+            renderSlashIdeas();
+            document.getElementById('slash-search').value = '';
+            // Delay focus to ensure modal is fully visible
+            setTimeout(() => {
+                document.getElementById('slash-search').focus();
+            }, 100);
+        }
+
+        function closeSlashModal() {
+            document.getElementById('slash-modal').classList.remove('active');
+        }
+
+        function getCategoryIcon(category) {
+            const icons = {
+                session: '💾',
+                quality: '🔍',
+                git: '🚀',
+                productivity: '📋',
+                dev: '💻',
+                other: '⚡'
+            };
+            return icons[category] || icons.other;
+        }
+
+        function getCategoryColor(category) {
+            const colors = {
+                session: '#3d6f9a',
+                quality: '#f97316',
+                git: '#22c55e',
+                productivity: '#8b5cf6',
+                dev: '#06b6d4',
+                other: '#888'
+            };
+            return colors[category] || colors.other;
+        }
+
+        function renderSlashCommands(filter = '') {
+            const list = document.getElementById('slash-list');
+            const countEl = document.getElementById('slash-count');
+
+            const filtered = slashCommands.filter(cmd => {
+                if (!filter) return true;
+                const searchLower = filter.toLowerCase();
+                return cmd.name.toLowerCase().includes(searchLower) ||
+                       cmd.title.toLowerCase().includes(searchLower) ||
+                       cmd.description.toLowerCase().includes(searchLower) ||
+                       cmd.tags.some(t => t.toLowerCase().includes(searchLower));
+            });
+
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="no-slash">No commands match your search</div>';
+                countEl.textContent = '0 commands';
+                return;
+            }
+
+            // Group by category
+            const grouped = {};
+            filtered.forEach(cmd => {
+                if (!grouped[cmd.category]) grouped[cmd.category] = [];
+                grouped[cmd.category].push(cmd);
+            });
+
+            let html = '';
+            for (const [category, commands] of Object.entries(grouped)) {
+                html += `<div class="slash-category">
+                    <div class="slash-category-header">
+                        <span class="slash-category-icon">${getCategoryIcon(category)}</span>
+                        <span class="slash-category-name">${category.toUpperCase()}</span>
+                    </div>
+                    <div class="slash-category-items">`;
+
+                commands.forEach(cmd => {
+                    html += `
+                        <div class="slash-item" onclick="copySlashCommand('${cmd.name}')" style="border-left-color: ${getCategoryColor(cmd.category)}">
+                            <div class="slash-item-header">
+                                <span class="slash-name">${cmd.name}</span>
+                                ${cmd.autoTrigger ? '<span class="slash-auto-badge">Auto</span>' : ''}
+                            </div>
+                            <div class="slash-title">${cmd.title}</div>
+                            <div class="slash-desc">${cmd.description}</div>
+                            <div class="slash-tags">
+                                ${cmd.tags.map(t => `<span class="slash-tag">${t}</span>`).join('')}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += '</div></div>';
+            }
+
+            list.innerHTML = html;
+            countEl.textContent = `${filtered.length} command${filtered.length !== 1 ? 's' : ''}`;
+        }
+
+        function filterSlashCommands() {
+            const search = document.getElementById('slash-search').value;
+            renderSlashCommands(search);
+        }
+
+        function copySlashCommand(command) {
+            navigator.clipboard.writeText(command).then(() => {
+                showStatus(`Copied ${command} to clipboard`, 'success');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                showStatus('Failed to copy', 'error');
+            });
+        }
+
+        function renderSlashIdeas() {
+            const container = document.getElementById('slash-ideas');
+
+            if (slashIdeas.length === 0) {
+                container.innerHTML = '<div class="no-ideas">No ideas yet. Brainstorm above!</div>';
+                return;
+            }
+
+            // Sort newest first
+            const sorted = [...slashIdeas].sort((a, b) => b.timestamp - a.timestamp);
+
+            container.innerHTML = sorted.map(idea => `
+                <div class="slash-idea-item" data-id="${idea.id}">
+                    <div class="idea-content">${escapeHtml(idea.text)}</div>
+                    <div class="idea-meta">
+                        <span class="idea-timestamp">${formatTimestamp(idea.timestamp)}</span>
+                        <button class="delete-idea-btn" onclick="deleteSlashIdea('${idea.id}')" title="Delete">×</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function saveSlashIdea() {
+            const input = document.getElementById('brainstorm-input');
+            const text = input.value.trim();
+
+            if (!text) {
+                showStatus('Please enter an idea', 'error');
+                return;
+            }
+
+            const idea = {
+                id: 'idea_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                text: text,
+                timestamp: Date.now()
+            };
+
+            slashIdeas.push(idea);
+            saveSlashIdeasToStorage();
+            renderSlashIdeas();
+            input.value = '';
+            showStatus('Idea saved', 'success');
+        }
+
+        function deleteSlashIdea(ideaId) {
+            slashIdeas = slashIdeas.filter(i => i.id !== ideaId);
+            saveSlashIdeasToStorage();
+            renderSlashIdeas();
+            showStatus('Idea deleted', 'success');
+        }
+
+        // Handle Ctrl+Enter in brainstorm textarea
+        document.getElementById('brainstorm-input').addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                saveSlashIdea();
+            }
+        });
+
+        // Close slash modal on outside click
+        document.getElementById('slash-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeSlashModal();
+            }
+        });
+    </script>
+</body>
+</html>

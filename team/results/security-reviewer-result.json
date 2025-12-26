@@ -1,0 +1,119 @@
+{
+  "agent": "security-reviewer",
+  "status": "complete",
+  "files_reviewed": [
+    "IHIM/api/main.py",
+    "IHIM/ui/index.html",
+    "IHIM/actions/registry.py",
+    "IHIM/actions/utils.py",
+    "IHIM/team/spawner.py",
+    "IHIM/team/blackboard.py",
+    "harness/commands/save.md",
+    "harness/commands/endsession.md",
+    "harness/commands/push-workspace.md",
+    "harness/commands/audit.md",
+    "harness/commands/meeting-prep.md",
+    "harness/skills/iHIM/skill.md"
+  ],
+  "vulnerabilities": [
+    {
+      "severity": "high",
+      "type": "CORS Misconfiguration",
+      "location": "IHIM/api/main.py:60-66",
+      "description": "CORS is configured with allow_origins=['*'] which allows any origin to access the API. Combined with allow_credentials=True, this could enable cross-site request forgery attacks if authentication is ever added.",
+      "recommendation": "Replace wildcard origin with specific allowed origins. If Chrome extension access is needed, use specific extension origins like 'chrome-extension://[extension-id]'. Never combine allow_origins=['*'] with allow_credentials=True."
+    },
+    {
+      "severity": "high",
+      "type": "Command Injection",
+      "location": "IHIM/actions/utils.py:77-82",
+      "description": "The open_terminal() function uses shell=True with f-string interpolation of 'command' parameter. If the command parameter comes from user input, it could allow arbitrary command execution. Currently, the 'command' parameter is hardcoded in registry.py but this is a latent vulnerability.",
+      "recommendation": "Avoid shell=True. Use subprocess.Popen with a list of arguments instead. If shell features are needed, sanitize and validate the command string."
+    },
+    {
+      "severity": "medium",
+      "type": "Command Injection",
+      "location": "IHIM/actions/utils.py:89-95",
+      "description": "macOS branch constructs shell command via f-string and passes to osascript. Similar latent injection risk as the Windows branch.",
+      "recommendation": "Use proper argument escaping or avoid dynamic command construction."
+    },
+    {
+      "severity": "medium",
+      "type": "Path Traversal",
+      "location": "IHIM/api/main.py:747-748",
+      "description": "The FlightPathRequest accepts project_path from user input. While there is validation that the path exists, there's no validation to restrict paths to the workspace directory. A malicious request could potentially scan any directory on the system.",
+      "recommendation": "Validate that project_path is within allowed directories (workspace root). Use pathlib's resolve() and check prefix."
+    },
+    {
+      "severity": "medium",
+      "type": "No Authentication",
+      "location": "IHIM/api/main.py (all endpoints)",
+      "description": "The API has no authentication mechanism. All endpoints are publicly accessible to anyone who can reach localhost:7777. While this is acceptable for local-only use, it becomes a risk if the server is ever exposed to a network.",
+      "recommendation": "Document that this is local-only. Consider adding optional API key authentication for future network exposure scenarios."
+    },
+    {
+      "severity": "medium",
+      "type": "Sensitive Path Exposure",
+      "location": "IHIM/api/main.py:698-702, IHIM/team/spawner.py:57-61",
+      "description": "Absolute file paths (including username '<user>') are hardcoded and exposed in API responses. This leaks local file system structure.",
+      "recommendation": "Use relative paths in API responses or environment-based path configuration."
+    },
+    {
+      "severity": "medium",
+      "type": "Arbitrary Process Execution",
+      "location": "IHIM/team/spawner.py:129-143",
+      "description": "The agent spawner executes arbitrary commands via Windows Terminal. While prompts are written to files, the architecture allows spawning processes that execute user-provided prompts through the agent CLI.",
+      "recommendation": "This is by design for the agent system, but ensure the prompt file is properly sanitized and the system is only accessible locally."
+    },
+    {
+      "severity": "low",
+      "type": "XSS (DOM-based)",
+      "location": "IHIM/ui/index.html:500-504",
+      "description": "The escapeHtml() function is implemented correctly and used for task/note rendering. However, the innerHTML assignments in lines 1462-1517 for node info display don't escape node.name, node.description, etc. These values come from the API.",
+      "recommendation": "Apply escapeHtml() to all dynamic content inserted via innerHTML, including node properties from the API response."
+    },
+    {
+      "severity": "low",
+      "type": "Weak ID Generation",
+      "location": "IHIM/team/blackboard.py:117-119",
+      "description": "Message IDs are generated using MD5 of time+random. While not cryptographically critical, MD5 is deprecated. Could lead to predictable IDs.",
+      "recommendation": "Use uuid.uuid4() for message IDs instead of MD5 hashing."
+    },
+    {
+      "severity": "low",
+      "type": "Information Disclosure",
+      "location": "IHIM/api/main.py:108-130",
+      "description": "The /api/system/stats endpoint exposes CPU and memory usage. While useful for monitoring, this could leak information about system load and available resources.",
+      "recommendation": "Document that this endpoint exists. Consider adding optional authentication if sensitive environments are a concern."
+    },
+    {
+      "severity": "low",
+      "type": "the operator Condition",
+      "location": "IHIM/team/blackboard.py:151-168",
+      "description": "The save_blackboard function attempts atomic writes via temp file + rename, but the retry logic with simple backoff may still have race conditions with multiple concurrent writers.",
+      "recommendation": "Use proper file locking (fcntl or msvcrt) for cross-process coordination, or consider using a database instead of JSON file."
+    }
+  ],
+  "secrets_found": false,
+  "pii_handling": [
+    "Username '<user>' appears in hardcoded paths throughout the codebase",
+    "No other PII detected in code",
+    "Slash commands like /meeting-prep may handle client names - ensure proper data handling"
+  ],
+  "owasp_checklist": {
+    "A01_Broken_Access_Control": "MEDIUM - No authentication, no authorization checks. Acceptable for local-only tool.",
+    "A02_Cryptographic_Failures": "OK - No cryptographic operations found. No secrets stored.",
+    "A03_Injection": "HIGH - Command injection risks in utils.py shell=True usage. Path traversal in flightpath.",
+    "A04_Insecure_Design": "LOW - Architecture is local-first by design. No sensitive data processed.",
+    "A05_Security_Misconfiguration": "HIGH - CORS allow_origins=['*'] with credentials is misconfigured.",
+    "A06_Vulnerable_Components": "NOT_CHECKED - Dependency audit not performed. Consider running 'pip list --outdated'.",
+    "A07_Auth_Failures": "MEDIUM - No auth implemented. By design for local tool.",
+    "A08_Data_Integrity_Failures": "LOW - No deserialization of untrusted data. JSON parsing is safe.",
+    "A09_Logging_Failures": "LOW - Minimal logging. No security-relevant events logged.",
+    "A10_SSRF": "LOW - No outbound HTTP requests from user input. Flight path scans local FS only."
+  },
+  "summary": "The Slash Command Center feature builds on existing iHIM infrastructure which is primarily a LOCAL-ONLY tool. The most significant vulnerabilities are: (1) CORS misconfiguration that could enable CSRF if auth is added later, (2) command injection risks in subprocess calls using shell=True, and (3) lack of input validation on file paths. These are acceptable for a local development tool but should be addressed if the system is ever exposed to a network. The commands feature itself (brainstorming, categorization, display) has minimal security impact as it's read-only UI for displaying existing commands. Recommend fixing CORS immediately and sanitizing any user input passed to subprocesses.",
+  "blockers": [],
+  "handoff_notes": "For frontend-dev: Escape dynamic content in innerHTML assignments for Flight Path node info. For backend-dev: Fix CORS configuration and add path validation for flightpath endpoints. For devops: Run dependency audit before deployment.",
+  "approved": true
+}

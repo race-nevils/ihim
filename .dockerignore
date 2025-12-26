@@ -1,0 +1,78 @@
+# =============================================================================
+# iHIM - Docker Build Ignore
+# Excludes files not needed in the container for smaller, faster builds
+# =============================================================================
+
+# Virtual environments (each machine has its own)
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Docker (prevent recursive builds)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Syncthing
+.stignore
+.stfolder/
+.stversions/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Development/Test files
+*.md
+*.txt
+!requirements.txt
+*.log
+*.test.py
+tests/
+pytest.ini
+requirements-dev.txt
+
+# Local data (will be mounted as volume)
+data/
+
+# Scripts not needed in container
+run.py
+run_silent.py
+start_ihim.vbs
+
+# Team task files (development artifacts)
+team/tasks/
+team/results/
+
+# Misc
+*.bak
+*.tmp
+.env
+.env.*
+!.env.example

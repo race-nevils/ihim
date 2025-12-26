@@ -1,0 +1,9 @@
+# Development/Testing dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Include base requirements
+-r requirements.txt
+
+# Testing
+pytest==8.3.4
+httpx==0.28.1

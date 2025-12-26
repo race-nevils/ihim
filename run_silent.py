@@ -1,0 +1,27 @@
+"""
+iHIM Silent Runner - No console window
+Used for background/startup execution
+"""
+import sys
+import os
+
+# Change to script directory
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# Add to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    import uvicorn
+except ImportError:
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q"])
+    import uvicorn
+
+# Run server silently (no browser open)
+uvicorn.run(
+    "api.main:app",
+    host="127.0.0.1",
+    port=7777,
+    log_level="error"
+)

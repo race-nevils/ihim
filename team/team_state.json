@@ -1,0 +1,29 @@
+{
+  "active": true,
+  "spawned_at": "2025-12-26T03:37:22.829206",
+  "collapsed_at": null,
+  "original_prompt": "Alright, here is what I want to build. I want to build a commands center with all of the existing commands, descriptions for each. It needs to be big enough to where each section can fit a decent description of what the commands do. I want to be able to brainstorm commands in here because I feel like commands is kind of integral to building the system with the agent. I think some of these commands can also be automatically called, which can make this commands system pretty powerful if we can integrate it the most efficient way with everything else.",
+  "project": "workspace",
+  "agents": {
+    "frontend-dev": {
+      "status": "working",
+      "started_at": "2025-12-26T03:37:22.829211"
+    },
+    "backend-dev": {
+      "status": "working",
+      "started_at": "2025-12-26T03:37:22.829215"
+    },
+    "devops": {
+      "status": "working",
+      "started_at": "2025-12-26T03:37:22.829218"
+    },
+    "qa-tester": {
+      "status": "working",
+      "started_at": "2025-12-26T03:37:22.829220"
+    },
+    "security-reviewer": {
+      "status": "working",
+      "started_at": "2025-12-26T03:37:22.829222"
+    }
+  }
+}

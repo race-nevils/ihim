@@ -1,0 +1,58 @@
+# =============================================================================
+# iHIM Flight Path - Docker Compose Overlay
+# =============================================================================
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.flightpath.yml up
+#
+# Flight Path is a workflow visualizer that shows project dependencies
+# and how components connect at a high level.
+# =============================================================================
+
+services:
+  # Flight Path Visualization Service
+  # Runs alongside the main iHIM service
+  flightpath:
+    build:
+      context: .
+      dockerfile: Dockerfile.flightpath
+    container_name: ihim-flightpath
+    ports:
+      - "${FLIGHTPATH_PORT:-7780}:7780"
+    environment:
+      - FLIGHTPATH_HOST=${FLIGHTPATH_HOST:-0.0.0.0}
+      - FLIGHTPATH_PORT=${FLIGHTPATH_PORT:-7780}
+      - FLIGHTPATH_LOG_LEVEL=${FLIGHTPATH_LOG_LEVEL:-info}
+      - FLIGHTPATH_SCAN_DEPTH=${FLIGHTPATH_SCAN_DEPTH:-3}
+      - FLIGHTPATH_REFRESH_INTERVAL=${FLIGHTPATH_REFRESH_INTERVAL:-30}
+      - IHIM_API_URL=http://ihim:7777
+    volumes:
+      # Mount the project root for scanning (read-only)
+      - ${FLIGHTPATH_SCAN_PATH:-..}:/workspace:ro
+      # Persist graph cache
+      - flightpath-cache:/app/cache
+    depends_on:
+      ihim:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7780/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - ihim-network
+
+  # Extend main ihim service to join the network
+  ihim:
+    networks:
+      - ihim-network
+
+volumes:
+  flightpath-cache:
+    name: ihim-flightpath-cache
+
+networks:
+  ihim-network:
+    name: ihim-network
+    driver: bridge

@@ -1,0 +1,141 @@
+{
+  "id": "workflow-complete-cycle",
+  "name": "Complete Development Cycle",
+  "version": "1.0.0",
+  "created_at": "2025-12-27",
+  "updated_at": "2025-12-27",
+
+  "what": "The complete closed-loop workflow from build to verified completion. Ensures nothing is left open-ended. Every cycle has a definitive END state.",
+
+  "philosophy": "No open loops. Every workflow MUST terminate with a clear DONE or ESCALATE state. The system self-heals through verification loops. If something can't be fixed in 3 attempts, it's an architectural issue requiring the agent intervention.",
+
+  "workflow": {
+    "phases": [
+      {
+        "phase": 1,
+        "name": "BUILD",
+        "mode": "yellow-mode",
+        "description": "Fast parallel development with live feedback",
+        "output": "Feature implemented (may have bugs)",
+        "next": "FIND"
+      },
+      {
+        "phase": 2,
+        "name": "FIND",
+        "mode": "red-team-recon",
+        "description": "10 the agent scouts find all bugs adversarially",
+        "output": "Prioritized bug list (CRITICAL, HIGH, MEDIUM, LOW)",
+        "next": "FIX"
+      },
+      {
+        "phase": 3,
+        "name": "FIX",
+        "mode": "red-team-fix",
+        "description": "6 the agent operators fix bugs by severity",
+        "output": "Files modified, fixes claimed",
+        "next": "VERIFY"
+      },
+      {
+        "phase": 4,
+        "name": "VERIFY",
+        "mode": "green-mode-verify",
+        "description": "10 the agent verifiers confirm fixes worked",
+        "output": "PASS or FAIL (binary)",
+        "next": {
+          "on_pass": "CLEANUP",
+          "on_fail": "FIX (loop)"
+        }
+      },
+      {
+        "phase": 5,
+        "name": "CLEANUP",
+        "mode": "blue-mode-cleanup",
+        "description": "Remove debug artifacts, ensure clean state",
+        "output": "CLEAN or NEEDS_ATTENTION",
+        "next": "DONE"
+      },
+      {
+        "phase": 6,
+        "name": "DONE",
+        "mode": null,
+        "description": "Workflow complete. Ready for commit.",
+        "output": "Terminal state",
+        "next": null
+      }
+    ],
+
+    "loop_behavior": {
+      "verify_fail_loop": {
+        "description": "When Green Mode fails, loop back to Fix",
+        "max_iterations": 3,
+        "on_max_exceeded": "ESCALATE to the agent for architectural review"
+      }
+    },
+
+    "escalation": {
+      "trigger": "3 failed verification loops",
+      "action": "Pause workflow, present to the agent",
+      "options": [
+        "Architectural redesign needed",
+        "Accept remaining issues as technical debt",
+        "Split into smaller sub-tasks"
+      ]
+    }
+  },
+
+  "state_machine": {
+    "states": ["BUILD", "FIND", "FIX", "VERIFY", "CLEANUP", "DONE", "ESCALATE"],
+    "transitions": [
+      {"from": "BUILD", "to": "FIND", "condition": "always"},
+      {"from": "FIND", "to": "FIX", "condition": "findings.length > 0"},
+      {"from": "FIND", "to": "CLEANUP", "condition": "findings.length == 0"},
+      {"from": "FIX", "to": "VERIFY", "condition": "always"},
+      {"from": "VERIFY", "to": "CLEANUP", "condition": "status == PASS"},
+      {"from": "VERIFY", "to": "FIX", "condition": "status == FAIL && loops < 3"},
+      {"from": "VERIFY", "to": "ESCALATE", "condition": "status == FAIL && loops >= 3"},
+      {"from": "CLEANUP", "to": "DONE", "condition": "always"},
+      {"from": "ESCALATE", "to": "FIX", "condition": "opus_decision == retry"},
+      {"from": "ESCALATE", "to": "DONE", "condition": "opus_decision == accept_debt"}
+    ],
+    "terminal_states": ["DONE", "ESCALATE"]
+  },
+
+  "tracking": {
+    "log_each_phase": true,
+    "capture_metrics": ["duration", "tokens", "findings", "fixes"],
+    "append_to": "IHIM/configs/execution-logs/executions.jsonl"
+  },
+
+  "current_state": {
+    "description": "Track where we are in active workflows",
+    "active_workflows": []
+  },
+
+  "examples": [
+    {
+      "scenario": "Happy path - all fixes verified first try",
+      "flow": "BUILD → FIND (17 bugs) → FIX (17 fixed) → VERIFY (PASS) → CLEANUP → DONE",
+      "loops": 0,
+      "result": "Complete in single pass"
+    },
+    {
+      "scenario": "One retry needed",
+      "flow": "BUILD → FIND (17 bugs) → FIX (15 fixed) → VERIFY (FAIL) → FIX (2 remaining) → VERIFY (PASS) → CLEANUP → DONE",
+      "loops": 1,
+      "result": "Complete after 1 retry"
+    },
+    {
+      "scenario": "Architectural issue",
+      "flow": "BUILD → FIND (17 bugs) → FIX → VERIFY (FAIL) → FIX → VERIFY (FAIL) → FIX → VERIFY (FAIL) → ESCALATE",
+      "loops": 3,
+      "result": "Escalated to the agent - design flaw identified"
+    }
+  ],
+
+  "metrics": {
+    "target_full_cycle_time": "< 45 minutes for medium features",
+    "expected_pass_rate_first_try": "60-70%",
+    "expected_pass_rate_after_one_loop": "90%",
+    "escalation_rate": "< 5% of workflows"
+  }
+}

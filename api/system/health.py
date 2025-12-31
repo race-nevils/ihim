@@ -1,5 +1,6 @@
 """
-Health check system - monitors status of all iHIM components.
+Health check system - monitors status of all workspace components.
+workspace is the root. iHIM is one system within workspace.
 """
 
 import json
@@ -10,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 
 from .models import ComponentHealth, HealthStatus, SystemHealth
-from .topology import get_system_topology, IHIM_ROOT
+from .topology import get_system_topology, IHIM_ROOT, WORKSPACE_ROOT
 
 
 def get_file_age_seconds(file_path: Path) -> Optional[float]:
@@ -131,6 +132,145 @@ def check_file_exists(file_path: Path) -> tuple[HealthStatus, str, dict]:
         ).isoformat()
 
         return HealthStatus.HEALTHY, "File exists", metrics
+
+    except Exception as e:
+        return HealthStatus.ERROR, f"Error: {str(e)[:50]}", metrics
+
+
+def check_markdown_file(file_path: Path, stale_days: int = 7) -> tuple[HealthStatus, str, dict]:
+    """
+    Check a markdown file for existence and freshness.
+
+    Returns: (status, message, metrics)
+    """
+    metrics = {}
+
+    if not file_path.exists():
+        return HealthStatus.ERROR, "File missing", metrics
+
+    try:
+        stat = file_path.stat()
+        metrics["file_size"] = stat.st_size
+        metrics["last_modified"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
+
+        # Calculate age in days
+        age_seconds = datetime.now().timestamp() - stat.st_mtime
+        age_days = age_seconds / 86400
+        metrics["age_days"] = round(age_days, 1)
+
+        # Read first line to get "Updated:" date if present
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.startswith("Updated:"):
+                        metrics["updated_line"] = line.strip()
+                        break
+        except Exception:
+            pass
+
+        if age_days > stale_days:
+            return HealthStatus.DEGRADED, f"Stale ({int(age_days)}d old)", metrics
+
+        return HealthStatus.HEALTHY, f"Fresh ({int(age_days)}d)", metrics
+
+    except Exception as e:
+        return HealthStatus.ERROR, f"Error: {str(e)[:50]}", metrics
+
+
+def check_skills_directory(dir_path: Path) -> tuple[HealthStatus, str, dict]:
+    """
+    Check skills directory - count valid skill folders.
+
+    Returns: (status, message, metrics)
+    """
+    metrics = {}
+
+    if not dir_path.exists():
+        return HealthStatus.ERROR, "Skills directory missing", metrics
+
+    try:
+        # Count skill folders (those with skill.md inside)
+        skill_count = 0
+        skill_names = []
+        for item in dir_path.iterdir():
+            if item.is_dir() and (item / "skill.md").exists():
+                skill_count += 1
+                skill_names.append(item.name)
+
+        metrics["skill_count"] = skill_count
+        metrics["skills"] = skill_names
+
+        if skill_count == 0:
+            return HealthStatus.DEGRADED, "No skills found", metrics
+
+        return HealthStatus.HEALTHY, f"{skill_count} skills", metrics
+
+    except Exception as e:
+        return HealthStatus.ERROR, f"Error: {str(e)[:50]}", metrics
+
+
+def check_commands_directory(dir_path: Path) -> tuple[HealthStatus, str, dict]:
+    """
+    Check commands directory - count .md command files.
+
+    Returns: (status, message, metrics)
+    """
+    metrics = {}
+
+    if not dir_path.exists():
+        return HealthStatus.INACTIVE, "No commands yet", metrics
+
+    try:
+        # Count .md files (commands)
+        commands = [f.stem for f in dir_path.glob("*.md")]
+        metrics["command_count"] = len(commands)
+        metrics["commands"] = commands
+
+        if len(commands) == 0:
+            return HealthStatus.INACTIVE, "No commands yet", metrics
+
+        return HealthStatus.HEALTHY, f"{len(commands)} commands", metrics
+
+    except Exception as e:
+        return HealthStatus.ERROR, f"Error: {str(e)[:50]}", metrics
+
+
+def check_jsonl_file(file_path: Path) -> tuple[HealthStatus, str, dict]:
+    """
+    Check a JSONL (JSON Lines) file for validity.
+
+    Returns: (status, message, metrics)
+    """
+    metrics = {}
+
+    if not file_path.exists():
+        return HealthStatus.INACTIVE, "No entries yet", metrics
+
+    try:
+        line_count = 0
+        valid_lines = 0
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    line_count += 1
+                    try:
+                        json.loads(line)
+                        valid_lines += 1
+                    except json.JSONDecodeError:
+                        pass
+
+        metrics["total_lines"] = line_count
+        metrics["valid_entries"] = valid_lines
+        metrics["file_size"] = file_path.stat().st_size
+
+        if line_count == 0:
+            return HealthStatus.INACTIVE, "Empty file", metrics
+
+        if valid_lines < line_count:
+            return HealthStatus.DEGRADED, f"{valid_lines}/{line_count} valid", metrics
+
+        return HealthStatus.HEALTHY, f"{valid_lines} entries", metrics
 
     except Exception as e:
         return HealthStatus.ERROR, f"Error: {str(e)[:50]}", metrics
@@ -334,7 +474,7 @@ def check_data_tasks() -> ComponentHealth:
     status, msg, metrics = check_json_file(file_path)
 
     # For tasks, staleness is expected - override to healthy if valid
-    if status == HealthStatus.DEGRADED and "Valid" in msg or "stale" in msg:
+    if status == HealthStatus.DEGRADED and ("Valid" in msg or "stale" in msg):
         status = HealthStatus.HEALTHY
         msg = f"{metrics.get('item_count', 0)} tasks"
 
@@ -353,7 +493,7 @@ def check_data_notes() -> ComponentHealth:
     status, msg, metrics = check_json_file(file_path)
 
     # For notes, staleness is expected - override to healthy if valid
-    if status == HealthStatus.DEGRADED and "Valid" in msg or "stale" in msg:
+    if status == HealthStatus.DEGRADED and ("Valid" in msg or "stale" in msg):
         status = HealthStatus.HEALTHY
         msg = f"{metrics.get('item_count', 0)} notes"
 
@@ -451,14 +591,325 @@ def check_ihim_root() -> ComponentHealth:
 
 
 # =========================================================================
+# workspace-LEVEL HEALTH CHECKS (Parent systems above iHIM)
+# =========================================================================
+
+def check_workspace_root() -> ComponentHealth:
+    """Check workspace root (always healthy if we can read the directory)."""
+    status, msg, metrics = check_directory(WORKSPACE_ROOT)
+    return ComponentHealth(
+        id="workspace-root",
+        status=status if status != HealthStatus.ERROR else HealthStatus.ERROR,
+        message="Virtual Workstation Online" if status == HealthStatus.HEALTHY else msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_memory_system() -> ComponentHealth:
+    """Check overall memory system health."""
+    # Check that all three memory files exist
+    memory_md = WORKSPACE_ROOT / "MEMORY.md"
+    owner_md = WORKSPACE_ROOT / "NOTES.md"
+    archive_md = WORKSPACE_ROOT / "MEMORY_ARCHIVE.md"
+
+    metrics = {
+        "memory_exists": memory_md.exists(),
+        "owner_exists": owner_md.exists(),
+        "archive_exists": archive_md.exists(),
+    }
+
+    missing = []
+    if not memory_md.exists():
+        missing.append("MEMORY.md")
+    if not owner_md.exists():
+        missing.append("NOTES.md")
+    if not archive_md.exists():
+        missing.append("MEMORY_ARCHIVE.md")
+
+    if missing:
+        return ComponentHealth(
+            id="memory-system",
+            status=HealthStatus.ERROR,
+            message=f"Missing: {', '.join(missing)}",
+            last_check=datetime.now().isoformat(),
+            metrics=metrics
+        )
+
+    return ComponentHealth(
+        id="memory-system",
+        status=HealthStatus.HEALTHY,
+        message="Dual memory active",
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_memory_claude() -> ComponentHealth:
+    """Check the agent's memory file (MEMORY.md)."""
+    file_path = WORKSPACE_ROOT / "MEMORY.md"
+    status, msg, metrics = check_markdown_file(file_path, stale_days=7)
+    return ComponentHealth(
+        id="memory-claude",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_memory_owner() -> ComponentHealth:
+    """Check the operator's memory file (NOTES.md)."""
+    file_path = WORKSPACE_ROOT / "NOTES.md"
+    status, msg, metrics = check_markdown_file(file_path, stale_days=7)
+    return ComponentHealth(
+        id="memory-owner",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_memory_archive() -> ComponentHealth:
+    """Check memory archive file."""
+    file_path = WORKSPACE_ROOT / "MEMORY_ARCHIVE.md"
+    # Archive doesn't need freshness check - it's append-only
+    status, msg, metrics = check_file_exists(file_path)
+    return ComponentHealth(
+        id="memory-archive",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_skills_system() -> ComponentHealth:
+    """Check the agent harness skills system."""
+    dir_path = WORKSPACE_ROOT / "harness dir" / "skills"
+    status, msg, metrics = check_skills_directory(dir_path)
+    return ComponentHealth(
+        id="skills-system",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_commands_system() -> ComponentHealth:
+    """Check the agent harness commands system."""
+    dir_path = WORKSPACE_ROOT / "harness dir" / "commands"
+    status, msg, metrics = check_commands_directory(dir_path)
+    return ComponentHealth(
+        id="commands-system",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_guardrails_system() -> ComponentHealth:
+    """Check guardrails file."""
+    file_path = WORKSPACE_ROOT / "GUARDRAILS.md"
+    status, msg, metrics = check_file_exists(file_path)
+    return ComponentHealth(
+        id="guardrails-system",
+        status=status,
+        message="Boundaries active" if status == HealthStatus.HEALTHY else msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_projects_system() -> ComponentHealth:
+    """Check projects system - count active project directories."""
+    metrics = {}
+    project_dirs = ["<business>", "Legal"]
+    existing = []
+
+    for proj in project_dirs:
+        if (WORKSPACE_ROOT / proj).exists():
+            existing.append(proj)
+
+    metrics["project_count"] = len(existing)
+    metrics["projects"] = existing
+
+    return ComponentHealth(
+        id="projects-system",
+        status=HealthStatus.HEALTHY,
+        message=f"{len(existing)} active projects",
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_project_edgeflow() -> ComponentHealth:
+    """Check EdgeFlowAI LP project."""
+    dir_path = WORKSPACE_ROOT / "<business>"
+    status, msg, metrics = check_directory(dir_path)
+    return ComponentHealth(
+        id="project-edgeflow",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_project_legal() -> ComponentHealth:
+    """Check Legal project."""
+    dir_path = WORKSPACE_ROOT / "Legal"
+    status, msg, metrics = check_directory(dir_path)
+    return ComponentHealth(
+        id="project-legal",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_learning_system() -> ComponentHealth:
+    """Check self-improvement system."""
+    debrief_cmd = WORKSPACE_ROOT / "harness dir" / "commands" / "debrief.md"
+    heuristics = IHIM_ROOT / "data" / "heuristics.json"
+
+    metrics = {
+        "debrief_exists": debrief_cmd.exists(),
+        "heuristics_exists": heuristics.exists(),
+    }
+
+    if not debrief_cmd.exists():
+        return ComponentHealth(
+            id="learning-system",
+            status=HealthStatus.DEGRADED,
+            message="Debrief command missing",
+            last_check=datetime.now().isoformat(),
+            metrics=metrics
+        )
+
+    return ComponentHealth(
+        id="learning-system",
+        status=HealthStatus.HEALTHY,
+        message="Self-improvement active",
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_debrief_engine() -> ComponentHealth:
+    """Check debrief command file."""
+    file_path = WORKSPACE_ROOT / "harness dir" / "commands" / "debrief.md"
+    status, msg, metrics = check_file_exists(file_path)
+    return ComponentHealth(
+        id="debrief-engine",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_heuristics_bank() -> ComponentHealth:
+    """Check heuristics.json file."""
+    file_path = IHIM_ROOT / "data" / "heuristics.json"
+    status, msg, metrics = check_json_file(file_path)
+
+    # Get heuristic count
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                metrics["heuristic_count"] = len(data)
+                msg = f"{len(data)} heuristics"
+    except Exception:
+        pass
+
+    return ComponentHealth(
+        id="heuristics-bank",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_debriefs_log() -> ComponentHealth:
+    """Check debriefs.jsonl file."""
+    file_path = IHIM_ROOT / "data" / "debriefs.jsonl"
+    status, msg, metrics = check_jsonl_file(file_path)
+    return ComponentHealth(
+        id="debriefs-log",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_slash_commands() -> ComponentHealth:
+    """Check commands API component."""
+    dir_path = IHIM_ROOT / "api" / "commands"
+    status, msg, metrics = check_directory(dir_path)
+    return ComponentHealth(
+        id="slash-commands",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+def check_data_slash_commands() -> ComponentHealth:
+    """Check slash_commands.json data file."""
+    file_path = IHIM_ROOT / "data" / "slash_commands.json"
+    status, msg, metrics = check_json_file(file_path)
+
+    # Override stale check for this file
+    if status == HealthStatus.DEGRADED and "stale" in msg.lower():
+        status = HealthStatus.HEALTHY
+        msg = f"{metrics.get('key_count', 0)} commands defined"
+
+    return ComponentHealth(
+        id="data-slash-commands",
+        status=status,
+        message=msg,
+        last_check=datetime.now().isoformat(),
+        metrics=metrics
+    )
+
+
+# =========================================================================
 # MAIN CHECK FUNCTIONS
 # =========================================================================
 
 # Map of component IDs to their check functions
 HEALTH_CHECKS: Dict[str, callable] = {
+    # workspace-level systems (top of hierarchy)
+    "workspace-root": check_workspace_root,
+    "memory-system": check_memory_system,
+    "memory-claude": check_memory_claude,
+    "memory-owner": check_memory_owner,
+    "memory-archive": check_memory_archive,
+    "skills-system": check_skills_system,
+    "commands-system": check_commands_system,
+    "guardrails-system": check_guardrails_system,
+    "projects-system": check_projects_system,
+    "project-edgeflow": check_project_edgeflow,
+    "project-legal": check_project_legal,
+    "learning-system": check_learning_system,
+    "debrief-engine": check_debrief_engine,
+    "heuristics-bank": check_heuristics_bank,
+    "debriefs-log": check_debriefs_log,
+
+    # iHIM systems (child of workspace)
     "ihim-root": check_ihim_root,
     "api-server": check_api_server,
     "actions-registry": check_actions_registry,
+    "slash-commands": check_slash_commands,
     "team-system": check_team_system,
     "team-spawner": check_team_spawner,
     "team-router": check_team_router,
@@ -472,6 +923,7 @@ HEALTH_CHECKS: Dict[str, callable] = {
     "data-stores": check_data_stores,
     "data-tasks": check_data_tasks,
     "data-notes": check_data_notes,
+    "data-slash-commands": check_data_slash_commands,
     "data-team-state": check_data_team_state,
     "sanity-check": check_sanity,
     "ui-assets": check_ui_assets,

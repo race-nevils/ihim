@@ -1,0 +1,110 @@
+{
+  "id": "green-mode-verify",
+  "name": "Green Mode: Verification Gate",
+  "version": "1.0.0",
+  "created_at": "2025-12-27",
+  "updated_at": "2025-12-27",
+
+  "what": "10 the agent scouts verify that fixes actually worked. THE GATE. Binary output: PASS or FAIL. No ambiguity. If any CRITICAL or HIGH issues remain unfixed, the workflow cannot proceed. This is the termination condition.",
+
+  "when_to_use": [
+    "ALWAYS after Red Team Fix wave",
+    "Before marking any feature 'done'",
+    "Before committing/pushing code",
+    "As the final checkpoint before moving on"
+  ],
+
+  "when_not_to_use": [
+    "Never skip this - it's mandatory for workflow closure"
+  ],
+
+  "philosophy": "Trust but verify. The Fix wave claims it fixed things - Green Mode confirms or denies. No fix is complete until verified. This is the GATE that prevents open-ended workflows. Binary output only: PASS or FAIL.",
+
+  "composition": {
+    "total_agents": 10,
+    "parallelism_slots": 10,
+    "wave": 3,
+    "previous_wave": "red-team-fix",
+    "breakdown": [
+      {
+        "tier": "haiku",
+        "role": "verifier",
+        "count": 10,
+        "access": "read-only",
+        "responsibilities": [
+          "Re-audit ONLY files touched by Fix wave",
+          "Check each CRITICAL/HIGH finding from Recon wave",
+          "Confirm fix was applied correctly",
+          "Verify no new issues introduced"
+        ]
+      }
+    ]
+  },
+
+  "constraints": [
+    "ALL verifiers are READ-ONLY",
+    "Only check files modified in Fix wave (scoped verification)",
+    "Output MUST be binary: PASS or FAIL",
+    "If ANY CRITICAL remains unfixed: FAIL",
+    "If ANY HIGH remains unfixed: FAIL",
+    "MEDIUMs can pass with documentation"
+  ],
+
+  "input": {
+    "required": [
+      "Original Recon findings (what was found)",
+      "Fix wave output (what was claimed fixed)",
+      "List of files modified by Fix wave"
+    ]
+  },
+
+  "output": {
+    "format": {
+      "status": "PASS | FAIL",
+      "criticals_fixed": "X of Y",
+      "highs_fixed": "X of Y",
+      "mediums_fixed": "X of Y",
+      "remaining_issues": ["list if FAIL"],
+      "new_issues_introduced": ["list if any"],
+      "recommendation": "PROCEED | LOOP_BACK_TO_FIX"
+    },
+    "on_pass": "Workflow can proceed to Cleanup or terminate",
+    "on_fail": "Loop back to Red-Team-Fix with remaining issues"
+  },
+
+  "termination_logic": {
+    "pass_condition": "All CRITICAL fixed AND all HIGH fixed",
+    "fail_condition": "Any CRITICAL unfixed OR any HIGH unfixed",
+    "loop_behavior": "On FAIL, re-run red-team-fix with remaining_issues as input",
+    "max_loops": 3,
+    "escalation": "After 3 failed loops, escalate to the agent for architectural review"
+  },
+
+  "examples": [
+    {
+      "scenario": "17 bugs found, 17 bugs fixed",
+      "input": "Recon found 4 CRITICAL, 7 HIGH, 6 MEDIUM. Fix wave touched 8 files.",
+      "output": "PASS - All CRITICAL and HIGH verified fixed. 2 MEDIUM documented as acceptable.",
+      "result": "Workflow terminates successfully"
+    },
+    {
+      "scenario": "17 bugs found, 15 bugs fixed",
+      "input": "Fix wave missed 1 CRITICAL (XSS) and 1 HIGH (memory leak)",
+      "output": "FAIL - 1 CRITICAL, 1 HIGH remain. Loop back to Fix wave.",
+      "result": "Workflow loops, Fix wave re-runs on remaining issues"
+    }
+  ],
+
+  "metrics": {
+    "target_completion_time": "< 3 minutes (parallel verification)",
+    "token_budget": "20,000 - 35,000 tokens",
+    "success_criteria": "Binary PASS/FAIL with zero ambiguity"
+  },
+
+  "history": {
+    "runs": 0,
+    "pass_rate": null,
+    "avg_loops_to_pass": null,
+    "lessons_extracted": []
+  }
+}

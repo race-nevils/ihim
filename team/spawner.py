@@ -14,8 +14,22 @@ import subprocess
 import sys
 import json
 import uuid
+import time
+import shlex
 from pathlib import Path
 from datetime import datetime
+
+# Win32 API for window tracking (Windows only)
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    WM_CLOSE = 0x0010
+
+# Module-level state: tracks the agent team window handle
+_team_window_hwnd: int = None
 
 # Import blackboard (with fallback for standalone usage)
 try:
@@ -66,6 +80,43 @@ def ensure_directories():
     TASKS_PATH.mkdir(parents=True, exist_ok=True)
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
     DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+
+# --- Window Tracking Helpers (Windows only) ---
+
+def _get_wt_windows() -> set:
+    """
+    Enumerate all visible Windows Terminal window handles.
+
+    Returns:
+        Set of HWND integers for Windows Terminal windows
+    """
+    if sys.platform != "win32":
+        return set()
+
+    handles = set()
+
+    def enum_callback(hwnd, _):
+        # Check if it's a Windows Terminal window
+        class_name = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, class_name, 256)
+        if class_name.value == "CASCADIA_HOSTING_WINDOW_CLASS":
+            if user32.IsWindowVisible(hwnd):
+                handles.add(hwnd)
+        return True
+
+    user32.EnumWindows(WNDENUMPROC(enum_callback), 0)
+    return handles
+
+
+def _get_window_title(hwnd: int) -> str:
+    """Get the title of a window by its handle."""
+    if sys.platform != "win32":
+        return ""
+    length = user32.GetWindowTextLengthW(hwnd) + 1
+    buffer = ctypes.create_unicode_buffer(length)
+    user32.GetWindowTextW(hwnd, buffer, length)
+    return buffer.value
 
 
 def generate_session_id() -> str:
@@ -120,26 +171,28 @@ def spawn_single_agent(agent: str, prompt: str, working_dir: Path, is_first: boo
         prompt_file = TASKS_PATH / f"{agent}-prompt.txt"
         prompt_file.write_text(prompt, encoding="utf-8")
 
-        # Instruction for the agent - include a marker so we can identify agent processes
+        # Instruction for the agent
         instruction = f"Read the file {prompt_file} and execute the task described in it. You are the {agent} specialist."
+
+        # [iHIM] prefix lets collapse_team() find and close this window
+        tab_title = f"[iHIM] {agent}"
 
         if is_first:
             # First agent: create NEW NAMED window
-            # --window creates/targets a window by name
             subprocess.Popen([
                 'wt', '--window', AGENT_WINDOW_NAME,
-                '--title', agent,
+                '--title', tab_title,
                 '-d', str(working_dir),
-                'cmd', '/k', f'claude "{instruction}"'
+                'cmd', '/k', f'claude {shlex.quote(instruction)}'
             ])
         else:
-            # Subsequent agents: add tab to the NAMED window (not -w 0)
+            # Subsequent agents: add tab to the NAMED window
             subprocess.Popen([
                 'wt', '--window', AGENT_WINDOW_NAME,
                 'nt',  # new-tab
-                '--title', agent,
+                '--title', tab_title,
                 '-d', str(working_dir),
-                'cmd', '/k', f'claude "{instruction}"'
+                'cmd', '/k', f'claude {shlex.quote(instruction)}'
             ])
         return True
     except Exception as e:
@@ -162,6 +215,14 @@ def spawn_agent_team(routed_prompts: dict, feature_description: str = None) -> d
         dict with spawn status and details
     """
     ensure_directories()
+
+    # Validate agent count (safety limit)
+    if len(routed_prompts) > 10:
+        return {
+            "success": False,
+            "message": f"Cannot spawn {len(routed_prompts)} agents. Maximum is 10.",
+            "agents": [],
+        }
 
     # Generate session ID
     session_id = generate_session_id()
@@ -206,12 +267,16 @@ def spawn_agent_team(routed_prompts: dict, feature_description: str = None) -> d
             "agents": [],
         }
 
+    global _team_window_hwnd
+
+    # Capture existing WT windows BEFORE spawning
+    windows_before = _get_wt_windows()
+
     agents = list(routed_prompts.keys())
     spawned = []
     failed = []
 
     # Spawn all agents - first one creates window, rest add as tabs
-    import time
     for i, agent in enumerate(agents):
         prompt = routed_prompts[agent]
         is_first = (i == 0)
@@ -225,6 +290,24 @@ def spawn_agent_team(routed_prompts: dict, feature_description: str = None) -> d
         if not is_first:
             time.sleep(0.5)
 
+    # Wait for the window to fully appear, then capture its handle
+    if spawned:
+        time.sleep(1.5)  # Give WT time to create the window
+        windows_after = _get_wt_windows()
+        new_windows = windows_after - windows_before
+
+        # Find our window - prefer one with [iHIM] in title
+        _team_window_hwnd = None
+        for hwnd in new_windows:
+            title = _get_window_title(hwnd)
+            if "[iHIM]" in title:
+                _team_window_hwnd = hwnd
+                break
+        else:
+            # Fallback: take any new window
+            if new_windows:
+                _team_window_hwnd = new_windows.pop()
+
     if spawned:
         result = {
             "success": True,
@@ -234,6 +317,7 @@ def spawn_agent_team(routed_prompts: dict, feature_description: str = None) -> d
             "failed": failed,
             "task_files": task_files,
             "spawned_at": datetime.now().isoformat(),
+            "window_tracked": _team_window_hwnd is not None,
         }
         if BLACKBOARD_AVAILABLE:
             result["blackboard"] = "IHIM/team/blackboard.json"
@@ -249,150 +333,53 @@ def spawn_agent_team(routed_prompts: dict, feature_description: str = None) -> d
 
 def collapse_team() -> dict:
     """
-    Collapse the agent team - close the agent window.
+    Collapse the agent team - close the tracked agent window.
 
-    Only closes the iHIM-AgentTeam window, NOT your main the agent session.
-    Uses window handles to close just the agent window without affecting
-    other Windows Terminal windows.
-
-    Returns:
-        dict with collapse status
+    Uses the window handle (HWND) captured at spawn time to close
+    the exact window, regardless of which tab is active.
     """
-    if sys.platform == "win32":
-        try:
-            tasks_path_str = str(TASKS_PATH).replace("\\", "\\\\")
+    global _team_window_hwnd
 
-            # PowerShell script that:
-            # 1. Finds cmd.exe processes with our task path
-            # 2. Gets their parent Windows Terminal window handle
-            # 3. Closes that specific window (not process - to not affect other WT windows)
-            # 4. Kills the cmd.exe processes
-            result = subprocess.run(
-                ['powershell', '-Command', '''
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-using System.Collections.Generic;
+    if sys.platform != "win32":
+        return {"success": False, "message": "Only supported on Windows"}
 
-public class WTWindowCloser {
-    [DllImport("user32.dll")]
-    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    # Clean up task and prompt files regardless of window state
+    for task_file in TASKS_PATH.glob("*-task.md"):
+        task_file.unlink()
+    for prompt_file in TASKS_PATH.glob("*-prompt.txt"):
+        prompt_file.unlink()
 
-    [DllImport("user32.dll")]
-    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-
-    public const uint WM_CLOSE = 0x0010;
-
-    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    public static List<IntPtr> wtWindows = new List<IntPtr>();
-
-    public static bool EnumWindowsCallback(IntPtr hWnd, IntPtr lParam) {
-        var className = new System.Text.StringBuilder(256);
-        GetClassName(hWnd, className, className.Capacity);
-        if (className.ToString() == "CASCADIA_HOSTING_WINDOW_CLASS") {
-            wtWindows.Add(hWnd);
+    # Check if we have a tracked window
+    if _team_window_hwnd is None:
+        return {
+            "success": False,
+            "message": "No agent window tracked (spawn first, or window was already closed)",
+            "collapsed_at": datetime.now().isoformat(),
         }
-        return true;
-    }
 
-    public static IntPtr[] GetWTWindows() {
-        wtWindows.Clear();
-        EnumWindows(EnumWindowsCallback, IntPtr.Zero);
-        return wtWindows.ToArray();
-    }
+    # Verify window still exists
+    if not user32.IsWindow(_team_window_hwnd):
+        _team_window_hwnd = None
+        return {
+            "success": True,
+            "message": "Agent window already closed",
+            "collapsed_at": datetime.now().isoformat(),
+        }
 
-    public static uint GetWindowPID(IntPtr hwnd) {
-        uint pid;
-        GetWindowThreadProcessId(hwnd, out pid);
-        return pid;
-    }
-}
-"@
+    # Send WM_CLOSE to the tracked window - graceful close
+    result = user32.PostMessageW(_team_window_hwnd, WM_CLOSE, 0, 0)
+    _team_window_hwnd = None
 
-$killed = 0
-$windowClosed = $false
-$targetPIDs = @()
-
-# First, find all cmd.exe processes running our agent tasks
-Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | ForEach-Object {
-    if ($_.CommandLine -like "*''' + tasks_path_str + '''*") {
-        $targetPIDs += $_.ParentProcessId
-    }
-}
-
-# Get unique parent PIDs (these should be Windows Terminal)
-$targetPIDs = $targetPIDs | Select-Object -Unique
-
-# Find the Windows Terminal window(s) that own our agent processes
-$wtWindows = [WTWindowCloser]::GetWTWindows()
-foreach ($hwnd in $wtWindows) {
-    $windowPID = [WTWindowCloser]::GetWindowPID($hwnd)
-    if ($targetPIDs -contains $windowPID) {
-        # This is the agent team window - close it
-        [WTWindowCloser]::PostMessage($hwnd, [WTWindowCloser]::WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero)
-        $windowClosed = $true
-    }
-}
-
-# Also kill any lingering cmd.exe processes (belt and suspenders)
-Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | ForEach-Object {
-    if ($_.CommandLine -like "*''' + tasks_path_str + '''*") {
-        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-        $killed++
-    }
-}
-
-Write-Output "$killed|$windowClosed"
-                '''],
-                capture_output=True,
-                text=True
-            )
-
-            output = result.stdout.strip()
-            parts = output.split("|") if "|" in output else [output, "False"]
-            killed_count = parts[0]
-            window_closed = parts[1].lower() == "true"
-
-            # Clean up task and prompt files
-            for task_file in TASKS_PATH.glob("*-task.md"):
-                task_file.unlink()
-            for prompt_file in TASKS_PATH.glob("*-prompt.txt"):
-                prompt_file.unlink()
-
-            if window_closed:
-                return {
-                    "success": True,
-                    "message": f"Closed agent window and {killed_count} agent(s)",
-                    "collapsed_at": datetime.now().isoformat(),
-                }
-            elif int(killed_count) > 0:
-                return {
-                    "success": True,
-                    "message": f"Collapsed {killed_count} agent(s) (window may have already closed)",
-                    "collapsed_at": datetime.now().isoformat(),
-                }
-            else:
-                return {
-                    "success": True,
-                    "message": "No active agents to collapse",
-                    "collapsed_at": datetime.now().isoformat(),
-                }
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Failed to collapse team: {str(e)}",
-            }
+    if result:
+        return {
+            "success": True,
+            "message": "Agent window closed",
+            "collapsed_at": datetime.now().isoformat(),
+        }
     else:
         return {
             "success": False,
-            "message": "Mac/Linux collapse not yet implemented",
+            "message": "Failed to close window (PostMessage failed)",
         }
 
 

@@ -8,6 +8,52 @@ NOTE: Blackboard instructions are injected by spawner.py (from blackboard.py),
 NOT here. This avoids duplicate instructions in agent prompts.
 """
 
+# Common end sequence for ALL agents - this is CRITICAL for the feedback loop
+END_SEQUENCE = """
+---
+
+## END SEQUENCE (REQUIRED - Do this BEFORE closing)
+
+When your task is complete, you MUST do these steps in order:
+
+### 1. Write Result File
+Save your deliverables to: `IHIM/team/results/{agent}-result.json`
+```json
+{{
+  "agent": "{agent}",
+  "status": "complete",
+  "timestamp": "<ISO timestamp>",
+  "summary": "<1-2 sentence summary of what you built>",
+  "files_created": ["<paths>"],
+  "files_modified": ["<paths>"],
+  "blockers": [],
+  "handoff_notes": "<what the next agent needs to know>"
+}}
+```
+
+### 2. Write Retrospective (CRITICAL FOR LEARNING)
+Save honest self-critique to: `IHIM/team/results/{agent}-retrospective.md`
+
+Include these sections:
+- **Assumptions I Didn't Verify** - What did you assume worked without testing?
+- **Where I Wasted Time** - Over-engineering, wrong approaches, rabbit holes
+- **What I'd Do Differently** - Concrete improvements for next time
+- **What Might Break** - Known risks, edge cases, fragile code
+- **What Next Agent Should Know** - Handoff notes, gotchas, dependencies
+
+Be brutally honest. This feeds the feedback loop.
+
+### 3. Post DONE to Blackboard
+Update your status so the team knows you're finished.
+
+### 4. Verify Before Closing
+- [ ] result.json exists and is valid JSON
+- [ ] retrospective.md exists and has all sections
+- [ ] Blackboard status updated
+
+DO NOT close your session until all 4 steps are complete.
+"""
+
 
 AGENT_TEMPLATES = {
     "frontend-dev": """
@@ -44,7 +90,7 @@ harness/agents/software-dev/frontend-dev.md
 - Use TypeScript, not JavaScript
 
 Begin your work now.
-""",
+""" + END_SEQUENCE,
 
     "backend-dev": """
 # Task for Backend Dev
@@ -80,7 +126,7 @@ harness/agents/software-dev/backend-dev.md
 - Always return proper HTTP status codes
 
 Begin your work now.
-""",
+""" + END_SEQUENCE,
 
     "devops": """
 # Task for DevOps (INTEGRATION LEAD)
@@ -132,7 +178,7 @@ In INTEGRATE/VERIFY phases, you MUST:
 - Always test locally before marking complete
 
 Begin your work now.
-""",
+""" + END_SEQUENCE,
 
     "qa-tester": """
 # Task for QA Tester
@@ -170,7 +216,7 @@ harness/agents/software-dev/qa-tester.md
 - Use descriptive test names
 
 Begin your work now.
-""",
+""" + END_SEQUENCE,
 
     "security-reviewer": """
 # Task for Security Reviewer
@@ -207,7 +253,7 @@ harness/agents/software-dev/security-reviewer.md
 - Be thorough but pragmatic
 
 Begin your review now.
-""",
+""" + END_SEQUENCE,
 }
 
 
@@ -225,5 +271,6 @@ def format_agent_prompt(agent_name: str, prompt: str, project: str, working_dir:
     return template.format(
         prompt=prompt,
         project=project,
-        working_dir=working_dir
+        working_dir=working_dir,
+        agent=agent_name  # For END_SEQUENCE file paths
     )

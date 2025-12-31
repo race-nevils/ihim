@@ -62,20 +62,29 @@ def main():
     print("  Press Ctrl+C to stop")
     print()
 
-    # Open browser after short delay
-    def open_browser():
-        time.sleep(1.5)
-        webbrowser.open("http://localhost:7777")
+    # Open browser after short delay (skip if supervised)
+    skip_browser = os.environ.get('IHIM_SUPERVISED') == '1'
+    if not skip_browser:
+        def open_browser():
+            time.sleep(1.5)
+            webbrowser.open("http://localhost:7777")
 
-    threading.Thread(target=open_browser, daemon=True).start()
+        threading.Thread(target=open_browser, daemon=True).start()
 
-    # Run server
+    # Run server with proper hot reload
     import uvicorn
+    from pathlib import Path
+
+    # Get the IHIM directory
+    ihim_dir = Path(__file__).parent
+
     uvicorn.run(
         "api.main:app",
         host="127.0.0.1",
         port=7777,
         reload=True,
+        reload_dirs=[str(ihim_dir)],  # Watch the entire IHIM directory
+        reload_includes=["*.py", "*.html", "*.css", "*.js"],  # Watch these file types
         log_level="warning"
     )
 

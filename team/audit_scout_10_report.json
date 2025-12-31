@@ -1,0 +1,173 @@
+{
+  "scout_id": "scout_10_data_files",
+  "domain": "IHIM/data/*.json",
+  "timestamp": "2025-12-27T12:00:00Z",
+  "summary": "All JSON data files are valid and structurally sound. No corruption detected. Minor schema inconsistencies found related to frontend state persistence.",
+  "bugs": [
+    {
+      "severity": "LOW",
+      "file": "notes.json",
+      "issue": "All note records have empty title field",
+      "description": "Every note object has title: '' (empty string). The data model supports titles but all entries are blank. Not a data corruption issue, but indicates feature is unused or incomplete.",
+      "count": 9,
+      "affected_ids": ["c980b6f3", "1847da53", "19b19d7b", "683fe188", "04458c3e", "323ba341", "358306c8", "239d8548", "a2067dfa"],
+      "impact": "UI shows empty title field for all notes. Title editing feature (if implemented) is not being used."
+    },
+    {
+      "severity": "LOW",
+      "file": "stopwatches.json",
+      "issue": "All stopwatch records have started_at: null despite is_running: false",
+      "description": "Both stopwatches have is_running=false and started_at=null, which is consistent. However, if a stopwatch were running (is_running=true), the started_at must be a valid timestamp for frontend time calculation (per backend-dev message: 'elapsed_ms + (Date.now() - Date.parse(started_at))'). Currently no way to verify this constraint.",
+      "impact": "Low - only matters if stopwatches transition to running state. Currently safe."
+    }
+  ],
+  "inconsistencies": [
+    {
+      "severity": "MEDIUM",
+      "type": "Schema mismatch: stopwatches backend vs frontend",
+      "issue": "Backend API spec includes fields not in persisted data",
+      "details": {
+        "backend_endpoints": "Backend deliverable lists POST /api/stopwatches/{id}/lap endpoint returning lap times",
+        "persisted_data": "stopwatches.json has no 'lap_times' or 'last_lap' fields",
+        "spec_statement": "Response format: {id, label, elapsed_ms, is_running, started_at, created_at}",
+        "problem": "Lap time tracking API endpoint exists in spec, but storage schema doesn't support it"
+      },
+      "files_affected": ["stopwatches.json"],
+      "recommendation": "Either remove /lap endpoint from backend or add lap_times array to stopwatch schema"
+    },
+    {
+      "severity": "LOW",
+      "type": "Data persistence strategy mismatch",
+      "issue": "Frontend doesn't use stopwatch backend API",
+      "details": "Frontend deliverable states 'State persists in localStorage (not using backend API)'. Backend created stopwatches.json but frontend doesn't consume it.",
+      "files_affected": ["stopwatches.json"],
+      "implication": "stopwatches.json becomes stale. Frontend changes won't sync to backend.",
+      "recommendation": "Decide: (1) Use backend API + stopwatches.json for sync, OR (2) remove backend persistence entirely"
+    },
+    {
+      "severity": "LOW",
+      "type": "Task schema missing created_at/updated_at",
+      "issue": "tasks.json records lack timestamp fields",
+      "description": "Task objects have: id, text, priority, completed, description. No created_at or updated_at timestamps.",
+      "note_api_has_timestamps": "Notes API enforces created_at and updated_at (see main.py line 975-976). Tasks don't follow same pattern.",
+      "impact": "Can't track task creation/modification times. Audit trails impossible.",
+      "files_affected": ["tasks.json"]
+    }
+  ],
+  "orphaned_data": {
+    "severity": "NONE",
+    "note": "No orphaned data detected. All IDs follow consistent 8-character hex format (UUID[:8]). No cross-references found in any file, so no orphan possibilities."
+  },
+  "schema_validation": {
+    "tasks.json": {
+      "structure": "Valid. Root object with 'tasks' array.",
+      "records": 6,
+      "required_fields_check": "PASS - all records have: id, text, priority, completed, description",
+      "id_format": "UUID[:8] hex (8 chars) - CONSISTENT",
+      "priority_values": ["medium", "high", "low"],
+      "completed_values": "all false - all bool",
+      "description_max_length": "Max 356 chars - reasonable"
+    },
+    "notes.json": {
+      "structure": "Valid. Root object with 'notes' array.",
+      "records": 9,
+      "required_fields_check": "PASS - all records have: id, title, content, created_at, updated_at",
+      "id_format": "UUID[:8] hex (8 chars) - CONSISTENT",
+      "timestamp_format": "ISO 8601 with Z suffix - CONSISTENT",
+      "content_max_length": "Max 1064 chars - reasonable",
+      "timestamps": "created_at always equals updated_at in first 6 notes, diverges in later notes (expected after editing)"
+    },
+    "stopwatches.json": {
+      "structure": "Valid. Root object with 'stopwatches' array.",
+      "records": 2,
+      "required_fields_check": "PASS - all records have: id, label, elapsed_ms, is_running, started_at, created_at",
+      "id_format": "UUID[:8] hex (8 chars) - CONSISTENT",
+      "elapsed_ms": "[0, 2290] - both valid integers",
+      "is_running": "all false - both bool",
+      "timestamp_format": "ISO 8601 with Z suffix - CONSISTENT"
+    },
+    "heuristics.json": {
+      "structure": "Valid. Root object with 'heuristics' array + 'meta' object.",
+      "records": 3,
+      "required_fields_check": "PASS - all have: id, trigger_conditions, action, anti_action, rationale, source_debrief, pattern, confidence, times_seen, times_applied, tokens_saved_estimate",
+      "id_format": "h[0-9]+ format (h001, h002, h003) - CONSISTENT",
+      "confidence_range": "[0.85, 0.95] - all valid 0-1 floats",
+      "meta_object": "PRESENT - tracks last_updated, total_heuristics, total_estimated_savings"
+    },
+    "debriefs.jsonl": {
+      "structure": "VALID JSONL (one JSON object per line)",
+      "records": 1,
+      "required_fields_check": "PASS - has: timestamp, task, outcome, metrics, scores, root_cause, learning, pattern, dead_ends, missed_signals",
+      "timestamp_format": "ISO 8601 with Z - CONSISTENT",
+      "scores": "problem_understanding:4, diagnosis_speed:2, solution_efficiency:3, tool_mastery:4, communication:5, overall:3 - all 1-5 scale",
+      "metrics": "total_commands:27, effective_commands:8, efficiency_ratio:0.30, dead_ends:4, pivots:2, time_to_root_cause:'late' - VALID"
+    },
+    "team_instances.json": {
+      "structure": "Valid. Root object with 'instances' array.",
+      "records": 1,
+      "required_fields_check": "PASS - all have: id, template_id, task_description, agents, status, spawned_at, completed_at, session_id",
+      "id_format": "inst-[UUID] (inst-48ec6fc7) - CONSISTENT",
+      "status_values": "[spawning] - valid (other expected: active, completed, failed)",
+      "agents_array": "[frontend-dev, backend-dev, devops, qa-tester, security-reviewer] - CONSISTENT with template",
+      "timestamp_format": "ISO 8601 with Z - CONSISTENT"
+    },
+    "team_templates.json": {
+      "structure": "Valid. Root object with 'templates' array.",
+      "records": 4,
+      "required_fields_check": "PASS - all have: id, name, description, agents, min_agents, max_agents, tags, created_at, updated_at, use_count",
+      "id_format": "kebab-case (software-dev, project-management, research, security-audit) - CONSISTENT",
+      "agent_structure": "Each agent object properly formed with: id, name, expertise[], responsibilities[], constraints[], collaborates_with[], prompt_template",
+      "min/max_agents": "All valid ranges (3-5, 3-4, etc.)",
+      "template_reference": "Instance file references 'software-dev' template - FOUND AND VALID"
+    }
+  },
+  "data_integrity_checks": {
+    "json_validity": "ALL FILES VALID - parsed successfully",
+    "cross_file_references": {
+      "team_instances uses template_id": "inst references 'software-dev' - FOUND in templates.json - VALID",
+      "template agents referenced": "All 5 agents in instance exist in template definition - VALID"
+    },
+    "timestamp_consistency": "All timestamps are ISO 8601 with Z suffix where used - CONSISTENT",
+    "id_uniqueness": "No duplicate IDs found across files - UNIQUE"
+  },
+  "suggestions": [
+    {
+      "priority": "HIGH",
+      "category": "Data Persistence",
+      "action": "Resolve stopwatches frontend/backend mismatch",
+      "detail": "Frontend uses localStorage, backend has stopwatches.json. Choose one: (A) Remove backend persistence and API endpoints for stopwatches, OR (B) Refactor frontend to sync with backend API instead of localStorage. Current split leads to data divergence."
+    },
+    {
+      "priority": "MEDIUM",
+      "category": "Schema Alignment",
+      "action": "Add timestamps to tasks",
+      "detail": "Add created_at and updated_at to task schema (follow notes.json pattern). Will enable audit trails and modification tracking."
+    },
+    {
+      "priority": "MEDIUM",
+      "category": "Schema Alignment",
+      "action": "Remove/implement lap time tracking",
+      "detail": "Backend spec mentions POST /api/stopwatches/{id}/lap endpoint but stopwatches.json has no lap_times field. Either implement full lap time storage or remove the endpoint from backend."
+    },
+    {
+      "priority": "LOW",
+      "category": "Data Quality",
+      "action": "Populate note titles",
+      "detail": "All notes have empty title field. Either start using titles or remove the field from schema to simplify."
+    },
+    {
+      "priority": "LOW",
+      "category": "Documentation",
+      "action": "Document stopwatch API lap endpoint behavior",
+      "detail": "Backend deliverable claims lap endpoint exists, but unclear if it persists, returns calculated value, or both. Add docstring to clarify."
+    }
+  ],
+  "verification_notes": [
+    "Tested JSON validity by parsing all files - no syntax errors",
+    "Verified schema consistency against API endpoint definitions in IHIM/api/main.py",
+    "Cross-referenced team_instances.json agent IDs with team_templates.json definitions",
+    "Checked timestamp format consistency (ISO 8601 with Z)",
+    "Verified ID uniqueness across all files",
+    "Confirmed no data corruption, all records parseable"
+  ]
+}

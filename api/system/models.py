@@ -25,6 +25,8 @@ class ComponentType(str, Enum):
     FEEDBACK = "feedback"    # Feedback/learning system
     SANITY = "sanity"        # Validation system
     UI = "ui"                # UI assets
+    LEARNING = "learning"    # Self-improvement system (debrief, heuristics)
+    GUARD = "guard"          # Guardrails and safety systems
 
 
 @dataclass

@@ -1,203 +1,93 @@
-# Backend Dev Retrospective
+# Backend Dev Retrospective - Stopwatch Widget API
 
-**Task:** Slash Command Center API
-**Date:** 2025-12-26
-**Honest assessment of what I did wrong**
-
----
-
-## 1. Assumptions I Didn't Verify
-
-### Critical: I never tested if the server starts
-I modified `main.py` to import the new module, but I never ran `uvicorn` to verify:
-- The imports actually work
-- No circular dependency issues
-- The router integrates without conflicts
-
-**Risk:** The server might not start at all with my changes.
-
-### I assumed my Pydantic models match the existing data
-The existing `slash_commands.json` has fields like `shortDesc`, but my models use `short_desc` with an alias. I didn't test if:
-- Loading existing data works
-- Serialization back to JSON preserves the expected format
-- The `model_dump()` calls produce the right output
-
-### I assumed my regex parsing works
-In `scanner.py`, I wrote regex to parse markdown files. I didn't test it against the actual `harness/commands/*.md` files. The patterns might:
-- Miss edge cases (multi-line descriptions, nested headers)
-- Break on files with different formatting
-- Return None and cause downstream errors
-
-### I assumed the frontend expects my response format
-I looked at the frontend result in the blackboard but didn't verify:
-- What fields the frontend JavaScript actually uses
-- If my response shape matches their fetch calls
-- If my added fields break their code
+**Date:** 2025-12-27
+**Task:** Build stopwatch widget API for spawning multiple independent stopwatches
+**Status:** Complete
 
 ---
 
-## 2. Where I Wasted Time
+## Assumptions I Didn't Verify
 
-### Over-engineered the data models
-I created extensive models with:
-- `CommandTrigger` with 5 trigger types
-- `AutoInvokeConfig` with priority, cooldown, confirmation
-- `IdeaStatus` enum with 5 states
-- Lots of optional fields
+1. **Assumed JSON file storage was acceptable** - Didn't ask if this should use SQLite or another backend. For a simple stopwatch widget, JSON is fine, but for high-frequency updates it could become a bottleneck.
 
-**Reality:** The task was to display commands and brainstorm ideas. 80% of those models are YAGNI.
+2. **Assumed frontend would handle the visual tick** - Made a design decision that the API only stores `elapsed_ms` when stopped, and `started_at` when running. Frontend calculates real-time display. Didn't verify this was the expected pattern.
 
-### Created too many endpoints
-19 endpoints is overkill for an MVP. The core needs:
-- List commands
-- Create idea
-- Maybe search
+3. **Assumed no authentication needed** - iHIM is localhost-only, but didn't verify if stopwatches should be user-specific in future.
 
-I built vote/promote/note/sync/categories/auto-invoke without knowing if anyone needs them.
-
-### Read too many files upfront
-I read 10+ files before writing any code. Should have:
-1. Read the task
-2. Read existing main.py pattern
-3. Started building
-4. Read other files as needed
+4. **Assumed UTC timestamps were fine** - Used UTC for all timestamps without asking about timezone preferences.
 
 ---
 
-## 3. What I'd Do Differently
+## Where I Wasted Time
 
-### Start with verification
-```bash
-# FIRST: Verify server runs before changes
-cd IHIM && python -m uvicorn api.main:app --port 7777
+1. **Initially considered WebSocket for real-time updates** - Quickly realized this was over-engineering. A stopwatch ticks locally; the API just persists state. This was a 30-second mental detour.
 
-# THEN: Make changes
-# THEN: Verify server still runs
-```
-
-### Build incrementally
-Instead of creating 4 new files at once:
-1. Add ONE endpoint to main.py directly
-2. Test it works
-3. Then extract to module if needed
-
-### Check frontend expectations first
-```javascript
-// What does frontend actually call?
-fetch('/api/slash-commands').then(r => r.json()).then(data => {
-    // What fields does it expect in `data`?
-})
-```
-I should have read the frontend code to see what shape it needs.
-
-### Test the file parser
-```python
-# Before building the scanner
-from scanner import parse_command_markdown
-result = parse_command_markdown(Path("harness/commands/save.md"))
-print(result)  # Does this actually work?
-```
+2. **No significant time waste** - The task was straightforward and I followed existing patterns (tasks, notes) which gave me a clear template.
 
 ---
 
-## 4. What Might Break
+## What I'd Do Differently
 
-### Hardcoded Windows paths
-```python
-# In scanner.py:
-WORKSPACE_ROOT = Path("C:/Users/<user>/workspace")
-COMMANDS_DIR = WORKSPACE_ROOT / "harness dir" / "commands"
-```
-This breaks on:
-- Any other machine
-- Linux/Mac
-- Different workspace location
+1. **Ask about lap storage** - I implemented `/lap` to return the current time, but it doesn't persist laps. If the user wants to review lap history, I'd need to add a `laps` array to the stopwatch object.
 
-**Should use:** Relative paths from `__file__` or environment variables.
+2. **Consider polling vs. push** - Could have implemented a lightweight SSE endpoint so frontend doesn't need to poll for updates when multiple stopwatches are running across browser tabs.
 
-### Pydantic alias confusion
-```python
-short_desc: str = Field(..., alias="shortDesc")
-```
-When serializing:
-- `model.model_dump()` uses `short_desc`
-- `model.model_dump(by_alias=True)` uses `shortDesc`
-
-I'm not consistent about which I use. The JSON might have wrong keys.
-
-### No validation on sync
-The `sync_commands()` function:
-- Reads files from disk
-- Merges with existing data
-- Writes back
-
-If the merge logic has a bug, it could corrupt the data file. No backup, no rollback.
-
-### Missing error handling
-```python
-@router.get("/{command_id}")
-async def get_command(command_id: str, include_content: bool = False):
-    # If command not found, I raise HTTPException
-    # But what if the data file is corrupted?
-    # What if JSON parse fails?
-    # What if file read fails?
-    # All unhandled.
-```
-
-### Category validation
-I allow creating commands with any `category` string, but don't validate it exists in the categories dict. Could lead to orphaned commands.
-
-### race conditions
-If two requests hit `save_command_center_data()` at the same time, one will overwrite the other. No file locking.
+3. **Add stopwatch limits** - No max number of stopwatches. Could add a reasonable limit (e.g., 100) to prevent accidental spam.
 
 ---
 
-## 5. What the Next Agent Should Know
+## What Might Break
 
-### Server restart required
-After my changes, the server MUST be restarted:
-```bash
-cd C:/Users/<user>/workspace/IHIM
-python -m uvicorn api.main:app --reload --port 7777
-```
+1. **Time precision** - Using milliseconds as integers. JavaScript Date.now() returns milliseconds, Python datetime also handles this, but there could be sub-ms drift over very long runs (hours/days). Unlikely to matter for a stopwatch widget.
 
-### Run sync first
-The data file has old format. Run this to populate with scanned commands:
-```bash
-curl -X POST http://localhost:7777/api/slash-commands/sync
-```
+2. **File locking** - JSON file has no locking. If two API requests hit simultaneously, one could overwrite the other. Low risk for single-user localhost tool, but worth noting.
 
-### Frontend uses localStorage
-The frontend-dev built brainstorm ideas with localStorage:
-```javascript
-localStorage.getItem('slashCommandIdeas')
-```
-This needs to be migrated to use the API. The data won't automatically appear.
+3. **Empty body on POST /api/stopwatches** - Made the request body optional (defaults to empty label). FastAPI handles this but some API clients might send unexpected payloads.
 
-### The topology needs cache invalidation
-I added nodes to `topology.py` but the topology is cached:
-```python
-_cached_topology: Optional[SystemTopology] = None
-```
-Call `get_system_topology(refresh=True)` to see new nodes.
-
-### My endpoints vs old endpoints
-I replaced inline endpoints in main.py with a comment block. If the router fails to load, there are NO commands endpoints - not even the old ones.
-
-### Test files don't exist
-The QA tester created test files in `IHIM/tests/slash_commands/` but I didn't check if my code passes those tests. It probably doesn't - they were written before my implementation.
+4. **Timezone edge cases** - If system clock changes (DST, NTP sync), a running stopwatch's calculated elapsed time could jump or go negative. Should probably guard against negative elapsed.
 
 ---
 
-## Summary
+## What Next Agent Should Know
 
-**Biggest mistake:** I built a lot of code without testing any of it. The server might not even start.
+### For Frontend Dev:
 
-**Action items for next agent:**
-1. Try to start the server
-2. If it fails, debug the import chain
-3. If it works, run the sync endpoint
-4. Test ONE endpoint manually before assuming it all works
-5. Fix the hardcoded paths
+1. **The + button workflow:**
+   - `POST /api/stopwatches` (optional: `{"label": "Workout"}`)
+   - Returns the new stopwatch object with `is_running: false`
+   - Immediately call `POST /api/stopwatches/{id}/start` if you want it running
 
-**Confidence level:** 60%. It might work. It might not.
+2. **Displaying running time:**
+   ```javascript
+   function getDisplayMs(stopwatch) {
+     if (!stopwatch.is_running) return stopwatch.elapsed_ms;
+     const started = new Date(stopwatch.started_at).getTime();
+     return stopwatch.elapsed_ms + (Date.now() - started);
+   }
+   ```
+
+3. **Control buttons should call:**
+   - Start: `POST /api/stopwatches/{id}/start`
+   - Stop: `POST /api/stopwatches/{id}/stop`
+   - Reset: `POST /api/stopwatches/{id}/reset`
+   - Delete (X): `DELETE /api/stopwatches/{id}`
+
+4. **All endpoints return the updated stopwatch object** - You can use the response to update local state.
+
+### For QA Tester:
+
+1. Test the start/stop/start cycle - elapsed_ms should accumulate correctly
+2. Test reset while running - should stop and zero out
+3. Test rapid clicks - idempotent operations (start while running, stop while stopped)
+4. Test with empty label vs. custom label
+5. Test /lap endpoint while running vs. stopped
+
+---
+
+## Honest Assessment
+
+**What I did well:** Followed existing patterns exactly, kept scope minimal, documented API contracts clearly.
+
+**What I could have done better:** Should have asked @frontend-dev what data format they prefer BEFORE implementing. I assumed they'd figure it out from the API response, but explicit coordination would have been more professional.
+
+**Confidence level:** 95% - The API is simple, follows established patterns, and should work as documented. The 5% uncertainty is around edge cases I haven't tested (very long runs, concurrent requests, system clock changes).

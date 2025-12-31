@@ -2,6 +2,7 @@
 import subprocess
 import sys
 import os
+import shlex
 from pathlib import Path
 
 
@@ -76,10 +77,12 @@ def open_terminal(path: Path, command: str = None) -> bool:
         if sys.platform == "win32":
             if command:
                 # Open new tab in Windows Terminal named "iHIM", run command
-                subprocess.Popen(
-                    f'wt --window iHIM nt -d "{path}" pwsh -NoExit -Command "{command}"',
-                    shell=True
-                )
+                # Use list form to avoid shell injection
+                subprocess.Popen([
+                    "wt", "--window", "iHIM", "nt",
+                    "-d", str(path),
+                    "pwsh", "-NoExit", "-Command", command
+                ])
             else:
                 subprocess.Popen([
                     "wt", "--window", "iHIM", "nt",
@@ -87,8 +90,11 @@ def open_terminal(path: Path, command: str = None) -> bool:
                 ])
         else:  # darwin
             if command:
-                # Create a temp script to run the command
-                script = f'cd "{path}" && {command}'
+                # Create a temp script to run the command - properly escape for AppleScript
+                # AppleScript requires backslash-escaping of quotes and backslashes
+                escaped_path = str(path).replace('\\', '\\\\').replace('"', '\\"')
+                escaped_command = command.replace('\\', '\\\\').replace('"', '\\"')
+                script = f'cd "{escaped_path}" && {escaped_command}'
                 subprocess.Popen([
                     "osascript", "-e",
                     f'tell app "Terminal" to do script "{script}"'
@@ -146,7 +152,8 @@ def open_in_chrome(url: str) -> bool:
     """Open URL specifically in Chrome"""
     try:
         if sys.platform == "win32":
-            subprocess.Popen(["start", "chrome", url], shell=True)
+            # Use cmd.exe directly without shell=True to avoid injection
+            subprocess.Popen(["cmd.exe", "/c", "start", "chrome", url])
         else:  # darwin
             subprocess.Popen(["open", "-a", "Google Chrome", url])
         return True

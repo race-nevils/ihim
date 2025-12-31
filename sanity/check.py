@@ -188,7 +188,8 @@ def check_template_formatting(report: SanityReport):
         test_vars = {
             "prompt": "Test prompt",
             "project": "TestProject",
-            "working_dir": "/test/dir"
+            "working_dir": "/test/dir",
+            "agent": "test-agent"  # For END_SEQUENCE file paths
         }
 
         for agent_name, template in AGENT_TEMPLATES.items():

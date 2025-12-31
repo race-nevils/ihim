@@ -1,0 +1,125 @@
+{
+  "id": "blue-mode-cleanup",
+  "name": "Blue Mode: Cleanup Sweep",
+  "version": "1.0.0",
+  "created_at": "2025-12-27",
+  "updated_at": "2025-12-27",
+
+  "what": "Final cleanup sweep after verification passes. Removes debug artifacts, temp files, console.logs, TODO comments from fixed code, and ensures no pollution remains. Cleans the bug off the shoe.",
+
+  "when_to_use": [
+    "After Green Mode returns PASS",
+    "Before final commit",
+    "When closing out a feature or fix cycle"
+  ],
+
+  "when_not_to_use": [
+    "Before Green Mode passes (premature cleanup)",
+    "On active development branches (would remove useful debug code)"
+  ],
+
+  "philosophy": "Leave no trace. The system should be cleaner after we leave than when we arrived. Debug artifacts, temporary hacks, and leftover comments pollute the codebase over time. Blue Mode ensures a clean final state.",
+
+  "composition": {
+    "total_agents": 6,
+    "parallelism_slots": 6,
+    "wave": 4,
+    "previous_wave": "green-mode-verify (must be PASS)",
+    "breakdown": [
+      {
+        "id": "cleaner-debug",
+        "tier": "haiku",
+        "role": "scanner",
+        "count": 2,
+        "access": "read-only",
+        "specialty": "Debug Artifacts",
+        "finds": [
+          "console.log statements",
+          "print() debug statements",
+          "debugger; breakpoints",
+          "TODO/FIXME comments in fixed code",
+          "Commented-out code blocks"
+        ]
+      },
+      {
+        "id": "cleaner-temp",
+        "tier": "haiku",
+        "role": "scanner",
+        "count": 2,
+        "access": "read-only",
+        "specialty": "Temporary Files",
+        "finds": [
+          ".tmp files",
+          ".bak files",
+          "Test output files",
+          "Generated files that shouldn't be committed",
+          "Cache files in wrong locations"
+        ]
+      },
+      {
+        "id": "cleaner-style",
+        "tier": "sonnet",
+        "role": "operator",
+        "count": 2,
+        "access": "read-write",
+        "specialty": "Code Cleanup",
+        "actions": [
+          "Remove identified debug statements",
+          "Clean up commented code",
+          "Fix formatting inconsistencies",
+          "Remove unused imports"
+        ]
+      }
+    ]
+  },
+
+  "constraints": [
+    "Only clean files touched in this workflow",
+    "Never remove debug code from unrelated files",
+    "Preserve intentional TODO comments (only remove ones from fixed bugs)",
+    "Don't over-clean - minimal changes only",
+    "Document what was removed"
+  ],
+
+  "input": {
+    "required": [
+      "List of files modified in Fix wave",
+      "Green Mode PASS confirmation"
+    ]
+  },
+
+  "output": {
+    "format": {
+      "files_cleaned": ["list"],
+      "artifacts_removed": {
+        "debug_statements": 0,
+        "temp_files": 0,
+        "commented_code_blocks": 0,
+        "unused_imports": 0
+      },
+      "final_state": "CLEAN | NEEDS_ATTENTION",
+      "notes": "Any special considerations"
+    }
+  },
+
+  "examples": [
+    {
+      "scenario": "Post-fix cleanup",
+      "input": "8 files touched by Fix wave, Green Mode passed",
+      "output": "Removed 3 console.logs, 2 TODO comments, 1 commented block. CLEAN.",
+      "result": "Codebase ready for commit"
+    }
+  ],
+
+  "metrics": {
+    "target_completion_time": "< 5 minutes",
+    "token_budget": "15,000 - 25,000 tokens",
+    "success_criteria": "Zero debug artifacts in modified files"
+  },
+
+  "history": {
+    "runs": 0,
+    "avg_artifacts_removed": null,
+    "lessons_extracted": []
+  }
+}

@@ -1,5 +1,6 @@
 """
-System topology builder - defines all iHIM components and their connections.
+System topology builder - defines all workspace components and their connections.
+workspace is the root. iHIM is one system within workspace.
 """
 
 from pathlib import Path
@@ -8,12 +9,16 @@ from .models import ComponentNode, SystemEdge, SystemTopology, ComponentType
 
 
 # Base paths
-IHIM_ROOT = Path("C:/Users/<user>/workspace/IHIM")
+WORKSPACE_ROOT = Path("C:/Users/<user>/workspace")
+IHIM_ROOT = WORKSPACE_ROOT / "IHIM"
 
 
 def build_topology() -> SystemTopology:
     """
-    Build the complete iHIM system topology.
+    Build the complete workspace system topology.
+
+    workspace = Virtual Workstation (top level, backend structure)
+    iHIM = Interface/frontend for interacting with workspace
 
     Returns a graph of all components and their connections.
     """
@@ -21,13 +26,124 @@ def build_topology() -> SystemTopology:
     edges = []
 
     # =========================================================================
-    # ROOT NODE - iHIM Command Center
+    # ROOT NODE - workspace (Virtual Workstation)
+    # =========================================================================
+    nodes.append(ComponentNode(
+        id="workspace-root",
+        name="workspace (Virtual Workstation)",
+        type=ComponentType.ROOT,
+        description="Top-level ecosystem - the living, evolving virtual workstation",
+        file_path=str(WORKSPACE_ROOT),
+    ))
+
+    # =========================================================================
+    # workspace SYSTEMS (Children of workspace)
+    # =========================================================================
+
+    # Memory System
+    nodes.append(ComponentNode(
+        id="memory-system",
+        name="Memory System",
+        type=ComponentType.DATA,
+        parent="workspace-root",
+        description="Cross-session context retention (the agent + the operator memories)",
+        file_path=str(WORKSPACE_ROOT / "MEMORY.md"),
+    ))
+
+    nodes.append(ComponentNode(
+        id="memory-claude",
+        name="the agent Memory",
+        type=ComponentType.DATA,
+        parent="memory-system",
+        description="AI context: patterns, decisions, learnings, heuristics",
+        file_path=str(WORKSPACE_ROOT / "MEMORY.md"),
+    ))
+
+    nodes.append(ComponentNode(
+        id="memory-owner",
+        name="the operator Memory",
+        type=ComponentType.DATA,
+        parent="memory-system",
+        description="Human context: recent prompts, ideas in flight, open questions",
+        file_path=str(WORKSPACE_ROOT / "NOTES.md"),
+    ))
+
+    nodes.append(ComponentNode(
+        id="memory-archive",
+        name="Memory Archive",
+        type=ComponentType.DATA,
+        parent="memory-system",
+        description="Full audit trail of all sessions",
+        file_path=str(WORKSPACE_ROOT / "MEMORY_ARCHIVE.md"),
+    ))
+
+    # Skills System
+    nodes.append(ComponentNode(
+        id="skills-system",
+        name="Skills",
+        type=ComponentType.API,
+        parent="workspace-root",
+        description="the agent harness capability packages (installable agency)",
+        file_path=str(WORKSPACE_ROOT / "harness dir" / "skills"),
+    ))
+
+    # Commands System
+    nodes.append(ComponentNode(
+        id="commands-system",
+        name="Commands",
+        type=ComponentType.API,
+        parent="workspace-root",
+        description="the agent harness commands",
+        file_path=str(WORKSPACE_ROOT / "harness dir" / "commands"),
+    ))
+
+    # Guardrails
+    nodes.append(ComponentNode(
+        id="guardrails-system",
+        name="Guardrails",
+        type=ComponentType.GUARD,
+        parent="workspace-root",
+        description="Hard stops, soft stops, and safety boundaries",
+        file_path=str(WORKSPACE_ROOT / "GUARDRAILS.md"),
+    ))
+
+    # Projects
+    nodes.append(ComponentNode(
+        id="projects-system",
+        name="Projects",
+        type=ComponentType.DATA,
+        parent="workspace-root",
+        description="Active development projects",
+        file_path=str(WORKSPACE_ROOT),
+    ))
+
+    nodes.append(ComponentNode(
+        id="project-edgeflow",
+        name="EdgeFlowAI LP",
+        type=ComponentType.DATA,
+        parent="projects-system",
+        description="C3.ai-inspired landing page",
+        file_path=str(WORKSPACE_ROOT / "<business>"),
+    ))
+
+    nodes.append(ComponentNode(
+        id="project-legal",
+        name="Legal",
+        type=ComponentType.DATA,
+        parent="projects-system",
+        description="Self-service legal templates",
+        file_path=str(WORKSPACE_ROOT / "Legal"),
+    ))
+
+    # =========================================================================
+    # iHIM - Interface/Frontend for workspace
     # =========================================================================
     nodes.append(ComponentNode(
         id="ihim-root",
-        name="iHIM Command Center",
+        name="iHIM (Interface)",
         type=ComponentType.ROOT,
-        description="Central control hub for all iHIM systems",
+        parent="workspace-root",
+        description="Dashboard/frontend for interacting with workspace",
         file_path=str(IHIM_ROOT),
     ))
 
@@ -221,6 +337,49 @@ def build_topology() -> SystemTopology:
     ))
 
     # =========================================================================
+    # SELF-IMPROVEMENT SYSTEM (Swiss Cheese Layer)
+    # =========================================================================
+    nodes.append(ComponentNode(
+        id="learning-system",
+        name="Self-Improvement",
+        type=ComponentType.LEARNING,
+        parent="ihim-root",
+        description="Value-per-token optimization through debrief analysis and heuristics",
+        file_path=str(IHIM_ROOT.parent / "harness dir" / "commands" / "debrief.md"),
+    ))
+
+    nodes.append(ComponentNode(
+        id="debrief-engine",
+        name="Debrief Engine",
+        type=ComponentType.LEARNING,
+        parent="learning-system",
+        description="Post-task efficiency analysis: signal latency, counterfactuals, scoring",
+        file_path=str(IHIM_ROOT.parent / "harness dir" / "commands" / "debrief.md"),
+    ))
+
+    nodes.append(ComponentNode(
+        id="heuristics-bank",
+        name="Heuristics Bank",
+        type=ComponentType.LEARNING,
+        parent="learning-system",
+        description="IF-THEN decision rules extracted from debriefs",
+        file_path=str(IHIM_ROOT / "data" / "heuristics.json"),
+    ))
+
+    nodes.append(ComponentNode(
+        id="debriefs-log",
+        name="Debriefs Log",
+        type=ComponentType.DATA,
+        parent="learning-system",
+        description="Append-only log of all debrief sessions",
+        file_path=str(IHIM_ROOT / "data" / "debriefs.jsonl"),
+    ))
+
+    # =========================================================================
+    # Note: Guardrails and Memory System are now workspace-level systems (above)
+    # =========================================================================
+
+    # =========================================================================
     # UI ASSETS
     # =========================================================================
     nodes.append(ComponentNode(
@@ -278,6 +437,21 @@ def build_topology() -> SystemTopology:
     edges.append(SystemEdge(source="feedback-optimizer", target="team-spawner", edge_type="data-flow"))
     edges.append(SystemEdge(source="sanity-check", target="api-server", edge_type="dependency"))
     edges.append(SystemEdge(source="slash-commands", target="data-slash-commands", edge_type="data-flow"))
+    edges.append(SystemEdge(source="api-server", target="heuristics-bank", edge_type="data-flow"))
+
+    # Self-Improvement System edges (Swiss Cheese Layer connections)
+    edges.append(SystemEdge(source="debrief-engine", target="debriefs-log", edge_type="data-flow"))
+    edges.append(SystemEdge(source="debrief-engine", target="heuristics-bank", edge_type="data-flow"))
+    edges.append(SystemEdge(source="heuristics-bank", target="memory-claude", edge_type="data-flow"))
+    edges.append(SystemEdge(source="feedback-metrics", target="learning-system", edge_type="data-flow"))
+
+    # Guardrails edges
+    edges.append(SystemEdge(source="guardrails-system", target="api-server", edge_type="dependency"))
+    edges.append(SystemEdge(source="guardrails-system", target="team-spawner", edge_type="dependency"))
+
+    # Memory System edges
+    edges.append(SystemEdge(source="memory-claude", target="heuristics-bank", edge_type="data-flow"))
+    edges.append(SystemEdge(source="debriefs-log", target="memory-archive", edge_type="data-flow"))
 
     return SystemTopology(nodes=nodes, edges=edges)
 
@@ -302,3 +476,4 @@ def get_node_by_id(node_id: str) -> Optional[ComponentNode]:
     """
     topology = get_system_topology()
     return next((n for n in topology.nodes if n.id == node_id), None)
+# trigger reload

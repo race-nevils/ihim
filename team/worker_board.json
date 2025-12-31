@@ -1,0 +1,246 @@
+{
+  "mission": "Find all TODO comments and technical debt in IHIM/",
+  "board_type": "worker",
+  "started_at": "2025-12-27T13:00:00Z",
+  "workers": [
+    "worker-3",
+    "worker-1",
+    "worker-4"
+  ],
+  "findings": [
+    {
+      "worker": "worker-3",
+      "area": "actions/",
+      "todos": [],
+      "debt_patterns": [
+        "Bare exception handlers: Multiple functions use 'except Exception' without logging (utils.py lines 45, 58, 99, 127, 141, 154, 167, 181)",
+        "Hard-coded platform path: workspace root path hard-coded for Windows (C:/Users/<user>/workspace) in utils.py line 15",
+        "Incomplete error handling: Browser operations return True/False but callers don't know what failed (utils.py lines 145-154)",
+        "Silent failures: run_command_background suppresses all output to DEVNULL, makes debugging difficult (utils.py line 124-125)",
+        "Inconsistent string quoting: Mixed use of subprocess.Popen with string vs list arguments (utils.py lines 80, 149)",
+        "Shell injection risk: Uses shell=True in subprocess calls (utils.py lines 80, 149)",
+        "No validation: Action handler doesn't validate action_id exists before dispatch (registry.py line 107-175)",
+        "Magic strings: Status messages and success indicators are repeated rather than centralized (registry.py multiple locations)"
+      ],
+      "count": 8
+    },
+    {
+      "worker": "worker-1",
+      "area": "api/",
+      "completed_at": "2025-12-27T13:05:30Z",
+      "explicit_todos": 0,
+      "todos": [],
+      "debt_patterns": [
+        {
+          "file": "api/main.py",
+          "pattern": "Broad exception handling",
+          "lines": [
+            621,
+            832,
+            928
+          ],
+          "severity": "medium",
+          "description": "except Exception: pass patterns that silently ignore errors, making debugging difficult"
+        },
+        {
+          "file": "api/main.py",
+          "pattern": "Multiple try-except ImportError blocks",
+          "lines": [
+            25,
+            37,
+            57,
+            65,
+            73
+          ],
+          "severity": "medium",
+          "description": "Redundant try-except blocks for optional modules (FEEDBACK, SANITY, SYSTEM_HEALTH, SLASH_COMMANDS, TEAM_BUILDER, TERMINAL) - could be consolidated into a single import helper"
+        },
+        {
+          "file": "api/main.py",
+          "pattern": "CORS allow_origins=['*']",
+          "lines": [
+            86
+          ],
+          "severity": "high",
+          "description": "Allowing all origins for CORS is a security risk - should be restricted to specific domains"
+        },
+        {
+          "file": "api/main.py",
+          "pattern": "Global module state flags",
+          "lines": [
+            31,
+            39,
+            42,
+            52,
+            60,
+            68,
+            76
+          ],
+          "severity": "medium",
+          "description": "Multiple boolean flags (FEEDBACK_AVAILABLE, SANITY_AVAILABLE, etc.) for conditional module loading - should use dependency injection"
+        },
+        {
+          "file": "api/terminal/pty_manager.py",
+          "pattern": "Exception swallowing",
+          "lines": [
+            242,
+            257,
+            264,
+            310,
+            377
+          ],
+          "severity": "medium",
+          "description": "Broad except clauses with pass statements (Exception, OSError, Exception) that hide errors and make debugging hard"
+        },
+        {
+          "file": "api/terminal/pty_manager.py",
+          "pattern": "Platform-specific code paths",
+          "lines": [
+            130,
+            145,
+            146,
+            148,
+            150,
+            169
+          ],
+          "severity": "low",
+          "description": "Multiple conditional platform checks (sys.platform == 'win32') scattered through code - could be abstracted into platform manager"
+        },
+        {
+          "file": "api/system/health.py",
+          "pattern": "Bare except clauses",
+          "lines": [
+            245,
+            379
+          ],
+          "severity": "medium",
+          "description": "Silent exception handlers in check_blackboard() and check_data_team_state() prevent proper error logging"
+        },
+        {
+          "file": "api/commands/scanner.py",
+          "pattern": "File I/O error handling",
+          "lines": [
+            96,
+            124
+          ],
+          "severity": "medium",
+          "description": "Broad exception handling in parse_command_markdown() and load_command_center_data() - should be more specific about what errors are acceptable"
+        },
+        {
+          "file": "api/commands/models.py",
+          "pattern": "DEPRECATED status enum",
+          "lines": [
+            28
+          ],
+          "severity": "low",
+          "description": "CommandStatus.DEPRECATED defined but may need cleanup logic to handle deprecated commands"
+        }
+      ],
+      "count": 9,
+      "summary": {
+        "total_files_scanned": 17,
+        "explicit_todos_found": 0,
+        "fixme_found": 0,
+        "hack_found": 0,
+        "xxx_found": 0,
+        "deprecated_found": 1,
+        "debt_patterns_found": 9,
+        "critical_issues": 0,
+        "high_severity": 1,
+        "medium_severity": 7,
+        "low_severity": 1
+      },
+      "recommendations": [
+        "Implement a proper exception handling strategy - avoid bare except clauses",
+        "Restrict CORS origins to specific domains (CRITICAL SECURITY ISSUE)",
+        "Consolidate optional module imports into a single loader with proper logging",
+        "Refactor platform-specific code into a platform abstraction layer",
+        "Add proper error logging instead of silent pass statements",
+        "Consider implementing dependency injection for optional features",
+        "Review and clean up deprecated command handling logic"
+      ]
+    },
+    {
+      "worker": "worker-4",
+      "area": "tests/",
+      "todos": [],
+      "debt_patterns": [
+        {
+          "type": "skipped_tests",
+          "severity": "high",
+          "file": "test_flight_path_plan.py",
+          "description": "39 test functions marked with @pytest.mark.skip('Flight Path feature not yet implemented')",
+          "impact": "Feature coverage incomplete - entire Flight Path visualization feature waiting implementation",
+          "lines": "35-437",
+          "count": 39,
+          "note": "Tests written as specifications/requirements (test-driven approach), but feature not yet implemented"
+        },
+        {
+          "type": "platform_conditional_tests",
+          "severity": "medium",
+          "file": "test_terminal_pty.py",
+          "description": "8 test functions using @pytest.mark.skipif for platform-specific tests (Windows/Unix)",
+          "impact": "Cross-platform testing requires running full suite on multiple platforms",
+          "lines": "241-296",
+          "count": 8,
+          "note": "Windows-only tests (lines 241,247) and Unix-only tests (lines 285,290,296)"
+        },
+        {
+          "type": "heavy_mock_usage",
+          "severity": "medium",
+          "files": [
+            "test_spawner.py",
+            "test_blackboard.py",
+            "test_tasks_api.py",
+            "test_terminal_integration.py",
+            "test_terminal_websocket.py",
+            "test_quick_notes.py"
+          ],
+          "description": "High reliance on unittest.mock (MagicMock, patch decorators) throughout test suite",
+          "impact": "Tests may not catch integration bugs; subprocess spawning and process communication heavily mocked",
+          "note": "Test spawner explicitly documents that spawn_single_agent and spawn_agent_team are mocked due to spawning real Windows Terminal processes"
+        },
+        {
+          "type": "unimplemented_pass_statement",
+          "severity": "low",
+          "file": "test_blackboard.py",
+          "description": "Line 750 contains: 'pass  # Acknowledged: jitter makes exact testing difficult'",
+          "impact": "Test acknowledges timing issues in stopwatch/jitter testing but doesn't implement robust assertions",
+          "lines": "750",
+          "note": "Known limitation documented but not addressed - test vacuously passes"
+        },
+        {
+          "type": "debug_print_statements",
+          "severity": "low",
+          "file": "test_command_structure.py and test_command_content.py",
+          "description": "Multiple print() statements used for console output in test functions (slash_commands/)",
+          "impact": "Test functions include stdout debugging instead of proper logging; makes parsing pytest output difficult",
+          "count": 30,
+          "note": "Lines 45, 50, 276-331 in test_command_structure.py and lines 30, 35, 39, 238-278 in test_command_content.py"
+        },
+        {
+          "type": "redundant_boolean_assertions",
+          "severity": "low",
+          "description": "Numerous assertions using 'assert result is True' and 'assert result is False'",
+          "impact": "Style issue - idiomatic Python would use 'assert result' and 'assert not result'",
+          "files": [
+            "test_terminal_pty.py",
+            "test_spawner.py",
+            "test_blackboard.py",
+            "test_quick_notes.py",
+            "test_state.py",
+            "test_tasks_api.py",
+            "test_stopwatches_api.py",
+            "test_terminal_integration.py"
+          ],
+          "count": "100+ instances",
+          "note": "Widespread pattern indicating opportunity for test code cleanup"
+        }
+      ],
+      "count": 6,
+      "summary": "Tests directory has 39 skipped tests (Flight Path feature), 8 conditional platform tests, heavy mock usage throughout, some untested timing issues, debug print statements in commands tests, and non-idiomatic boolean assertions.",
+      "timestamp": "2025-12-27T13:30:45Z"
+    }
+  ],
+  "status": "in_progress"
+}

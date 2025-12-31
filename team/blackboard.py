@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
+import portalocker
 
 
 # Paths
@@ -71,12 +72,19 @@ class Message:
     @classmethod
     def from_dict(cls, data: dict) -> "Message":
         """Parse from JSON dict. Accepts both 'from' and 'agent' keys."""
+        # BUG FIX: Use explicit None checks instead of truthy/falsy or (lines 75, 77, 79)
+        # Empty strings should be preserved, not treated as missing values
+        agent = data.get("from") if data.get("from") is not None else data.get("agent", "unknown")
+        timestamp = data.get("timestamp", "")
+        message = data.get("message") if data.get("message") is not None else data.get("content", "")
+        msg_to = data.get("to") if data.get("to") is not None else data.get("target")
+
         return cls(
-            agent=data.get("from") or data.get("agent", "unknown"),
-            timestamp=data.get("timestamp", ""),
-            message=data.get("message") or data.get("content", ""),
+            agent=agent,
+            timestamp=timestamp,
+            message=message,
             type=data.get("type"),
-            to=data.get("to") or data.get("target"),
+            to=msg_to,
         )
 
 
@@ -122,7 +130,15 @@ def init_blackboard(feature: str, agents: List[str]) -> Blackboard:
 
     Returns:
         Initialized Blackboard
+
+    Raises:
+        ValueError: If agents list is empty
     """
+    # BUG FIX: Validate agent list is non-empty (lines 126-132)
+    # Empty agent list causes immediate completion (0 >= 0 = True)
+    if not agents:
+        raise ValueError("Cannot initialize blackboard with empty agent list")
+
     board = Blackboard(
         feature=feature,
         phase=Phase.PHASE_1_BUILD,
@@ -137,24 +153,39 @@ def init_blackboard(feature: str, agents: List[str]) -> Blackboard:
 
 def save_blackboard(board: Blackboard) -> bool:
     """
-    Save blackboard to file with file locking.
+    Save blackboard to file with proper file locking.
 
-    Uses a simple retry mechanism to handle concurrent writes.
+    Uses portalocker for cross-platform file locking to prevent
+    concurrent writes from corrupting the file.
     """
-    max_retries = 3
+    max_retries = 10
     for attempt in range(max_retries):
         try:
-            # Write to temp file first, then rename (atomic on most systems)
-            temp_file = BLACKBOARD_FILE.with_suffix('.tmp')
-            temp_file.write_text(
-                json.dumps(board.to_dict(), indent=2),
-                encoding="utf-8"
-            )
-            temp_file.replace(BLACKBOARD_FILE)
+            # Ensure parent directory exists
+            BLACKBOARD_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+            # Open file with exclusive lock (blocking mode)
+            with portalocker.Lock(
+                BLACKBOARD_FILE,
+                mode='w',
+                encoding='utf-8',
+                timeout=30,  # Wait up to 30 seconds for lock
+                flags=portalocker.LOCK_EX,
+                fail_when_locked=False  # Block instead of failing
+            ) as f:
+                json.dump(board.to_dict(), f, indent=2)
+                f.flush()  # Ensure data is written to disk
             return True
+        except portalocker.exceptions.LockException:
+            # Lock timeout - another process has the lock
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (2 ** attempt))  # Exponential backoff
+            else:
+                print(f"Failed to acquire write lock after {max_retries} attempts")
+                return False
         except Exception as e:
             if attempt < max_retries - 1:
-                time.sleep(0.1 * (attempt + 1))  # Backoff
+                time.sleep(0.1 * (2 ** attempt))  # Exponential backoff
             else:
                 print(f"Failed to save blackboard: {e}")
                 return False
@@ -162,16 +193,101 @@ def save_blackboard(board: Blackboard) -> bool:
 
 
 def load_blackboard() -> Optional[Blackboard]:
-    """Load blackboard from file."""
+    """
+    Load blackboard from file with shared lock.
+
+    Uses shared lock to allow multiple readers but prevent reading
+    while someone is writing.
+    """
     if not BLACKBOARD_FILE.exists():
         return None
 
-    try:
-        data = json.loads(BLACKBOARD_FILE.read_text(encoding="utf-8"))
-        return Blackboard.from_dict(data)
-    except Exception as e:
-        print(f"Failed to load blackboard: {e}")
-        return None
+    max_retries = 10
+    for attempt in range(max_retries):
+        try:
+            # Open file with shared lock for reading
+            with portalocker.Lock(
+                BLACKBOARD_FILE,
+                mode='r',
+                encoding='utf-8',
+                timeout=30,
+                flags=portalocker.LOCK_SH,
+                fail_when_locked=False
+            ) as f:
+                data = json.load(f)
+                return Blackboard.from_dict(data)
+        except portalocker.exceptions.LockException:
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (2 ** attempt))  # Exponential backoff
+            else:
+                print(f"Failed to acquire read lock after {max_retries} attempts")
+                return None
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (2 ** attempt))
+            else:
+                print(f"Failed to load blackboard: {e}")
+                return None
+    return None
+
+
+def atomic_update(update_fn) -> bool:
+    """
+    Perform an atomic read-modify-write operation on the blackboard.
+
+    This function eliminates race conditions by holding an exclusive lock
+    during the entire read-modify-write cycle.
+
+    Args:
+        update_fn: Function that takes a Blackboard and modifies it in-place
+
+    Returns:
+        True if successful, False otherwise
+    """
+    max_retries = 10
+    for attempt in range(max_retries):
+        try:
+            # Ensure file exists
+            if not BLACKBOARD_FILE.exists():
+                print("Blackboard file does not exist")
+                return False
+
+            # Acquire exclusive lock for read-modify-write (blocking)
+            with portalocker.Lock(
+                BLACKBOARD_FILE,
+                mode='r+',
+                encoding='utf-8',
+                timeout=30,
+                flags=portalocker.LOCK_EX,
+                fail_when_locked=False  # Block until lock is available
+            ) as f:
+                # Read current state
+                data = json.load(f)
+                board = Blackboard.from_dict(data)
+
+                # Modify in-place
+                update_fn(board)
+
+                # Write back atomically
+                f.seek(0)
+                f.truncate()
+                json.dump(board.to_dict(), f, indent=2)
+                f.flush()
+
+            return True
+        except portalocker.exceptions.LockException:
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (2 ** attempt))  # Exponential backoff
+            else:
+                print(f"Failed to acquire exclusive lock after {max_retries} attempts")
+                return False
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (2 ** attempt))
+            else:
+                print(f"Failed atomic update: {e}")
+                return False
+    return False
 
 
 def post_message(
@@ -192,10 +308,6 @@ def post_message(
     Returns:
         True if successful
     """
-    board = load_blackboard()
-    if not board:
-        return False
-
     msg = Message(
         agent=agent,
         timestamp=datetime.now().isoformat(),
@@ -204,31 +316,28 @@ def post_message(
         to=to,
     )
 
-    board.messages.append(msg)
-    return save_blackboard(board)
+    def update(board: Blackboard):
+        board.messages.append(msg)
+
+    return atomic_update(update)
 
 
 def update_status(agent: str, status: str) -> bool:
     """Update an agent's status."""
-    board = load_blackboard()
-    if not board:
-        return False
+    def update(board: Blackboard):
+        board.agent_status[agent] = status
 
-    board.agent_status[agent] = status
-    return save_blackboard(board)
+    return atomic_update(update)
 
 
 def add_deliverable(agent: str, deliverable: str) -> bool:
     """Record something an agent created."""
-    board = load_blackboard()
-    if not board:
-        return False
+    def update(board: Blackboard):
+        if agent not in board.deliverables:
+            board.deliverables[agent] = []
+        board.deliverables[agent].append(deliverable)
 
-    if agent not in board.deliverables:
-        board.deliverables[agent] = []
-    board.deliverables[agent].append(deliverable)
-
-    return save_blackboard(board)
+    return atomic_update(update)
 
 
 def get_messages_for_agent(agent: str) -> List[Message]:
@@ -310,19 +419,22 @@ def check_phase_ready() -> bool:
     if not board:
         return False
 
+    # BUG FIX: Changed >= to == (lines 313-318)
+    # Using >= was wrong logic - we need EXACTLY all agents done, not more
     # All agents must have status "complete" or posted DONE
     done_agents = set(get_done_agents())
     complete_agents = {a for a, s in board.agent_status.items() if s == "complete"}
 
     all_done = done_agents | complete_agents
-    return len(all_done) >= len(board.agent_status)
+    return len(all_done) == len(board.agent_status)
 
 
 def advance_phase() -> Optional[Phase]:
     """Advance to the next phase if all agents ready."""
-    board = load_blackboard()
-    if not board:
-        return None
+    # BUG FIX: Check phase readiness before advancing (lines 321-341)
+    if not check_phase_ready():
+        board = load_blackboard()
+        return board.phase if board else None
 
     phase_order = [
         Phase.PHASE_1_BUILD,
@@ -332,13 +444,24 @@ def advance_phase() -> Optional[Phase]:
         Phase.COMPLETE,
     ]
 
-    current_idx = phase_order.index(board.phase)
-    if current_idx < len(phase_order) - 1:
-        board.phase = phase_order[current_idx + 1]
-        save_blackboard(board)
-        return board.phase
+    result_phase = [None]  # Use list to capture value from closure
 
-    return board.phase
+    def update(board: Blackboard):
+        # BUG FIX: Add try/except for phase_order.index() (line 335)
+        # Crashes with ValueError if phase is corrupted string
+        try:
+            current_idx = phase_order.index(board.phase)
+        except ValueError:
+            print(f"Warning: Invalid phase '{board.phase}', cannot advance")
+            result_phase[0] = board.phase
+            return
+
+        if current_idx < len(phase_order) - 1:
+            board.phase = phase_order[current_idx + 1]
+        result_phase[0] = board.phase
+
+    success = atomic_update(update)
+    return result_phase[0] if success else None
 
 
 def get_poll_interval(agent: str) -> float:
@@ -391,7 +514,7 @@ def poll_loop(agent: str, callback, max_iterations: Optional[int] = None):
         # Filter to messages relevant to this agent
         relevant = [
             m for m in new_messages
-            if m.target is None or m.target == agent
+            if m.to is None or m.to == agent
         ]
 
         if relevant or board.phase != Phase.PHASE_1_BUILD:
@@ -416,8 +539,19 @@ def agent_post(agent: str, message: str, msg_type: Optional[str] = None, to: Opt
 
 def agent_done(agent: str, summary: str) -> bool:
     """Mark agent as done with summary of work."""
-    update_status(agent, "complete")
-    return post_message(agent, summary, msg_type="DONE")
+    msg = Message(
+        agent=agent,
+        timestamp=datetime.now().isoformat(),
+        message=summary,
+        type="DONE",
+        to=None,
+    )
+
+    def update(board: Blackboard):
+        board.agent_status[agent] = "complete"
+        board.messages.append(msg)
+
+    return atomic_update(update)
 
 
 def agent_ask(agent: str, target: str, question: str) -> bool:
@@ -427,15 +561,38 @@ def agent_ask(agent: str, target: str, question: str) -> bool:
 
 def agent_deliver(agent: str, description: str, files: List[str]) -> bool:
     """Record a deliverable."""
-    for f in files:
-        add_deliverable(agent, f)
-    return post_message(agent, f"{description}: {', '.join(files)}", msg_type="DELIVERABLE")
+    msg = Message(
+        agent=agent,
+        timestamp=datetime.now().isoformat(),
+        message=f"{description}: {', '.join(files)}",
+        type="DELIVERABLE",
+        to=None,
+    )
+
+    def update(board: Blackboard):
+        if agent not in board.deliverables:
+            board.deliverables[agent] = []
+        board.deliverables[agent].extend(files)
+        board.messages.append(msg)
+
+    return atomic_update(update)
 
 
 def agent_blocked(agent: str, blocker: str) -> bool:
     """Report being blocked."""
-    update_status(agent, "blocked")
-    return post_message(agent, blocker, msg_type="BLOCKER")
+    msg = Message(
+        agent=agent,
+        timestamp=datetime.now().isoformat(),
+        message=blocker,
+        type="BLOCKER",
+        to=None,
+    )
+
+    def update(board: Blackboard):
+        board.agent_status[agent] = "blocked"
+        board.messages.append(msg)
+
+    return atomic_update(update)
 
 
 def get_blackboard_summary() -> dict:
@@ -465,47 +622,62 @@ def get_blackboard_summary() -> dict:
 BLACKBOARD_INSTRUCTIONS = """
 ## Agent Coordination via Blackboard
 
-You are part of a multi-agent team. Use the blackboard file for coordination.
+You are part of a multi-agent team. Use the blackboard API for coordination.
 
-**Blackboard file**: `C:/Users/<user>/workspace/IHIM/team/blackboard.json`
+### API Endpoints (Preferred Method)
 
-### Message Format (Simple)
+The iHIM server provides REST endpoints for blackboard operations at `http://localhost:7777`:
 
-Add to the "messages" array:
-```json
-{
-  "from": "YOUR_AGENT_NAME",
-  "timestamp": "2025-12-26T10:00:00Z",
-  "message": "What you did or what you need"
-}
+**Post a message:**
+```bash
+curl -X POST http://localhost:7777/api/blackboard \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent": "YOUR_AGENT_NAME", "message": "Your status update", "msg_type": "STATUS"}'
 ```
 
-That's it. Three fields. Add optional fields only when needed:
-- `"type": "QUESTION"` - when asking another agent something
-- `"type": "DONE"` - when you're finished
-- `"to": "frontend-dev"` - when targeting a specific agent
-
-### Examples
-
-Status update:
-```json
-{"from": "qa-tester", "timestamp": "...", "message": "Test suite complete. 45 tests passed."}
+**Mark yourself as done:**
+```bash
+curl -X POST http://localhost:7777/api/blackboard/done \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent": "YOUR_AGENT_NAME", "summary": "What you completed"}'
 ```
 
-Question to another agent:
-```json
-{"from": "backend-dev", "type": "QUESTION", "to": "frontend-dev", "timestamp": "...", "message": "What endpoint format do you expect?"}
+**Report being blocked:**
+```bash
+curl -X POST http://localhost:7777/api/blackboard/blocked \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent": "YOUR_AGENT_NAME", "blocker": "What is blocking you"}'
 ```
 
-Done with work:
-```json
-{"from": "frontend-dev", "type": "DONE", "timestamp": "...", "message": "Modal complete. Added search, categories, click-to-copy."}
+**Record a deliverable:**
+```bash
+curl -X POST http://localhost:7777/api/blackboard/deliverable \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent": "YOUR_AGENT_NAME", "deliverable": "path/to/file.py"}'
 ```
+
+**Read the blackboard:**
+```bash
+curl http://localhost:7777/api/blackboard
+curl http://localhost:7777/api/blackboard/messages
+curl http://localhost:7777/api/blackboard/blockers
+```
+
+### Message Types
+- `STATUS` - General status update
+- `DONE` - Work completed (use /api/blackboard/done instead)
+- `QUESTION` - Question for another agent (add "to": "agent-name")
+- `DELIVERABLE` - Recording something created
+- `BLOCKER` - Reporting being blocked (use /api/blackboard/blocked instead)
+
+### File Fallback
+
+If the API is unavailable, you can write directly to:
+`C:/Users/<user>/workspace/IHIM/team/blackboard.json`
 
 ### When You're Done
 
-1. Post a message summarizing what you built
-2. Update your status in `agent_status` to "complete"
-3. Add files you created to `deliverables`
-4. Write result to: `C:/Users/<user>/workspace/IHIM/team/results/{YOUR_AGENT_NAME}-result.json`
+1. POST to /api/blackboard/done with your summary
+2. Record deliverables with /api/blackboard/deliverable
+3. Write result file to: `C:/Users/<user>/workspace/IHIM/team/results/{YOUR_AGENT_NAME}-result.json`
 """

@@ -1,0 +1,247 @@
+{
+  "scout_id": "scout_1_api_core",
+  "domain": "IHIM/api/main.py (FastAPI server core)",
+  "audit_date": "2025-12-27",
+  "file_size_lines": 1364,
+  "summary": "Comprehensive audit of FastAPI server core. Found 3 bugs, 7 inconsistencies, 8 security/best-practice issues, and 5 recommendations.",
+
+  "CRITICAL_BUGS": [
+    {
+      "line": 648,
+      "severity": "BUG - Parameter Default Issue",
+      "issue": "create_stopwatch() has parameter 'stopwatch: StopwatchCreate = None' but StopwatchCreate is a required Pydantic model. FastAPI will NOT accept body=None - it treats = None as making it optional.",
+      "code": "@app.post('/api/stopwatches', status_code=201) async def create_stopwatch(stopwatch: StopwatchCreate = None):",
+      "impact": "Line 660 will crash when stopwatch=None: 'stopwatch.label' raises AttributeError. The parameter should either be required (no default) or use Body(default=None, embed=False).",
+      "fix": "Option 1: Remove default - 'stopwatch: StopwatchCreate'. Option 2: Use Optional[StopwatchCreate] with proper None handling. Option 3: Use Body() from fastapi."
+    },
+    {
+      "line": 86,
+      "severity": "SECURITY - Overly Permissive CORS",
+      "issue": "CORS configured with allow_origins=['*'], allow_credentials=True. This is contradictory and dangerous: credentials + wildcard origins violates CORS spec and allows any origin to read credentials.",
+      "code": "app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True, allow_methods=['*'], allow_headers=['*'])",
+      "impact": "Security risk noted in blackboard: 'CORS: Still misconfigured (allow_origins=*)'. Any website can make credentialed requests to this server. Combined with allow_methods/headers=*, full attack surface exposed.",
+      "fix": "Set specific allowed origins: allow_origins=['http://localhost:7777', 'http://127.0.0.1:7777']. If credentials not needed, remove allow_credentials. Document why each setting exists."
+    },
+    {
+      "line": "341-343",
+      "severity": "BUG - Silent Failure in spawn_custom_team",
+      "issue": "Exception from spawn_team() is caught and silently passed (line 343 'pass'). No logging, no context. Fallback occurs with zero visibility into why team_builder failed.",
+      "code": "except Exception as e:\n    # Fall back to basic spawn\n    pass",
+      "impact": "When team_builder is available but fails, user gets silent fallback to basic spawn. Errors disappear. Hard to debug integration issues. Exception 'e' variable is created but unused.",
+      "fix": "Log the exception before passing: 'logger.warning(f\"Team builder spawn failed: {e}, falling back to basic spawn\")'. Or import and use logging module."
+    }
+  ],
+
+  "HIGH_SEVERITY_ISSUES": [
+    {
+      "line": "656, 707, 728, 975, 1003",
+      "severity": "DEPRECATION WARNING - datetime.utcnow()",
+      "issue": "Multiple uses of datetime.utcnow() which is deprecated in Python 3.12+. Scheduled for removal in future versions.",
+      "instances": [
+        "Line 656: now = datetime.utcnow().isoformat() + 'Z'",
+        "Line 707: sw['started_at'] = datetime.utcnow().isoformat() + 'Z'",
+        "Line 728: now = datetime.utcnow()",
+        "Line 975: now = datetime.utcnow().isoformat() + 'Z'",
+        "Line 1003: note['updated_at'] = datetime.utcnow().isoformat() + 'Z'"
+      ],
+      "impact": "Code will break in Python 3.13+. Deprecation warnings in logs on 3.12.",
+      "fix": "Use: from datetime import datetime, timezone; datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')"
+    },
+    {
+      "line": 256,
+      "severity": "INCONSISTENCY - Incorrect Type Hint",
+      "issue": "spawn_agent_team() is called with 'routed_prompts' dict but documented as taking 'agents' parameter. Parameter signature unclear in main.py.",
+      "code": "result = spawn_agent_team(routed_prompts, feature_description=feature_desc)",
+      "impact": "Parameter naming inconsistency with documentation. Readers expect 'agents' but get 'routed_prompts'. Check spawner.py to verify actual parameter name.",
+      "fix": "Verify spawner.py signature and align naming. Add explicit parameter names in calls."
+    },
+    {
+      "line": "621",
+      "severity": "ANTI-PATTERN - Bare Exception Catch",
+      "issue": "Broad 'except Exception:' without logging in load_stopwatches() and similar functions. Failures silently return empty list.",
+      "code": "except Exception:\n    pass",
+      "instances": [
+        "Line 621: load_stopwatches()",
+        "Line 832: load_tasks()",
+        "Line 930: load_notes()"
+      ],
+      "impact": "File corruption, missing data, or JSON parse errors are invisible. No way to know if data was lost.",
+      "fix": "Log failures: 'logger.exception(f\"Failed to load {filename}: {e}\")' before returning empty."
+    }
+  ],
+
+  "INCONSISTENCIES": [
+    {
+      "line": "409-414",
+      "issue": "Response format inconsistency in feedback_status()",
+      "problem": "Returns: {'available': bool, 'message': str}. Other endpoints use: {'error': str} or {'success': bool}. No standard format.",
+      "impact": "Frontend needs different parsing for different endpoints. Harder to build generic error handling.",
+      "fix": "Standardize: all errors return {'success': False, 'error': str}. Use that consistently."
+    },
+    {
+      "line": "222-223, 239",
+      "issue": "Inconsistent error response for missing node",
+      "problem": "Line 222-223 returns {'error': '...'} but line 239 returns nested structure with health.status. Different shapes.",
+      "code": "if not node:\n    return {'error': f\"Node '{node_id}' not found\"}",
+      "fix": "Wrap all error responses consistently: {'success': False, 'error': str}"
+    },
+    {
+      "line": "113-114",
+      "issue": "Path construction pattern inconsistency",
+      "problem": "UI_DIR defined as Path(__file__).parent.parent / 'ui' but other file paths use different patterns.",
+      "instances": [
+        "Line 113: UI_DIR = Path(__file__).parent.parent / 'ui'",
+        "Line 602: STOPWATCHES_FILE = Path(__file__).parent.parent / 'data' / 'stopwatches.json'"
+      ],
+      "impact": "Multiple ways to refer to same directory. Hard to maintain. If structure changes, need to update in many places.",
+      "fix": "Create config module with centralized path definitions. Or use environment variable: os.getenv('IHIM_PATH', Path(__file__).parent.parent)"
+    },
+    {
+      "line": "24-79",
+      "issue": "Import organization: try/except imports not grouped",
+      "problem": "Each feature has its own try/except block with redundant flag checks. No clear organization.",
+      "pattern": "Repeated 7 times:\n  try:\n      from feature import x\n      FLAG_AVAILABLE = True\n  except ImportError as e:\n      print(f'Warning: ...')\n      FLAG_AVAILABLE = False",
+      "impact": "Code repetition. If import logic needs to change, must update in 7 places. Flags scattered throughout file.",
+      "fix": "Create imports.py module that handles all optional imports and returns dict of flags. Much cleaner."
+    },
+    {
+      "line": "648",
+      "issue": "Parameter style inconsistency: Optional vs None default",
+      "problem": "StopwatchCreate parameter uses 'StopwatchCreate = None' instead of 'Optional[StopwatchCreate] = None'.",
+      "impact": "Type checkers (mypy, pyright) may flag as incorrect. Not explicit about optionality.",
+      "fix": "Use 'Optional[StopwatchCreate] = None' or 'StopwatchCreate | None = None' (Python 3.10+)"
+    },
+    {
+      "line": "727",
+      "issue": "Hardcoded 'Z' timezone marker instead of standard parsing",
+      "problem": "Uses .rstrip('Z') for parsing, assumes Z always present. What if timestamp format changes?",
+      "code": "started = datetime.fromisoformat(sw['started_at'].rstrip('Z'))",
+      "impact": "Fragile parsing. If someone stores timestamp without Z, parsing fails silently.",
+      "fix": "Use iso8601 library or more robust parsing: 'datetime.fromisoformat(started_at.replace('Z', '+00:00'))'"
+    },
+    {
+      "line": "794-798",
+      "issue": "Asymmetric endpoint behavior: delete all vs delete one",
+      "problem": "DELETE /api/stopwatches (delete all) doesn't validate count or require confirmation. Different from create pattern.",
+      "code": "@app.delete('/api/stopwatches')\nasync def delete_all_stopwatches():\n    save_stopwatches([])\n    return {'success': True, 'message': 'All stopwatches deleted'}",
+      "impact": "Easy to accidentally delete all stopwatches with one request. No rollback. No audit trail.",
+      "fix": "Require POST with confirmation token, or move to /api/stopwatches/clear endpoint with password/session check."
+    }
+  ],
+
+  "SECURITY_AND_BEST_PRACTICES": [
+    {
+      "line": 81,
+      "category": "API Title/Description",
+      "issue": "FastAPI app title is 'iHIM' and description 'Your Command Center' but no version, contact, or license info.",
+      "fix": "Add: app = FastAPI(title='iHIM', version='0.1.0', description='...', contact={...}, license_info={...})"
+    },
+    {
+      "line": "102",
+      "category": "Missing Router Prefix",
+      "issue": "Terminal router included without prefix. If terminal router has /api/... routes, they might collide with main.py routes.",
+      "fix": "Use: app.include_router(terminal_router, prefix='/api/terminal')"
+    },
+    {
+      "line": "113-114",
+      "category": "File Path Traversal Risk",
+      "issue": "Static files mounted at /static pointing to UI directory. If attacker can control request path, could escape directory.",
+      "fix": "StaticFiles already has protections, but verify it doesn't follow symlinks in UI directory."
+    },
+    {
+      "line": "130",
+      "category": "Missing Status Code Specification",
+      "issue": "execute_action() doesn't specify response status code. Action failures should return 400/500, not 200.",
+      "fix": "Add status_code parameter based on result: 200 for success, 400 for invalid action, 500 for execution error."
+    },
+    {
+      "line": "459-488",
+      "category": "Missing Input Validation",
+      "issue": "process_feedback() accepts ProcessFeedbackRequest but doesn't validate session_id format. Could be arbitrary string.",
+      "fix": "Validate session_id is UUID format: 'from pydantic import validator' or regex pattern."
+    },
+    {
+      "line": "729",
+      "category": "Potential Timezone Bug",
+      "issue": "Calculates elapsed_ms using datetime.utcnow() but started_at is parsed without timezone. Mixing naive and aware datetimes.",
+      "code": "started = datetime.fromisoformat(sw['started_at'].rstrip('Z'))\nnow = datetime.utcnow()",
+      "impact": "Both are naive, so subtraction works, but fragile if timezone handling changes.",
+      "fix": "Use timezone-aware datetimes consistently."
+    },
+    {
+      "line": "856",
+      "category": "UUID Truncation Risk",
+      "issue": "Task ID created as str(uuid.uuid4())[:8]. Only 8 hex chars = ~32-bit space. Collision risk if millions of tasks.",
+      "code": "'id': str(uuid.uuid4())[:8]",
+      "impact": "Same in stopwatch (line 659), notes (line 978). Should use full UUID for production.",
+      "fix": "Use full UUID: str(uuid.uuid4()) - only 36 chars, still reasonable for JSON."
+    },
+    {
+      "line": "1364",
+      "category": "Missing Server Startup Hook",
+      "issue": "No startup or shutdown event handlers. No database initialization, cleanup, or migration on server start.",
+      "fix": "Add @app.on_event('startup') and @app.on_event('shutdown') handlers."
+    }
+  ],
+
+  "DEAD_CODE_AND_UNUSED_PATTERNS": [
+    {
+      "line": "341",
+      "issue": "Exception variable 'e' is created but never used",
+      "code": "except Exception as e:\n    # Fall back to basic spawn\n    pass",
+      "fix": "Either use it (log it) or remove: 'except Exception:'"
+    }
+  ],
+
+  "MISSING_ERROR_HANDLING": [
+    {
+      "line": "132-133",
+      "issue": "execute_action() doesn't handle if run_action() raises exception",
+      "fix": "Wrap in try/except and return error response."
+    },
+    {
+      "line": "1106",
+      "issue": "scan_project() call could raise exception, caught but error message not specific",
+      "fix": "Add specific error messages for common failure modes (path not found, permission denied, etc.)"
+    },
+    {
+      "line": "728-729",
+      "issue": "datetime.fromisoformat() can raise ValueError if timestamp malformed",
+      "fix": "Wrap in try/except and return error instead of crashing."
+    }
+  ],
+
+  "TESTING_OBSERVATIONS": [
+    {
+      "issue": "All stopwatch operations read/write from file on every request",
+      "impact": "Load/save pattern is fine for small datasets, but no caching or buffering. File I/O on every stopwatch operation is inefficient.",
+      "improvement": "Consider in-memory cache with periodic flush or use SQLite for better performance."
+    },
+    {
+      "issue": "No validation of JSON file format before parsing",
+      "impact": "If stopwatches.json is corrupted, entire endpoint fails. From blackboard, QA found edge cases but file corruption not tested.",
+      "improvement": "Add schema validation with pydantic models on load."
+    }
+  ],
+
+  "RECOMMENDATIONS": [
+    "Implement logging module with DEBUG level for all function calls and exceptions",
+    "Replace datetime.utcnow() with timezone-aware datetime.now(timezone.utc)",
+    "Standardize API response format: {success: bool, data?: T, error?: str, status_code: int}",
+    "Extract path constants to config.py module for centralized management",
+    "Consolidate optional import try/except blocks into imports.py or use importlib.util.find_spec()",
+    "Add pydantic model validation schemas for all JSON file loading/saving",
+    "Fix CORS configuration for security: specify exact origins, remove credentials if not needed",
+    "Add server startup/shutdown hooks for initialization and cleanup",
+    "Consider adding API versioning: /api/v1/... for future compatibility",
+    "Add request logging middleware for audit trail of all API calls"
+  ],
+
+  "NOTES": [
+    "Blackboard shows security-reviewer flagged CORS issue - aligns with audit findings",
+    "Frontend uses localStorage for stopwatch state, not backend API - backend stopwatch endpoints may be unused",
+    "Team-builder and terminal routers included but not thoroughly tested in this audit scope",
+    "File-based persistence (JSON) works for single-user local app but not scalable",
+    "No database migrations or schema versioning - could be problem if data structure changes"
+  ]
+}

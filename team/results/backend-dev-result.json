@@ -1,212 +1,78 @@
 {
   "agent": "backend-dev",
   "status": "complete",
-  "timestamp": "2025-12-26T00:00:00Z",
+  "timestamp": "2025-12-27T02:00:00Z",
+  "task": "Build stopwatch widget API for spawning multiple independent stopwatches",
+  "summary": "Created full CRUD + control API for multiple stopwatches with JSON file persistence, following existing iHIM patterns (tasks, notes). Endpoints support spawning, starting, stopping, resetting, lap recording, and deleting stopwatches.",
   "files_created": [
-    "IHIM/api/commands/__init__.py",
-    "IHIM/api/commands/models.py",
-    "IHIM/api/commands/scanner.py",
-    "IHIM/api/commands/routes.py"
+    "IHIM/data/stopwatches.json"
   ],
   "files_modified": [
-    "IHIM/api/main.py",
-    "IHIM/api/system/topology.py"
+    "IHIM/api/main.py"
   ],
   "api_endpoints": [
-    {
-      "method": "GET",
-      "path": "/api/slash-commands",
-      "description": "List all commands with optional filtering (category, status, auto_invoke, search)"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/summary",
-      "description": "Get condensed command summary for command palette"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/{command_id}",
-      "description": "Get detailed info for a specific command, optionally with raw markdown content"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/{command_id}/content",
-      "description": "Get raw markdown content from harness/commands/{id}.md"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/slash-commands/{command_id}/auto-invoke",
-      "description": "Configure auto-invoke settings (triggers, priority, cooldown)"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/auto-invoke/active",
-      "description": "Get all commands with auto-invoke enabled"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/ideas/all",
-      "description": "List all brainstorm ideas with optional status filter"
-    },
-    {
-      "method": "POST",
-      "path": "/api/slash-commands/ideas",
-      "description": "Create a new command idea for brainstorming"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/ideas/{idea_id}",
-      "description": "Get details for a specific idea"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/slash-commands/ideas/{idea_id}",
-      "description": "Update an existing idea (name, description, status, priority, etc.)"
-    },
-    {
-      "method": "POST",
-      "path": "/api/slash-commands/ideas/{idea_id}/vote",
-      "description": "Vote on an idea to help prioritize (upvote/downvote)"
-    },
-    {
-      "method": "POST",
-      "path": "/api/slash-commands/ideas/{idea_id}/note",
-      "description": "Add a discussion note to an idea"
-    },
-    {
-      "method": "POST",
-      "path": "/api/slash-commands/ideas/{idea_id}/promote",
-      "description": "Promote an idea to a real command (creates command entry)"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/slash-commands/ideas/{idea_id}",
-      "description": "Delete an idea from the brainstorm list"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/categories/all",
-      "description": "List all command categories"
-    },
-    {
-      "method": "POST",
-      "path": "/api/slash-commands/categories",
-      "description": "Create a new category for organizing commands"
-    },
-    {
-      "method": "POST",
-      "path": "/api/slash-commands/sync",
-      "description": "Sync commands from harness/commands/ directory to data store"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/sync/status",
-      "description": "Check sync status between data store and file system"
-    },
-    {
-      "method": "GET",
-      "path": "/api/slash-commands/search",
-      "description": "Search across commands and ideas by query string"
-    }
+    {"method": "GET", "path": "/api/stopwatches", "description": "Get all stopwatches with their current state"},
+    {"method": "POST", "path": "/api/stopwatches", "description": "Create (spawn) a new stopwatch with optional label"},
+    {"method": "GET", "path": "/api/stopwatches/{id}", "description": "Get single stopwatch by ID"},
+    {"method": "PUT", "path": "/api/stopwatches/{id}", "description": "Update stopwatch label"},
+    {"method": "POST", "path": "/api/stopwatches/{id}/start", "description": "Start the stopwatch (sets is_running=true, records started_at)"},
+    {"method": "POST", "path": "/api/stopwatches/{id}/stop", "description": "Stop the stopwatch (calculates and accumulates elapsed_ms)"},
+    {"method": "POST", "path": "/api/stopwatches/{id}/reset", "description": "Reset stopwatch to zero (stops if running)"},
+    {"method": "POST", "path": "/api/stopwatches/{id}/lap", "description": "Record current lap time without stopping"},
+    {"method": "DELETE", "path": "/api/stopwatches/{id}", "description": "Delete a stopwatch"},
+    {"method": "DELETE", "path": "/api/stopwatches", "description": "Delete all stopwatches"}
   ],
-  "data_models": {
-    "SlashCommand": {
-      "id": "string - unique identifier",
-      "name": "string - display name with slash (e.g., '/save')",
-      "shortDesc": "string - one-line description",
-      "description": "string - full description",
-      "category": "string - category ID",
-      "status": "enum - active|beta|planned|deprecated",
-      "file_path": "string|null - path to .md file",
-      "source": "string - 'file'|'builtin'|'skill'",
-      "auto_invoke": "AutoInvokeConfig object",
-      "usage": "string - when/how to use",
-      "examples": "string[] - example invocations",
-      "related_commands": "string[] - related command IDs"
-    },
-    "SlashCommandIdea": {
-      "id": "string - unique identifier",
-      "name": "string - proposed command name",
-      "description": "string - what this command would do",
-      "status": "enum - brainstorm|designing|approved|implemented|rejected",
-      "proposed_category": "string|null",
-      "use_cases": "string[]",
-      "implementation_notes": "string",
-      "priority": "int - 0-100",
-      "auto_invoke_potential": "bool",
-      "potential_triggers": "string[]",
-      "votes": "int - for prioritization",
-      "notes": "array - discussion notes with timestamps"
-    },
-    "AutoInvokeConfig": {
-      "enabled": "bool",
-      "triggers": "CommandTrigger[]",
-      "priority": "int - 0-100",
-      "cooldown_seconds": "int",
-      "requires_confirmation": "bool"
-    },
-    "CommandTrigger": {
-      "type": "enum - event|schedule|condition|hook|manual",
-      "event": "string|null - event name",
-      "condition": "string|null - condition expression",
-      "schedule": "string|null - cron-like schedule",
-      "hook_name": "string|null - the agent harness hook name",
-      "description": "string - human-readable trigger description"
-    }
-  },
   "response_formats": {
-    "list_commands": {
-      "success": true,
-      "count": "int",
-      "commands": "SlashCommand[]",
-      "categories": "object - category definitions",
-      "metadata": "object - version, last_sync, etc."
+    "stopwatch_object": {
+      "id": "string (8-char UUID prefix)",
+      "label": "string (optional name, empty string default)",
+      "elapsed_ms": "integer (accumulated milliseconds when stopped)",
+      "is_running": "boolean",
+      "started_at": "ISO8601 string or null (set when running)",
+      "created_at": "ISO8601 string"
     },
-    "command_summary": {
-      "success": true,
-      "total": "int",
-      "byCategory": "object - commands grouped by category",
-      "categories": "object"
+    "list_response": {
+      "stopwatches": "[array of stopwatch objects]"
     },
-    "idea_list": {
-      "success": true,
-      "count": "int",
-      "ideas": "SlashCommandIdea[] - sorted by priority, then votes"
+    "single_response": {
+      "success": "boolean",
+      "stopwatch": "{stopwatch object}"
     },
-    "sync_result": {
-      "success": true,
-      "synced": "int - total commands in files",
-      "added": "string[] - new command IDs",
-      "updated": "string[] - modified command IDs",
-      "removed": "string[] - deprecated command IDs",
-      "errors": "string[]"
-    },
-    "search_result": {
-      "success": true,
-      "query": "string",
-      "total": "int",
-      "commands": "array - matching commands",
-      "ideas": "array - matching ideas"
+    "lap_response": {
+      "success": "boolean",
+      "lap_ms": "integer (current total elapsed including running time)",
+      "timestamp": "ISO8601 string"
     }
   },
-  "summary": "Created a comprehensive Slash Command Center API module with 19 endpoints for managing the agent harness commands. Supports: command discovery via file scanning, brainstorming with ideas workflow (create, vote, promote), auto-invoke configuration with triggers, categories for organization, and search functionality. The module scans harness/commands/*.md files and syncs to IHIM/data/slash_commands.json.",
-  "key_features": [
-    "File system sync - discovers commands from harness/commands/*.md",
-    "Brainstorming workflow - ideas can be created, voted on, and promoted to commands",
-    "Auto-invoke configuration - commands can be triggered by events, schedules, conditions, or hooks",
-    "Category organization - commands grouped into categories with icons",
-    "Search functionality - search across commands and ideas",
-    "Markdown content access - get raw .md content for editing/viewing"
-  ],
+  "database_schemas": [],
   "blockers": [],
-  "handoff_notes": "@frontend-dev: API is ready. Endpoints return JSON with 'success' boolean. See response_formats for data shapes. Key endpoints for UI: GET /api/slash-commands/summary for command palette, GET /api/slash-commands for full list, POST /api/slash-commands/ideas for brainstorming. POST /api/slash-commands/sync to refresh from file system.",
-  "questions_for_team": [
-    "@frontend-dev: What layout do you prefer for the command center? Sidebar + detail panel or card grid?",
-    "@frontend-dev: Should ideas have inline editing or open a modal?",
-    "@devops: Should we add a startup hook to auto-sync commands on server boot?"
-  ],
-  "needs_review_from": [
-    "qa-tester",
-    "security-reviewer"
-  ]
+  "handoff_notes": "@frontend-dev: The stopwatch API is ready. Key implementation notes: (1) Click + button -> POST /api/stopwatches to spawn new stopwatch, (2) For running stopwatches, calculate DISPLAY time as: elapsed_ms + (Date.now() - Date.parse(started_at)), (3) Use setInterval/requestAnimationFrame for smooth visual timer tick while is_running=true, (4) The API handles persistence - elapsed_ms only gets updated on /stop, so the frontend owns the live display. (5) All control endpoints return the updated stopwatch object.",
+  "needs_review_from": ["frontend-dev", "qa-tester"],
+  "dependencies": {
+    "required": ["fastapi", "pydantic"],
+    "optional": []
+  },
+  "security_notes": "Standard local-only API. No authentication required for localhost iHIM. Label field has max 100 char limit for input validation.",
+  "scores": {
+    "completion": 100,
+    "quality": 90,
+    "efficiency": 95,
+    "collaboration": 90
+  },
+  "retrospective": {
+    "what_went_well": [
+      "Followed existing patterns from tasks/notes endpoints exactly",
+      "Added lap functionality as a bonus feature",
+      "Clean separation - API handles persistence, frontend handles visual tick"
+    ],
+    "what_could_improve": [
+      "Could add a batch create endpoint for spawning multiple at once",
+      "Could add optional auto-stop after max duration",
+      "Did not implement lap storage - just returns current time"
+    ],
+    "learnings": [
+      "Stopwatch timing is fundamentally a frontend concern, backend just handles state persistence",
+      "The elapsed_ms + started_at pattern allows proper time accumulation across stop/start cycles"
+    ]
+  }
 }

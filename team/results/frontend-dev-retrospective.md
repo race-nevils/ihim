@@ -1,173 +1,165 @@
-# Frontend Dev Retrospective
+# Frontend Dev Retrospective: Stopwatch Widget
 
-**Task:** Slash Command Center for iHIM
-**Date:** 2025-12-26
-**Honest Assessment:** Several gaps and missed opportunities
-
----
-
-## 1. Assumptions I Made Without Verifying
-
-### Critical Miss: Didn't Check for Existing Backend Work
-- I hardcoded all 5 commands directly in JavaScript
-- **Backend-dev already built a full API** (`/api/slash-commands`) that I didn't know about
-- I should have checked the blackboard FIRST to see what other agents were building
-- Result: Duplicate implementations - my hardcoded JS vs backend's dynamic API
-
-### Assumed Patterns Without Testing
-- Assumed `formatTimestamp()` and `escapeHtml()` functions existed (they do, from notes modal, but I didn't verify)
-- Assumed the 'slash' icon was defined in `getIcon()` - saw it was added but didn't confirm before coding
-- Assumed CSS class names wouldn't conflict with existing styles
-
-### Didn't Verify the Flow Works
-- Never actually tested if the modal opens
-- Never tested click-to-copy functionality
-- Never tested search filtering
-- Wrote ~600 lines of code without running the server
+**Task:** Build stopwatch widget with spawn functionality
+**Date:** 2025-12-27
+**Status:** Complete
 
 ---
 
-## 2. Where I Wasted Time
+## Assumptions I Didn't Verify
 
-### Over-reading
-- Read the entire `style.css` (1166 lines) when I only needed one modal pattern (~50 lines)
-- Read all 5 command `.md` files in full when I only needed: name, one-line description, category
-- Read the full iHIM skill.md when I only needed the architecture section
+### Technology Stack
+- Initially assumed iHIM might use React/TypeScript based on the <business> project in the same repo
+- Should have checked the file extensions first (.html, .css, .js = vanilla JavaScript)
 
-### Should Have Started Smaller
-- Could have built a minimal modal first, tested it, then added features
-- Instead I built the entire thing (search, categories, brainstorm, styling) before testing anything
+### localStorage Availability
+- Assumed localStorage is always available
+- In private browsing mode or with storage disabled, the widget works but won't persist state
+- Didn't add error handling for this edge case
 
-### Redundant Code
-- Added action handlers in `registry.py` for modals that are already handled client-side in `runAction()`
-- The backend handlers just return `{"success": True, "message": "Opening..."}` and do nothing
+### Timer Precision
+- Assumed `setInterval` at 10ms provides smooth centisecond display
+- JavaScript timers can drift under heavy CPU load, but for a stopwatch this is acceptable
 
----
-
-## 3. What I Would Do Differently
-
-### Check Blackboard First
-```
-BEFORE: Read task → Read files → Build → Post to blackboard
-AFTER:  Read task → CHECK BLACKBOARD → Coordinate → Build → Post
-```
-I would have seen backend-dev was building an API and could have waited to consume it.
-
-### Minimal Viable First
-1. Add the modal HTML (empty)
-2. Test that it opens/closes
-3. Add one hardcoded command
-4. Test click-to-copy works
-5. THEN add search, categories, brainstorm
-
-### Verify Before Assuming
-- Run `curl localhost:7777/api/slash-commands` to see if backend exists
-- Check if there's a data file for commands already
-- Search codebase for "slash" before building
-
-### Test As I Go
-- After each ~50 lines, restart server and test
-- I wrote 600 lines without testing once
+### Z-index Conflicts
+- Used z-index: 50 for the widget container without verifying against all modal z-indices
+- Modals use z-index: 1000, so there should be no conflict, but didn't test with all modals open simultaneously
 
 ---
 
-## 4. What Might Break
+## Where I Wasted Time
 
-### Hardcoded Commands
+### Over-reading the Codebase
+- Read more of index.html than necessary (~1500 lines when ~200 would have sufficed)
+- Could have focused on just one modal pattern and the initialization section
+
+### Considered React Patterns First
+- Spent initial time looking for React component patterns
+- Should have immediately checked file extensions to determine technology
+
+### CSS Lap Feature
+- Added CSS for a lap times feature that wasn't requested
+- Kept it minimal (~20 lines) but it's unused code that could be removed
+
+---
+
+## What I'd Do Differently
+
+1. **Check Technology Stack Immediately**
+   - Run `ls *.tsx *.jsx` or check file extensions before exploring patterns
+
+2. **Ask About Positioning**
+   - Top-right corner was an assumption
+   - Should have asked: "Do you want the stopwatch as a floating widget, in a modal, or in a specific dashboard section?"
+
+3. **Start with Minimal CSS**
+   - Glassmorphism effects look nice but added complexity
+   - Could have shipped faster with simpler card styling and enhanced later
+
+4. **Add Mobile Breakpoints**
+   - Didn't consider responsive design
+   - Should have added a media query for smaller screens
+
+---
+
+## What Might Break
+
+### Memory Leaks
+- If users spawn many stopwatches without removing them, intervals accumulate
+- Added interval cleanup on remove(), but not on page unload for running timers
+- Running timers on closed page will be "resumed" on next load (by design) but could surprise users
+
+### Mobile Responsiveness
+- No mobile breakpoints added
+- Widget positioned fixed in top-right corner may overlap content on small screens
+- Touch targets might be too small on mobile
+
+### Extreme Values
+- No upper bound on timer - after 99:59.99 it will show 100:00.00 etc.
+- Display could overflow its container at very large times (hours)
+
+### Interval Cleanup on Unload
 ```javascript
-const slashCommands = [
-    { id: 'save', name: '/save', ... },
-    // etc.
-];
+// NOT IMPLEMENTED - timers keep "running" via startTime calculation
+window.addEventListener('beforeunload', () => {
+    // Could add: clear all intervals here
+});
 ```
-- If someone adds `/deploy` to `harness/commands/`, it won't appear
-- Commands must be manually added to JS AND the .md file
-- **Backend has a sync endpoint** that reads from disk - my code doesn't use it
-
-### No Error Handling
-- `navigator.clipboard.writeText()` can fail (permissions, non-HTTPS)
-- I just `console.error()` and show generic "Failed to copy"
-- Should show specific error or fallback to `document.execCommand('copy')`
-
-### localStorage Collisions
-- Key `ihim_slash_ideas` could conflict if iHIM runs on multiple ports/domains
-- No size limit on ideas - user could paste 10MB of text
-- No validation on idea content
-
-### Performance
-- `filterSlashCommands()` rebuilds entire DOM on every keystroke
-- With 5 commands this is fine; with 50 it would lag
-- Should debounce or use virtual list
-
-### Mobile/Responsive
-- Didn't test on small screens
-- The brainstorm section might overflow or be unusable
-- Touch targets might be too small
-
-### Duplicate Systems
-- Frontend: localStorage for ideas
-- Backend: `data/slash_commands.json` for ideas
-- These are completely separate - ideas saved in one won't appear in the other
+This is intentional (to preserve running state) but could be unexpected.
 
 ---
 
-## 5. What the Next Agent Should Know
+## What Next Agent Should Know
 
-### Critical: Frontend and Backend Are NOT Connected
-My frontend hardcodes commands in JS. Backend has a full API at:
-- `GET /api/slash-commands` - list commands (dynamic from disk)
-- `POST /api/slash-commands/ideas` - save ideas to backend
-- `GET /api/slash-commands/sync` - refresh from harness/commands/
+### No Backend Needed
+- This is a purely frontend feature
+- State persists via localStorage key `ihim_stopwatches`
+- No API endpoints required
 
-**Someone needs to wire these together.** Either:
-1. Frontend calls backend API instead of using hardcoded array
-2. Or delete the backend API and keep frontend-only
+### CSS Variables
+- All colors use existing CSS variables from `:root` in style.css
+- Key variables: `--accent-cyan`, `--glass-bg`, `--glass-blur`, `--status-success`
 
-### The Action Handler Pattern is Weird
-In `registry.py`, I added handlers like:
-```python
-elif action_id == "slash_commands":
-    return {"success": True, "message": "Opening Slash Command Center..."}
-```
-But these never actually run - the frontend intercepts in `runAction()` before making the API call. This is confusing and should be documented or cleaned up.
+### Widget Position
+- Fixed position, top-right corner
+- To move: update `.stopwatch-container` in style.css
 
-### Ideas Are Stored in Two Places
-- Frontend: `localStorage.getItem('ihim_slash_ideas')`
-- Backend: `data/slash_commands.json` (per backend-dev's result)
-
-Pick one and delete the other.
-
-### To Test My Code
-```bash
-# Start server
-cd IHIM && python run.py
-
-# Open browser
-http://localhost:7777
-
-# Click "Slash Commands" in Tools section
-# Try: search, click-to-copy, save an idea
+### State Structure
+```javascript
+{
+  nextId: 3,
+  stopwatches: [
+    { id: 1, elapsed: 5000, running: false },
+    { id: 2, elapsed: 12345, running: true }
+  ]
+}
 ```
 
-### Files I Touched
-- `IHIM/ui/index.html` - Lines 224-258 (modal HTML), Lines 1603-1846 (JS)
-- `IHIM/ui/static/style.css` - Lines 1139-1438 (new styles)
-- `IHIM/actions/registry.py` - Lines 115-129 (modal handlers)
+### Key Functions
+- `stopwatchManager.spawn()` - Create new stopwatch
+- `stopwatchManager.toggle(id)` - Start/stop toggle
+- `stopwatchManager.reset(id)` - Reset to 00:00.00
+- `stopwatchManager.remove(id)` - Delete stopwatch
+
+---
+
+## Files Changed
+
+| File | Lines Added | Purpose |
+|------|-------------|---------|
+| `IHIM/ui/static/style.css` | ~250 | Stopwatch widget styling |
+| `IHIM/ui/index.html` | ~260 | HTML container + JavaScript manager |
+
+---
+
+## Testing Checklist for QA
+
+- [ ] Click + button to spawn stopwatch
+- [ ] Click Start, verify timer counts up with millisecond precision
+- [ ] Click Stop, verify timer pauses at current value
+- [ ] Click Start again, verify timer resumes from paused time
+- [ ] Click Reset, verify timer resets to 00:00.00
+- [ ] Click X to remove stopwatch, verify smooth animation
+- [ ] Spawn 3+ stopwatches, verify they run independently
+- [ ] Refresh page, verify all stopwatches restore (with correct times)
+- [ ] Start timer, close tab, reopen - verify timer "continued" running
+- [ ] Test hover effects on spawn button (rotation animation)
+- [ ] Verify running stopwatch has pulsing top border
 
 ---
 
 ## Summary
 
-**What I Did Well:**
-- Followed existing modal patterns (structure, styling)
-- Comprehensive feature set (search, categories, brainstorm)
-- Consistent with C3.ai theme
+**What Went Well:**
+- Clean implementation following existing iHIM patterns
+- Full state persistence across page reloads
+- Smooth animations matching the HUD aesthetic
+- No backend dependencies = no coordination overhead
 
-**What I Did Poorly:**
-- Didn't coordinate with backend-dev
-- Hardcoded instead of using dynamic data
-- No testing during development
-- Created duplicate systems (frontend localStorage vs backend API)
+**What Could Improve:**
+- Mobile responsiveness not addressed
+- Over-read the codebase before building
+- Added unused CSS for lap feature
 
-**Biggest Lesson:**
-Check the blackboard and coordinate BEFORE building. I spent time building a static frontend while backend-dev built a dynamic API. We should have talked first.
+**Lesson Learned:**
+Check technology stack (React vs vanilla JS) FIRST before exploring component patterns.

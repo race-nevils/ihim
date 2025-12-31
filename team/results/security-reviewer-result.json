@@ -1,119 +1,160 @@
 {
   "agent": "security-reviewer",
   "status": "complete",
+  "timestamp": "2025-12-27T02:10:00.000000Z",
+  "summary": "Reviewed terminal WebSocket backend and stopwatch widget API. Terminal has HIGH-severity command injection in dispatch endpoint. Stopwatch API is LOW-risk (simple CRUD, no auth but local-only). CORS misconfiguration persists. XSS protections properly implemented.",
   "files_reviewed": [
-    "IHIM/api/main.py",
-    "IHIM/ui/index.html",
-    "IHIM/actions/registry.py",
-    "IHIM/actions/utils.py",
-    "IHIM/team/spawner.py",
-    "IHIM/team/blackboard.py",
-    "harness/commands/save.md",
-    "harness/commands/endsession.md",
-    "harness/commands/push-workspace.md",
-    "harness/commands/audit.md",
-    "harness/commands/meeting-prep.md",
-    "harness/skills/iHIM/skill.md"
+    "IHIM/api/terminal/routes.py",
+    "IHIM/api/terminal/pty_manager.py",
+    "IHIM/api/main.py (stopwatch endpoints lines 618-798)",
+    "IHIM/ui/index.html (terminal and stopwatch sections)"
   ],
+  "stopwatch_review": {
+    "status": "approved",
+    "security_posture": "low-risk",
+    "findings": [
+      "Simple CRUD operations on JSON file - no injection vectors",
+      "Pydantic validation on input models",
+      "No secrets or PII stored",
+      "8-character UUID IDs (low entropy but acceptable for stopwatches)",
+      "No authentication (acceptable for local-only personal widget)"
+    ],
+    "concerns": [
+      "No rate limiting on create - could create many stopwatches",
+      "Label field not sanitized but rendered with escapeHtml() in frontend"
+    ],
+    "verdict": "Approved for deployment. Stopwatch feature is safe for local use."
+  },
+  "files_created": [],
+  "files_modified": [],
   "vulnerabilities": [
     {
+      "id": "SEC-001",
+      "severity": "high",
+      "type": "Command Injection",
+      "location": "IHIM/api/terminal/routes.py:409-411",
+      "description": "The dispatch_agent() endpoint builds a shell command by escaping double quotes and newlines in the prompt, but this is insufficient. The escape pattern `prompt.replace('\"', '\\\"')` does not handle shell metacharacters like $(), backticks, semicolons, pipes, or ampersands. An attacker can inject arbitrary commands via the prompt parameter.",
+      "example_exploit": "prompt: 'test$(whoami)' or prompt: 'test; rm -rf /'",
+      "recommendation": "Use subprocess with arguments list instead of shell command string. Replace the command construction with proper argument passing that doesn't go through shell interpretation.",
+      "owasp_category": "A03:2021 - Injection"
+    },
+    {
+      "id": "SEC-002",
+      "severity": "high",
+      "type": "Missing Authentication",
+      "location": "IHIM/api/terminal/routes.py (all endpoints)",
+      "description": "The terminal WebSocket and all REST endpoints lack authentication. Anyone with access to localhost:7777 can: create terminal sessions, send keystrokes to terminals, spawn shell processes, execute arbitrary commands via dispatch. Combined with CORS *, any webpage can connect via JavaScript.",
+      "recommendation": "Implement WebSocket authentication via Sec-WebSocket-Protocol header token or first-message auth handshake. Add API key middleware to all terminal REST endpoints. Consider rate limiting session creation.",
+      "owasp_category": "A01:2021 - Broken Access Control"
+    },
+    {
+      "id": "SEC-003",
       "severity": "high",
       "type": "CORS Misconfiguration",
-      "location": "IHIM/api/main.py:60-66",
-      "description": "CORS is configured with allow_origins=['*'] which allows any origin to access the API. Combined with allow_credentials=True, this could enable cross-site request forgery attacks if authentication is ever added.",
-      "recommendation": "Replace wildcard origin with specific allowed origins. If Chrome extension access is needed, use specific extension origins like 'chrome-extension://[extension-id]'. Never combine allow_origins=['*'] with allow_credentials=True."
+      "location": "IHIM/api/main.py:84-90",
+      "description": "CORS is configured with allow_origins=['*'] and allow_credentials=True. This permits any website to make authenticated cross-origin requests to the API, including WebSocket upgrade requests. While the server binds to 127.0.0.1, browser-based attacks from malicious websites can still reach localhost.",
+      "recommendation": "Restrict allow_origins to specific trusted origins only (e.g., ['http://localhost:7777', 'chrome-extension://<id>']). Consider removing allow_credentials if not needed.",
+      "owasp_category": "A05:2021 - Security Misconfiguration"
     },
     {
-      "severity": "high",
-      "type": "Command Injection",
-      "location": "IHIM/actions/utils.py:77-82",
-      "description": "The open_terminal() function uses shell=True with f-string interpolation of 'command' parameter. If the command parameter comes from user input, it could allow arbitrary command execution. Currently, the 'command' parameter is hardcoded in registry.py but this is a latent vulnerability.",
-      "recommendation": "Avoid shell=True. Use subprocess.Popen with a list of arguments instead. If shell features are needed, sanitize and validate the command string."
-    },
-    {
+      "id": "SEC-004",
       "severity": "medium",
-      "type": "Command Injection",
-      "location": "IHIM/actions/utils.py:89-95",
-      "description": "macOS branch constructs shell command via f-string and passes to osascript. Similar latent injection risk as the Windows branch.",
-      "recommendation": "Use proper argument escaping or avoid dynamic command construction."
+      "type": "Path Traversal Risk",
+      "location": "IHIM/api/terminal/pty_manager.py:121-123",
+      "description": "The cwd parameter in create_session() is user-controllable and is passed directly to subprocess. While Python's subprocess.Popen does validate the path exists, there's no validation to restrict terminals to safe directories. An attacker could create a terminal with cwd='C:\\Windows\\System32' or any other sensitive directory.",
+      "recommendation": "Validate cwd against an allowlist of safe directories or ensure it's within the workspace project root. Add path canonicalization to prevent ../ traversal.",
+      "owasp_category": "A01:2021 - Broken Access Control"
     },
     {
+      "id": "SEC-005",
       "severity": "medium",
-      "type": "Path Traversal",
-      "location": "IHIM/api/main.py:747-748",
-      "description": "The FlightPathRequest accepts project_path from user input. While there is validation that the path exists, there's no validation to restrict paths to the workspace directory. A malicious request could potentially scan any directory on the system.",
-      "recommendation": "Validate that project_path is within allowed directories (workspace root). Use pathlib's resolve() and check prefix."
+      "type": "Session Fixation Risk",
+      "location": "IHIM/api/terminal/routes.py:202-209",
+      "description": "WebSocket endpoint auto-creates sessions if session_id doesn't exist. An attacker could predict or brute-force session IDs (8 character UUIDs) to hijack or pre-create sessions. Session IDs use only first 8 chars of UUID which reduces entropy to 32 bits.",
+      "recommendation": "Use full UUID for session IDs. Don't auto-create sessions on WebSocket connect - require explicit session creation via POST first. Add session ownership validation.",
+      "owasp_category": "A07:2021 - Identification and Authentication Failures"
     },
     {
+      "id": "SEC-006",
       "severity": "medium",
-      "type": "No Authentication",
-      "location": "IHIM/api/main.py (all endpoints)",
-      "description": "The API has no authentication mechanism. All endpoints are publicly accessible to anyone who can reach localhost:7777. While this is acceptable for local-only use, it becomes a risk if the server is ever exposed to a network.",
-      "recommendation": "Document that this is local-only. Consider adding optional API key authentication for future network exposure scenarios."
+      "type": "No Session Timeout",
+      "location": "IHIM/api/terminal/pty_manager.py",
+      "description": "Terminal sessions persist indefinitely with no idle timeout. Shell processes remain alive consuming resources. An attacker could spawn many sessions leading to resource exhaustion.",
+      "recommendation": "Implement idle session timeout (e.g., 30 minutes). Add maximum concurrent sessions limit. Clean up sessions on server shutdown.",
+      "owasp_category": "A04:2021 - Insecure Design"
     },
     {
+      "id": "SEC-007",
       "severity": "medium",
-      "type": "Sensitive Path Exposure",
-      "location": "IHIM/api/main.py:698-702, IHIM/team/spawner.py:57-61",
-      "description": "Absolute file paths (including username '<user>') are hardcoded and exposed in API responses. This leaks local file system structure.",
-      "recommendation": "Use relative paths in API responses or environment-based path configuration."
+      "type": "Missing Rate Limiting",
+      "location": "IHIM/api/terminal/routes.py (all POST endpoints)",
+      "description": "No rate limiting on session creation, dispatch, or resize endpoints. An attacker can spawn unlimited terminal sessions or flood the server with requests causing denial of service.",
+      "recommendation": "Add rate limiting middleware (e.g., slowapi). Limit session creation to reasonable rate. Consider per-IP limits.",
+      "owasp_category": "A04:2021 - Insecure Design"
     },
     {
-      "severity": "medium",
-      "type": "Arbitrary Process Execution",
-      "location": "IHIM/team/spawner.py:129-143",
-      "description": "The agent spawner executes arbitrary commands via Windows Terminal. While prompts are written to files, the architecture allows spawning processes that execute user-provided prompts through the agent CLI.",
-      "recommendation": "This is by design for the agent system, but ensure the prompt file is properly sanitized and the system is only accessible locally."
-    },
-    {
+      "id": "SEC-008",
       "severity": "low",
-      "type": "XSS (DOM-based)",
-      "location": "IHIM/ui/index.html:500-504",
-      "description": "The escapeHtml() function is implemented correctly and used for task/note rendering. However, the innerHTML assignments in lines 1462-1517 for node info display don't escape node.name, node.description, etc. These values come from the API.",
-      "recommendation": "Apply escapeHtml() to all dynamic content inserted via innerHTML, including node properties from the API response."
+      "type": "Error Information Disclosure",
+      "location": "IHIM/api/terminal/routes.py:101-105, 207",
+      "description": "Exception messages are returned directly to clients (str(e)). This could leak internal paths, Python tracebacks, or system information.",
+      "recommendation": "Log full errors server-side. Return generic error messages to clients.",
+      "owasp_category": "A05:2021 - Security Misconfiguration"
     },
     {
+      "id": "SEC-009",
       "severity": "low",
-      "type": "Weak ID Generation",
-      "location": "IHIM/team/blackboard.py:117-119",
-      "description": "Message IDs are generated using MD5 of time+random. While not cryptographically critical, MD5 is deprecated. Could lead to predictable IDs.",
-      "recommendation": "Use uuid.uuid4() for message IDs instead of MD5 hashing."
-    },
-    {
-      "severity": "low",
-      "type": "Information Disclosure",
-      "location": "IHIM/api/main.py:108-130",
-      "description": "The /api/system/stats endpoint exposes CPU and memory usage. While useful for monitoring, this could leak information about system load and available resources.",
-      "recommendation": "Document that this endpoint exists. Consider adding optional authentication if sensitive environments are a concern."
-    },
-    {
-      "severity": "low",
-      "type": "the operator Condition",
-      "location": "IHIM/team/blackboard.py:151-168",
-      "description": "The save_blackboard function attempts atomic writes via temp file + rename, but the retry logic with simple backoff may still have race conditions with multiple concurrent writers.",
-      "recommendation": "Use proper file locking (fcntl or msvcrt) for cross-process coordination, or consider using a database instead of JSON file."
+      "type": "Hardcoded localhost URL",
+      "location": "IHIM/api/terminal/routes.py:377, 418",
+      "description": "WebSocket URLs are hardcoded as 'ws://localhost:7777/...'. Minor coupling issue.",
+      "recommendation": "Construct WebSocket URL dynamically from request headers.",
+      "owasp_category": "A05:2021 - Security Misconfiguration"
     }
+  ],
+  "positive_findings": [
+    "Server binds to 127.0.0.1 only in run.py and run_silent.py (not exposed to network)",
+    "XSS protection via escapeHtml() is properly implemented and used consistently",
+    "Frontend uses SRI hashes on CDN imports for xterm.js (integrity verification)",
+    "Pydantic models used for request validation (type checking)",
+    "Scrollback buffer has fixed size (1000 lines) preventing memory exhaustion",
+    "Process termination has timeout handling to prevent zombie processes",
+    "No secrets or API keys found in code",
+    "Frontend action rendering properly escapes user-controlled content"
   ],
   "secrets_found": false,
   "pii_handling": [
-    "Username '<user>' appears in hardcoded paths throughout the codebase",
-    "No other PII detected in code",
-    "Slash commands like /meeting-prep may handle client names - ensure proper data handling"
+    "Terminal scrollback stores raw command output which may contain PII",
+    "No PII redaction in logs or scrollback buffer"
   ],
-  "owasp_checklist": {
-    "A01_Broken_Access_Control": "MEDIUM - No authentication, no authorization checks. Acceptable for local-only tool.",
-    "A02_Cryptographic_Failures": "OK - No cryptographic operations found. No secrets stored.",
-    "A03_Injection": "HIGH - Command injection risks in utils.py shell=True usage. Path traversal in flightpath.",
-    "A04_Insecure_Design": "LOW - Architecture is local-first by design. No sensitive data processed.",
-    "A05_Security_Misconfiguration": "HIGH - CORS allow_origins=['*'] with credentials is misconfigured.",
-    "A06_Vulnerable_Components": "NOT_CHECKED - Dependency audit not performed. Consider running 'pip list --outdated'.",
-    "A07_Auth_Failures": "MEDIUM - No auth implemented. By design for local tool.",
-    "A08_Data_Integrity_Failures": "LOW - No deserialization of untrusted data. JSON parsing is safe.",
-    "A09_Logging_Failures": "LOW - Minimal logging. No security-relevant events logged.",
-    "A10_SSRF": "LOW - No outbound HTTP requests from user input. Flight path scans local FS only."
+  "owasp_summary": {
+    "A01_Broken_Access_Control": "HIGH - No auth on terminal endpoints",
+    "A02_Cryptographic_Failures": "N/A - No encryption required for local-only service",
+    "A03_Injection": "HIGH - Command injection in dispatch endpoint",
+    "A04_Insecure_Design": "MEDIUM - Missing session timeouts and rate limiting",
+    "A05_Security_Misconfiguration": "HIGH - CORS allows all origins",
+    "A06_Vulnerable_Components": "LOW - CDN dependencies have SRI hashes",
+    "A07_Auth_Failures": "MEDIUM - Weak session IDs, no ownership validation",
+    "A08_Data_Integrity_Failures": "LOW - No signed data requirements",
+    "A09_Logging_Failures": "MEDIUM - No audit logging for terminal commands",
+    "A10_SSRF": "N/A - No outbound requests based on user input"
   },
-  "summary": "The Slash Command Center feature builds on existing iHIM infrastructure which is primarily a LOCAL-ONLY tool. The most significant vulnerabilities are: (1) CORS misconfiguration that could enable CSRF if auth is added later, (2) command injection risks in subprocess calls using shell=True, and (3) lack of input validation on file paths. These are acceptable for a local development tool but should be addressed if the system is ever exposed to a network. The commands feature itself (brainstorming, categorization, display) has minimal security impact as it's read-only UI for displaying existing commands. Recommend fixing CORS immediately and sanitizing any user input passed to subprocesses.",
-  "blockers": [],
-  "handoff_notes": "For frontend-dev: Escape dynamic content in innerHTML assignments for Flight Path node info. For backend-dev: Fix CORS configuration and add path validation for flightpath endpoints. For devops: Run dependency audit before deployment.",
-  "approved": true
+  "blockers": [
+    {
+      "id": "SEC-001",
+      "reason": "Command injection in dispatch endpoint allows arbitrary code execution",
+      "must_fix_before": "Terminal feature deployment"
+    },
+    {
+      "id": "SEC-002",
+      "reason": "Unauthenticated terminal access is effectively a remote shell",
+      "must_fix_before": "Terminal feature deployment"
+    }
+  ],
+  "approved": false,
+  "approval_conditions": [
+    "Fix SEC-001 (command injection) - CRITICAL",
+    "Implement authentication (SEC-002) before any network exposure",
+    "Restrict CORS (SEC-003) to specific origins"
+  ],
+  "handoff_notes": "@backend-dev: SEC-001 is critical command injection. The escape logic in dispatch_agent() is insufficient - shell metacharacters like $(), backticks, semicolons bypass it. Use subprocess args list, not shell string. SEC-002 requires auth - consider FastAPI Depends() with API key header. @frontend-dev: XSS protections look good. Add reconnection error handling for when auth is implemented. @devops: DO NOT deploy terminal until SEC-001 and SEC-002 are fixed."
 }

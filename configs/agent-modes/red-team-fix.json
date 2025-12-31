@@ -1,0 +1,134 @@
+{
+  "id": "red-team-fix",
+  "name": "Red Team: Fix Wave",
+  "version": "1.0.0",
+  "created_at": "2025-12-27",
+  "updated_at": "2025-12-27",
+
+  "what": "4-6 the agent operators implement fixes from Red Team recon findings. Wave 2 of the Red Team pattern. WRITE access. Deploy based on severity - CRITICALs first, then HIGHs. Each the agent takes ownership of a domain.",
+
+  "when_to_use": [
+    "After red-team-recon wave completes",
+    "When user approves the prioritized findings",
+    "Sufficient time exists to verify fixes after"
+  ],
+
+  "when_not_to_use": [
+    "Before recon wave (no findings to fix)",
+    "Without user approval of priorities",
+    "When findings require architectural decisions (escalate to the agent)"
+  ],
+
+  "philosophy": "Targeted surgical fixes. Each the agent owns a domain and fixes issues in that domain. No cross-domain work - stay in your lane. Speed matters but correctness matters more. Every fix should be verifiable.",
+
+  "composition": {
+    "total_agents": 6,
+    "parallelism_slots": 6,
+    "wave": 2,
+    "previous_wave": "red-team-recon",
+    "next_wave": "red-team-verify (optional)",
+    "breakdown": [
+      {
+        "id": "fixer-security",
+        "tier": "sonnet",
+        "role": "operator",
+        "access": "read-write",
+        "specialty": "Security Fixes",
+        "owns": ["XSS prevention", "input sanitization", "command escaping", "CORS hardening"],
+        "priority_tags": ["CRITICAL", "HIGH"]
+      },
+      {
+        "id": "fixer-backend",
+        "tier": "sonnet",
+        "role": "operator",
+        "access": "read-write",
+        "specialty": "Python/FastAPI",
+        "owns": ["error handling", "validation", "atomic operations", "resource cleanup"],
+        "priority_tags": ["CRITICAL", "HIGH", "MEDIUM"]
+      },
+      {
+        "id": "fixer-frontend",
+        "tier": "sonnet",
+        "role": "operator",
+        "access": "read-write",
+        "specialty": "JavaScript/HTML",
+        "owns": ["DOM safety", "event handlers", "memory leaks", "state management"],
+        "priority_tags": ["CRITICAL", "HIGH", "MEDIUM"]
+      },
+      {
+        "id": "fixer-data",
+        "tier": "sonnet",
+        "role": "operator",
+        "access": "read-write",
+        "specialty": "Data Layer",
+        "owns": ["race conditions", "file locking", "JSON validation", "atomic writes"],
+        "priority_tags": ["CRITICAL", "HIGH"]
+      },
+      {
+        "id": "fixer-tests",
+        "tier": "sonnet",
+        "role": "operator",
+        "access": "read-write",
+        "specialty": "Test Coverage",
+        "owns": ["security tests", "edge case tests", "regression tests"],
+        "priority_tags": ["HIGH", "MEDIUM"]
+      },
+      {
+        "id": "fixer-integration",
+        "tier": "sonnet",
+        "role": "operator",
+        "access": "read-write",
+        "specialty": "Integration Lead",
+        "owns": ["code review", "merge verification", "final validation"],
+        "priority_tags": ["ALL"]
+      }
+    ]
+  },
+
+  "constraints": [
+    "Fix only issues from recon findings (no scope creep)",
+    "Each fixer stays in their domain",
+    "CRITICAL fixes before HIGH before MEDIUM",
+    "Document every fix with line numbers",
+    "No architectural changes without the agent approval"
+  ],
+
+  "input": {
+    "source": "red-team-recon output",
+    "format": "Prioritized list of findings with severity, file:line, description",
+    "required": "User approval before deploying fix wave"
+  },
+
+  "output": {
+    "format": "Files modified with change descriptions",
+    "verification": "Each fix should be testable",
+    "handoff": "Summary of what was fixed, what remains"
+  },
+
+  "examples": [
+    {
+      "scenario": "4 CRITICAL XSS vulnerabilities",
+      "deployment": "fixer-security handles all 4 in parallel",
+      "result": "All 4 fixed with escapeHtml() implementation"
+    },
+    {
+      "scenario": "Memory leak in event handlers",
+      "deployment": "fixer-frontend owns this domain",
+      "result": "Added cleanup functions, removed accumulating listeners"
+    }
+  ],
+
+  "metrics": {
+    "target_completion_time": "< 15 minutes for 4-6 CRITICALs",
+    "expected_fixes": "Match CRITICAL + HIGH count from recon",
+    "token_budget": "50,000 - 80,000 tokens",
+    "success_criteria": "All targeted issues fixed, no new issues introduced"
+  },
+
+  "history": {
+    "runs": 0,
+    "avg_duration_seconds": null,
+    "avg_fixes": null,
+    "lessons_extracted": []
+  }
+}

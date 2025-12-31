@@ -165,3 +165,229 @@ I did none of that.
 ---
 
 *This retrospective is more valuable than my security report.*
+
+---
+
+# Security Reviewer Retrospective - Session 2
+
+**Agent:** security-reviewer
+**Date:** 2025-12-26
+**Task:** Review WebSocket/PTY Terminal Feature Security
+
+---
+
+## Context
+
+This is a follow-up session reviewing the proposed embedded terminal feature (xterm.js + node-pty + WebSocket). The previous session reviewed the commands center.
+
+---
+
+## 1. Assumptions I Verified This Time
+
+| Assumption | How Verified | Result |
+|------------|--------------|--------|
+| Server binds to localhost | Read main.py startup code | Confirmed: 127.0.0.1 in spawner.py line 154, NOT 0.0.0.0 |
+| CORS still allows `*` | Grepped for allow_origins | Confirmed: main.py:78 still has allow_origins=["*"] |
+| No auth still exists | Searched for auth/token patterns | Confirmed: No authentication on any endpoint |
+| Terminal feature doesn't exist yet | Grepped for WebSocket | Confirmed: Only references are in task descriptions |
+
+**Correction from previous session**: Previous reviewer said server binds to 0.0.0.0 based on skill.md. Actual code shows 127.0.0.1 in spawner.py. Server IS local-only. Previous assessment was partially incorrect.
+
+---
+
+## 2. Where I Was More Efficient
+
+1. **Started with grep** - First searched for dangerous patterns before reading full files
+2. **Focused on attack surface** - Terminal feature is the highest-risk proposed change
+3. **Read previous retrospective** - Avoided duplicating the same mistakes
+4. **Verified network binding** - Traced actual code instead of trusting skill.md
+
+---
+
+## 3. Key Findings for Terminal Feature
+
+### The Terminal Would Create These Risks:
+
+1. **Shell as a Service** - WebSocket + PTY = anyone with CORS bypass can execute commands
+2. **CORS + Credentials** - Browsers will send cookies, so any malicious page could connect
+3. **No Session Management** - Terminal sessions would persist indefinitely
+4. **ANSI Escape Attacks** - Malicious command output could exploit xterm.js
+
+### Required Before Implementation:
+
+1. Fix CORS (change to specific origins)
+2. Add authentication (API key at minimum)
+3. WebSocket auth (token in connection handshake)
+4. Session timeout (prevent zombie sessions)
+5. Command logging (audit trail)
+
+---
+
+## 4. What Might Break
+
+| Change | Could Break | Mitigation |
+|--------|-------------|------------|
+| CORS restriction | Chrome extension | Add extension origin to allowlist |
+| Authentication | Rapid API calls | Use long-lived token, not per-request |
+| Session timeout | Long-running agents | Make timeout configurable per session |
+
+---
+
+## 5. Handoff Notes for Other Agents
+
+### Backend Dev
+- SEC-001 (CORS) and SEC-002 (Auth) are prerequisites for terminal
+- Consider FastAPI OAuth2PasswordBearer for simple token auth
+- WebSocket auth: Accept token in Sec-WebSocket-Protocol header
+
+### Frontend Dev
+- Add SRI to xterm.js CDN imports
+- Terminal output needs sanitization (xterm.js has some built-in)
+- Handle reconnection gracefully when auth fails
+
+### DevOps
+- DO NOT deploy terminal until auth is in place
+- Consider process isolation for terminal sessions
+- Log all terminal commands for audit
+
+### QA Tester
+- Test WebSocket connection from different origin (should fail)
+- Test terminal with malicious ANSI sequences
+- Test session timeout behavior
+
+---
+
+## Summary
+
+This session was more focused than the previous one. The terminal feature is high-risk but manageable if authentication is implemented first. The core codebase is reasonably secure for local development use, but NOT ready for network exposure or sensitive features like terminal access.
+
+**Confidence**: 90% - Verified key assumptions this time, focused on specific feature
+
+---
+
+# Security Reviewer Retrospective - Session 3
+
+**Agent:** security-reviewer
+**Date:** 2025-12-27
+**Task:** Review implemented terminal WebSocket/PTY backend code
+
+---
+
+## Context
+
+This session reviewed the ACTUAL IMPLEMENTED terminal code (routes.py, pty_manager.py) that was built by backend-dev and frontend-dev. Previous sessions reviewed proposed designs.
+
+---
+
+## 1. Assumptions I Didn't Verify
+
+| Assumption | Should Have Verified |
+|------------|---------------------|
+| Escape logic in dispatch_agent is insufficient | Did trace the code but didn't actually test `$(whoami)` payload |
+| Path traversal in cwd parameter works | Didn't test with `../` or absolute paths outside workspace |
+| Session ID brute force is feasible | Didn't calculate actual entropy (8 hex chars = 32 bits) |
+
+### What I Got Right
+- Verified server still binds to 127.0.0.1 (in run.py line 83)
+- Confirmed CORS still allows `*` (main.py line 86)
+- Confirmed XSS protections exist and are used (escapeHtml in index.html)
+- Confirmed SRI hashes added to CDN imports
+
+---
+
+## 2. Where I Wasted Time
+
+### Still Reading Too Much
+- Read all 424 lines of routes.py when key security issues were in 3 functions
+- Should have searched for: `pty_manager.write`, `create_session`, `dispatch_agent`
+
+### Could Have Been More Targeted
+- Spent time documenting "low" severity issues (hardcoded localhost URLs) when HIGH issues exist
+- Should focus blockers on deployment-critical issues only
+
+---
+
+## 3. What I'd Do Differently
+
+1. **Search for shell command construction patterns first**
+   ```bash
+   grep -n "f'" IHIM/api/terminal/  # f-strings near shell commands
+   grep -n "encode\|decode" IHIM/api/terminal/  # Data flowing to PTY
+   ```
+
+2. **Trace user input to dangerous sinks**
+   - `prompt` parameter -> `dispatch_agent()` -> shell command
+   - `cwd` parameter -> `create_session()` -> subprocess working directory
+   - `session_id` -> WebSocket URL -> session lookup
+
+3. **Actually test one exploit**
+   ```bash
+   curl -X POST "http://localhost:7777/api/terminal/dispatch?prompt=test%24(whoami)"
+   ```
+   This would prove or disprove SEC-001 definitively.
+
+---
+
+## 4. What Might Break
+
+| Finding | Confidence | Risk If Wrong |
+|---------|------------|---------------|
+| SEC-001 Command Injection | 85% - code trace clear | If escape IS sufficient, wasted fix effort |
+| SEC-002 No Auth | 100% - obvious | N/A |
+| SEC-003 CORS | 100% - obvious | N/A |
+| SEC-004 Path Traversal | 70% - not tested | May not be exploitable if subprocess validates |
+| SEC-005 Session Fixation | 60% - theoretical | Auto-create might be intentional design |
+
+---
+
+## 5. What Next Agent Should Know
+
+### Backend Dev
+- SEC-001 is the critical fix. The line is:
+  ```python
+  escaped_prompt = prompt.replace('"', '\\"').replace('\n', ' ')
+  command = f'claude "{escaped_prompt}"\n'
+  ```
+  This doesn't handle: `$()`, backticks, `;`, `|`, `&`, etc.
+
+  **Recommended fix**: Use subprocess args list OR write prompt to temp file and read it.
+
+### QA Tester
+- Test dispatch endpoint with these payloads:
+  - `test$(whoami)`
+  - `test; echo INJECTED`
+  - `test` followed by backtick commands
+  - `test & calc.exe`
+
+### Frontend Dev
+- XSS protections look solid. `escapeHtml()` used consistently.
+- SRI hashes present on CDN imports.
+- No changes needed from security perspective.
+
+### DevOps
+- **DO NOT DEPLOY** until SEC-001 and SEC-002 fixed
+- Terminal is a shell-as-a-service without auth
+
+---
+
+## Summary
+
+**What I Did Well:**
+- Focused on the actual implemented code, not theoretical designs
+- Identified the most critical issue (command injection in dispatch)
+- Verified previous findings (localhost binding, CORS config)
+- Noted positive security implementations (escapeHtml, SRI)
+
+**What I Did Poorly:**
+- Didn't actually test any exploit
+- Still documenting low-severity issues when blockers exist
+- Reported 9 vulnerabilities when 2-3 critical ones would suffice
+
+**Honest Assessment:**
+This is a more actionable review than previous sessions. The command injection in `dispatch_agent()` is a real vulnerability that needs fixing before deployment. The code is local-only so exploitation requires local access or CORS bypass, but it's still a security hole.
+
+**Confidence**: 85% - Traced code paths, verified assumptions, but didn't prove exploitability with actual tests.
+
+---
+
+*The feedback loop is working - each session is more focused than the last.*

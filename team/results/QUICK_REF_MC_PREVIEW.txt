@@ -1,0 +1,238 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                  MISSION CONTROL: DRY RUN PREVIEW                           ║
+║                        Quick Reference Card                                 ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ THE ONE-SENTENCE PITCH                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Add a "Preview Impact" button that shows users EXACTLY what will happen before
+they spawn a team - transforming Mission Control from "submit and hope" to
+"preview and deploy with confidence."
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CURRENT VS. FUTURE                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CURRENT (Form Submission):
+  User → Type task → Pick template → Click "Spawn" → ??? → Hope it works
+  Confidence: LOW    Exploration: NONE    Iteration: RARE
+
+FUTURE (Dry Run Preview):
+  User → Type task → Pick template → "Preview Impact" → See details →
+  → Adjust if needed → "Deploy" → Confident execution
+  Confidence: HIGH   Exploration: MODERATE   Iteration: NATURAL
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ WHAT THE PREVIEW SHOWS                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────┐
+│ Preview - What Will Happen        │
+├───────────────────────────────────┤
+│ 🤖 AGENTS:                        │ ← How many, what tier, what model
+│    • 10 the agent scouts              │
+│    • Model: claude-haiku-3.5      │
+│    • Execution: Parallel          │
+│                                   │
+│ 🔒 PERMISSIONS:                   │ ← What can they do/not do
+│    • READ-ONLY (no writes)        │
+│    • No git operations            │
+│    • No external APIs             │
+│                                   │
+│ 📁 FILES ACCESSED:                │ ← Exactly what files they'll scan
+│    • 187 Python files             │
+│    • 34 HTML files                │
+│    • 22 JSON files                │
+│    Total: 243 files               │
+│                                   │
+│ 📤 OUTPUT:                        │ ← Where results will go
+│    • Findings → blackboard.json   │
+│    • Reports → team/results/      │
+│    • No code changes              │
+│                                   │
+│ ⏱️ ESTIMATED TIME: 3-5 minutes    │ ← How long it will take
+│                                   │
+│ ⚠️ RISKS: None (read-only)       │ ← What could go wrong
+│                                   │
+│ [Adjust Team] [Deploy]            │ ← Clear next actions
+└───────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ IMPLEMENTATION CHECKLIST                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+BACKEND (4 hours):
+  [ ] Create IHIM/api/team_builder/routes.py
+  [ ] Implement POST /api/teams/preview endpoint
+  [ ] Add file glob logic (count Python/HTML/JSON/CSS/JS files)
+  [ ] Add tier-based permissions logic (the agent=READ, the agent=R/W, the agent=FULL)
+  [ ] Add time estimation heuristics (parallel vs sequential)
+  [ ] Register router in main.py
+  [ ] Write unit tests
+
+FRONTEND (4 hours):
+  [ ] Add "Preview Impact" button next to "Spawn Team"
+  [ ] Create preview modal HTML structure
+  [ ] Style preview modal (dark theme, Iron Man colors)
+  [ ] Implement previewTeamImpact() JavaScript function
+  [ ] Implement populatePreviewModal() function
+  [ ] Wire up modal close handlers (X button, backdrop click, Esc key)
+  [ ] Wire up "Deploy" button → spawns team
+  [ ] Enable/disable preview button based on form state
+
+TESTING (2 hours):
+  [ ] Manual: Happy path (preview → deploy)
+  [ ] Manual: Edge cases (empty task, no template, bad template ID)
+  [ ] Manual: UI responsiveness (mobile/tablet)
+  [ ] Automated: Preview endpoint returns 200
+  [ ] Automated: File count is accurate (±10%)
+  [ ] Automated: Permissions match tier
+
+TOTAL EFFORT: ~10 hours (1.5 days)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ API SPECIFICATION                                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+POST /api/teams/preview
+
+REQUEST:
+{
+  "template_id": "red-team-recon",
+  "task": "Audit iHIM for security issues"
+}
+
+RESPONSE:
+{
+  "template_id": "red-team-recon",
+  "template_name": "Red Team Recon",
+  "task": "Audit iHIM for security issues",
+  "agent_count": 10,
+  "agent_tier": "the agent",
+  "model_name": "claude-haiku-3.5",
+  "execution_mode": "Parallel (10 concurrent)",
+  "permissions": [
+    "READ-ONLY (no file writes)",
+    "No git operations",
+    "No external API calls",
+    "Blackboard write access"
+  ],
+  "files_breakdown": [
+    { "type": "Python", "pattern": "IHIM/**/*.py", "count": 187 },
+    { "type": "HTML", "pattern": "IHIM/**/*.html", "count": 34 },
+    { "type": "JSON", "pattern": "IHIM/**/*.json", "count": 22 }
+  ],
+  "total_files": 243,
+  "outputs": [
+    "Findings → IHIM/team/blackboard.json",
+    "Reports → IHIM/team/results/*-audit.json",
+    "No code changes",
+    "No git commits"
+  ],
+  "estimated_time": "3-5 minutes",
+  "risks": "None (read-only operation)"
+}
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SUCCESS CRITERIA                                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+MUST HAVE:
+  ✓ "Preview Impact" button appears and is functional
+  ✓ Modal shows accurate file count (within 10% of actual)
+  ✓ Modal shows correct tier and permissions
+  ✓ "Deploy" button spawns team correctly
+  ✓ Preview endpoint responds in <500ms
+  ✓ No breaking changes to existing flow
+
+NICE TO HAVE:
+  ✓ Modal is keyboard accessible (Esc to close, Tab navigation)
+  ✓ Modal is mobile responsive
+  ✓ Loading spinner while preview generates
+  ✓ Error handling with user-friendly messages
+
+USER IMPACT:
+  ✓ Users report feeling "in control" vs "hoping for the best"
+  ✓ Preview usage rate: 80%+ of spawns
+  ✓ Users explore 2-3 templates before deploying (vs 1 currently)
+  ✓ Support questions about "what will this do?" drop to zero
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FUTURE PHASES                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PHASE 2: Template Gallery (Week 2)
+  Replace dropdown with visual card-based gallery
+  Visual browsing > text dropdown
+
+PHASE 3: Scenarios (Week 3)
+  Save draft configurations, compare side-by-side
+  Non-destructive experimentation
+
+PHASE 4: Conversational (Month 2)
+  Natural language dialogue refines configuration
+  System asks clarifying questions, suggests improvements
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FILES CREATED                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+All files in: IHIM/team/results/
+
+1. mission-control-competitive-analysis.md    (Full analysis, 9,500 words)
+2. mc-interaction-patterns.txt                (ASCII diagrams, visual reference)
+3. dry-run-preview-spec.md                    (Technical spec, implementation guide)
+4. mc-thinking-tool-summary.md                (Executive summary, decisions)
+5. QUICK_REF_MC_PREVIEW.txt                   (This file, quick reference)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ WHY THIS WINS                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1. ADDRESSES CORE FEAR
+   "What will this actually DO?" is the #1 barrier to exploration.
+   Preview removes uncertainty.
+
+2. NON-DESTRUCTIVE EXPLORATION
+   Users can try different templates without committing.
+   Safe experimentation = more exploration.
+
+3. EDUCATIONAL VALUE
+   Users learn what teams do by reading previews.
+   System becomes transparent, not a black box.
+
+4. FOUNDATION FOR FUTURE
+   Gallery, scenarios, and conversational UI all build on preview.
+   This is the cornerstone.
+
+5. IMMEDIATE VALUE
+   Ships in 1-2 days. Users get confidence boost immediately.
+   Fast ROI.
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ NEXT STEPS                                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1. Review dry-run-preview-spec.md (technical details)
+2. Build backend /api/teams/preview endpoint
+3. Add "Preview Impact" button + modal to UI
+4. Test with real users
+5. Gather feedback
+6. Ship Phase 1
+7. Iterate toward Phase 2 (gallery)
+
+═══════════════════════════════════════════════════════════════════════════
+
+Ready to transform Mission Control from form to thinking tool.
+Start with dry-run-preview-spec.md.

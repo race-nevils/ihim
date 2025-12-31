@@ -19,20 +19,8 @@ ACTIONS = {
         "icon": "cli",
         "category": "dev",
     },
-    "edgeflow_workspace": {
-        "name": "EdgeFlowAI LP Dev Workspace",
-        "description": "VS Code + the agent + Dev Server (all-in-one)",
-        "icon": "rocket",
-        "category": "dev",
-    },
-    "edgeflow_dev": {
-        "name": "EdgeFlow Dev Server",
-        "description": "Start EdgeFlow LP dev server",
-        "icon": "play",
-        "category": "dev",
-    },
     "explorer_workspace": {
-        "name": "Open workspace Folder",
+        "name": "workspace",
         "description": "Open workspace in file browser",
         "icon": "folder",
         "category": "files",
@@ -65,20 +53,58 @@ ACTIONS = {
         "icon": "slash",
         "category": "tools",
         "has_modal": True,
+        "hidden": True,  # Consolidated into Mission Control
     },
-    # Team actions
+    "mission_control": {
+        "name": "Mission Control",
+        "description": "Terminal, Commands, Feature Builder, Team Builder - all in one",
+        "icon": "terminal",
+        "category": "tools",
+        "has_modal": True,
+    },
+    "stopwatch": {
+        "name": "Stopwatch",
+        "description": "Spawn multiple independent stopwatches on screen",
+        "icon": "timer",
+        "category": "tools",
+    },
+    "heuristics": {
+        "name": "Tricks & Heuristics",
+        "description": "Debugging tricks and patterns that work",
+        "icon": "lightbulb",
+        "category": "tools",
+        "has_modal": True,
+    },
+    "standards_library": {
+        "name": "Standards Library",
+        "description": "Compliance modules - HIPAA, SOC 2, and more",
+        "icon": "shield",
+        "category": "tools",
+        "has_modal": True,
+    },
+    # Team actions (consolidated into Mission Control)
     "software_dev_team": {
         "name": "Feature Builder",
         "description": "Spawn 5 coding specialists in parallel",
         "icon": "rocket",
         "category": "actions",
-        "has_input": True,  # This action needs user input (prompt)
+        "has_input": True,
+        "hidden": True,  # Consolidated into Mission Control
     },
-    "collapse_team": {
-        "name": "Collapse Team",
-        "description": "Close all agent tabs",
-        "icon": "x",
+    "agent_team_builder": {
+        "name": "Team Builder",
+        "description": "Design and spawn custom agent teams (3-5 agents)",
+        "icon": "users",
         "category": "actions",
+        "has_modal": True,
+        "hidden": True,  # Consolidated into Mission Control
+    },
+    # System actions
+    "restart_server": {
+        "name": "Restart Server",
+        "description": "Kill and restart iHIM (self-destruct)",
+        "icon": "restart",
+        "category": "system",
     },
 }
 
@@ -90,22 +116,6 @@ def run_action(action_id: str) -> dict:
         if open_claude_code(PATHS["workspace"]):
             return {"success": True, "message": "Opening the agent harness"}
         return {"success": False, "message": "Failed to open the agent harness"}
-
-    elif action_id == "edgeflow_workspace":
-        # All-in-one: VS Code + the agent + Dev Server
-        success = True
-        if not open_vscode_with_claude(PATHS["workspace"]):
-            success = False
-        if not run_npm_script(PATHS["edgeflow_web"], "dev"):
-            success = False
-        if success:
-            return {"success": True, "message": "Launching EdgeFlow workspace..."}
-        return {"success": False, "message": "Some components failed to launch"}
-
-    elif action_id == "edgeflow_dev":
-        if run_npm_script(PATHS["edgeflow_web"], "dev"):
-            return {"success": True, "message": "Starting EdgeFlow dev server"}
-        return {"success": False, "message": "Failed to start dev server"}
 
     elif action_id == "explorer_workspace":
         if open_folder(PATHS["workspace"]):
@@ -128,16 +138,34 @@ def run_action(action_id: str) -> dict:
         # Handled by UI (modal)
         return {"success": True, "message": "Opening Slash Command Center..."}
 
+    elif action_id == "mission_control":
+        # Handled by UI (modal)
+        return {"success": True, "message": "Opening Mission Control..."}
+
+    elif action_id == "stopwatch":
+        # Handled by UI (spawns floating stopwatch widgets)
+        return {"success": True, "message": "Opening Stopwatch..."}
+
+    elif action_id == "heuristics":
+        # Handled by UI (modal for viewing/adding heuristics)
+        return {"success": True, "message": "Opening Tricks & Heuristics..."}
+
+    elif action_id == "standards_library":
+        # Handled by UI (modal for managing compliance modules)
+        return {"success": True, "message": "Opening Standards Library..."}
+
     elif action_id == "software_dev_team":
         # This action is handled by the UI (shows input modal)
         # The actual spawn happens via POST /api/team/spawn
         return {"success": True, "message": "Opening team panel...", "show_input": True}
 
-    elif action_id == "collapse_team":
-        # Import here to avoid circular imports
-        from team.spawner import collapse_team as do_collapse
-        result = do_collapse()
-        return result
+    elif action_id == "agent_team_builder":
+        # Handled by UI (modal for designing custom agent teams)
+        return {"success": True, "message": "Opening Team Builder..."}
+
+    elif action_id == "restart_server":
+        # Handled by frontend - calls /api/server/restart directly
+        return {"success": True, "message": "Use the restart endpoint", "redirect": "/api/server/restart"}
 
     else:
         return {"success": False, "message": f"Unknown action: {action_id}"}

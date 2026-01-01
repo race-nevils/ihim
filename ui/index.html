@@ -262,21 +262,37 @@
             <button class="standards-library-close" onclick="closeStandardsLibraryWindow()">&times;</button>
         </div>
         <div class="standards-library-body">
-            <div class="standards-library-search">
-                <input type="text" id="standards-library-search-input" placeholder="Search modules..." oninput="filterStandardsLibraryModules()">
+            <!-- Tabs -->
+            <div class="standards-library-tabs">
+                <button class="sl-tab-btn active" data-tab="modules" onclick="switchStandardsLibraryTab('modules')">Modules</button>
+                <button class="sl-tab-btn" data-tab="references" onclick="switchStandardsLibraryTab('references')">References</button>
             </div>
-            <div class="standards-library-content">
-                <div class="standards-library-list-panel">
-                    <div id="standards-library-modules-list" class="standards-library-modules-list">
-                        <!-- Modules loaded dynamically -->
-                    </div>
+
+            <!-- Modules Panel -->
+            <div class="sl-tab-panel active" id="sl-modules-panel">
+                <div class="standards-library-search">
+                    <input type="text" id="standards-library-search-input" placeholder="Search modules..." oninput="filterStandardsLibraryModules()">
                 </div>
-                <div class="standards-library-detail-panel">
-                    <div id="standards-library-module-detail" class="standards-library-module-detail">
-                        <div class="standards-library-empty-state">
-                            <p>Select a module to view details</p>
+                <div class="standards-library-content">
+                    <div class="standards-library-list-panel">
+                        <div id="standards-library-modules-list" class="standards-library-modules-list">
+                            <!-- Modules loaded dynamically -->
                         </div>
                     </div>
+                    <div class="standards-library-detail-panel">
+                        <div id="standards-library-module-detail" class="standards-library-module-detail">
+                            <div class="standards-library-empty-state">
+                                <p>Select a module to view details</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- References Panel -->
+            <div class="sl-tab-panel" id="sl-references-panel" style="display: none;">
+                <div id="standards-references-list" class="standards-references-list">
+                    <!-- Loaded dynamically -->
                 </div>
             </div>
         </div>
@@ -2137,6 +2153,73 @@
                 countEl.textContent = `${totalCount} modules (${activeCount} active)`;
             }
         }
+
+        // =====================
+        // Standards Library References Tab
+        // =====================
+        let referencesData = null;
+
+        function switchStandardsLibraryTab(tab) {
+            document.querySelectorAll('.sl-tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.sl-tab-panel').forEach(panel => panel.style.display = 'none');
+
+            document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+            document.getElementById(`sl-${tab}-panel`).style.display = 'block';
+
+            if (tab === 'references' && !referencesData) {
+                loadStandardsReferences();
+            }
+        }
+
+        async function loadStandardsReferences() {
+            try {
+                const res = await fetch(`${API}/api/standards/references`);
+                referencesData = await res.json();
+                renderStandardsReferences();
+            } catch (e) {
+                console.error('Failed to load references:', e);
+                document.getElementById('standards-references-list').innerHTML = '<div class="standards-library-empty-state"><p>Failed to load references</p></div>';
+            }
+        }
+
+        function renderStandardsReferences() {
+            const listEl = document.getElementById('standards-references-list');
+            if (!referencesData?.standards || referencesData.standards.length === 0) {
+                listEl.innerHTML = '<div class="standards-library-empty-state"><p>No references found</p></div>';
+                return;
+            }
+
+            listEl.innerHTML = referencesData.standards.map(std => `
+                <div class="reference-standard-item">
+                    <div class="reference-standard-header" onclick="toggleReferenceExpand('${std.id}')">
+                        <span class="expand-icon" id="expand-${std.id}">▶</span>
+                        <span class="reference-standard-name">${std.name}</span>
+                        <span class="reference-count">${std.references.length} refs</span>
+                    </div>
+                    <div class="reference-links-list" id="refs-${std.id}" style="display: none;">
+                        ${std.references.map(ref => `
+                            <a href="${ref.url}" target="_blank" class="reference-link-item">
+                                <span class="ref-type ref-type-${ref.type}">${ref.type}</span>
+                                <span class="ref-title">${ref.title}</span>
+                            </a>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function toggleReferenceExpand(stdId) {
+            const list = document.getElementById(`refs-${stdId}`);
+            const icon = document.getElementById(`expand-${stdId}`);
+            if (list.style.display === 'none') {
+                list.style.display = 'block';
+                icon.textContent = '▼';
+            } else {
+                list.style.display = 'none';
+                icon.textContent = '▶';
+            }
+        }
+
 
         // =====================
         // System Monitor

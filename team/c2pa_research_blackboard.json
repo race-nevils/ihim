@@ -1,0 +1,289 @@
+{
+  "operation": "C2PA Research Swarm v2",
+  "created": "2025-12-31T08:00:00Z",
+  "status": "completed",
+  "swarms": {
+    "swarm_1_c2pa_spec": {
+      "workers": ["scout-c2pa-1", "scout-c2pa-2"],
+      "observer": {
+        "id": "observer-c2pa-spec",
+        "synthesis": "C2PA specification defines manifest structure with claims, assertions, and ingredients. Manifests are cryptographically signed to ensure content provenance and integrity."
+      }
+    },
+    "swarm_2_implementation": {
+      "workers": ["scout-fastapi-1", "scout-fastapi-2"],
+      "observer": {
+        "id": "observer-implementation",
+        "synthesis": "FastAPI + c2pa-python integration requires synchronous functions (def not async def) for manifest operations. Critical: c2pa_tool.read_file() is blocking I/O."
+      }
+    },
+    "swarm_3_json_ld": {
+      "workers": ["scout-jsonld-1", "scout-jsonld-2"],
+      "observer": {
+        "id": "observer-jsonld",
+        "synthesis": "JSON-LD uses @context for vocabulary mapping, @type for semantic typing, @id for resource identification. RDF triple model underlies all assertions."
+      }
+    },
+    "swarm_4_verification": {
+      "workers": ["scout-verify-1", "scout-verify-2"],
+      "observer": {
+        "id": "observer-verification",
+        "synthesis": "Verification involves signature validation, hash checking, certificate chain validation. Active manifest vs store distinction critical."
+      }
+    },
+    "swarm_5_web_components": {
+      "workers": ["scout-webcomp-1", "scout-webcomp-2"],
+      "observer": {
+        "id": "observer-webcomponents",
+        "synthesis": "Web Components (Custom Elements + Shadow DOM) provide encapsulated UI for C2PA manifest display. Lifecycle callbacks enable dynamic loading."
+      }
+    },
+    "swarm_6_architecture": {
+      "workers": ["scout-arch-1", "scout-arch-2"],
+      "observer": {
+        "id": "observer-architecture",
+        "synthesis": "workspace integration: feedback aggregator for events, blackboard for deliverables, compliance modules for policy enforcement."
+      }
+    }
+  },
+  "findings": [
+    {
+      "swarm": "swarm_1_c2pa_spec",
+      "category": "manifest_structure",
+      "title": "C2PA Manifest Anatomy",
+      "summary": "Manifests contain claims (assertions), ingredients (sources), signatures (crypto proof). Active manifest = current state, store = history.",
+      "key_concepts": {
+        "claims": "Top-level assertions (dc:title, dc:format, claim_generator, assertions array)",
+        "assertions": "Typed metadata (c2pa.actions, c2pa.hash.data, c2pa.ingredient, stds.schema-org, stds.exif)",
+        "ingredients": "Source materials with relationships (parentOf, componentOf, inputTo) and nested manifests",
+        "signature": "ES256/PS256 crypto signature, X.509 cert chain, RFC 3161 timestamp",
+        "manifest_store": "Active manifest (outermost) + array of historical manifests showing edit provenance"
+      },
+      "workspace_relevance": "Compliance module validates manifest structure. Blackboard could adopt active+store pattern."
+    },
+    {
+      "swarm": "swarm_2_implementation",
+      "category": "fastapi_integration",
+      "title": "FastAPI + c2pa-python Integration",
+      "summary": "Use def (not async def) for c2pa routes. Library is blocking I/O. Workaround: ThreadPoolExecutor + run_in_executor.",
+      "critical_details": {
+        "library": "c2pa-python (pip install c2pa-python)",
+        "imports": "from c2pa import Builder, Reader, SigningAlg",
+        "blocking_operations": ["Reader.read_file(path)", "Builder.sign()", "ManifestStore.validate()"],
+        "sync_pattern": "def get_manifest(path): return Reader.from_file(path).get_active_manifest()",
+        "async_workaround": "executor = ThreadPoolExecutor(4); await loop.run_in_executor(executor, Reader.from_file, path)",
+        "exceptions": ["C2paError", "InvalidManifest", "SignatureError"],
+        "validation": "Always check reader.validate_signature() before trusting data"
+      },
+      "workspace_relevance": "All /api/manifest/* routes need sync handlers or executor pattern to avoid blocking event loop."
+    },
+    {
+      "swarm": "swarm_3_json_ld",
+      "category": "json_ld_semantics",
+      "title": "JSON-LD Core Concepts",
+      "summary": "JSON-LD = semantic layer over JSON. @context maps terms to IRIs, @type declares semantic type, @id identifies resources.",
+      "core_concepts": {
+        "@context": "Vocabulary mapping (dc -> http://purl.org/dc/elements/1.1/). Enables compact notation.",
+        "@type": "Semantic type (c2pa.claim, c2pa.actions, stds.schema-org.CreativeWork). Enables type inference.",
+        "@id": "Resource IRI (urn:uuid:abc123). Enables linking and deduplication.",
+        "rdf_triples": "JSON-LD represents subject-predicate-object triples. Enables graph queries.",
+        "compaction_expansion": "jsonld.compact() shortens IRIs using context. jsonld.expand() removes context."
+      },
+      "workspace_relevance": "Blackboard deliverables could use JSON-LD for semantic interop. Feedback aggregator validates assertion structure."
+    },
+    {
+      "swarm": "swarm_4_verification",
+      "category": "trust_verification",
+      "title": "C2PA Verification Process",
+      "summary": "4-step verification: signature validation, hash check, cert chain, timestamp. Trust levels: trusted, untrusted_sig, untrusted_hash, no_manifest, partial.",
+      "verification_steps": {
+        "1_signature": "Verify ECDSA/RSA-PSS signature over claim box using cert public key",
+        "2_hash": "Verify SHA-256/512 hash of asset bytes matches c2pa.hash.data assertion",
+        "3_cert_chain": "Validate X.509 chain to trusted root CA",
+        "4_timestamp": "Verify RFC 3161 TSA timestamp within cert validity period"
+      },
+      "trust_model": {
+        "trusted": "All 4 steps pass",
+        "untrusted_signature": "Sig invalid or cert not trusted",
+        "untrusted_hash": "Sig valid but hash mismatch (asset modified post-signing)",
+        "no_manifest": "No C2PA data present",
+        "partial_trust": "Some assertions valid, others failed"
+      },
+      "workspace_relevance": "Compliance modules enforce trust thresholds. Feedback aggregator tracks verification events."
+    },
+    {
+      "swarm": "swarm_5_web_components",
+      "category": "ui_encapsulation",
+      "title": "Web Components for C2PA UI",
+      "summary": "Custom Elements + Shadow DOM = encapsulated, reusable components. Lifecycle callbacks (connected, disconnected, attributeChanged) enable dynamic manifest loading.",
+      "component_patterns": {
+        "custom_elements": "customElements.define('c2pa-manifest', C2paManifest). Extends HTMLElement.",
+        "shadow_dom": "this.attachShadow({mode: 'open'}). Scoped styles, DOM isolation.",
+        "lifecycle": "connectedCallback (fetch data), disconnectedCallback (cleanup), attributeChangedCallback (react to src change)",
+        "example_components": [
+          "<c2pa-manifest src='/api/manifest/123' mode='detailed'>",
+          "<c2pa-badge status='trusted'>",
+          "<c2pa-timeline manifest-store='...'>",
+          "<c2pa-ingredient-tree ingredients='...'>"
+        ],
+        "styling": "CSS variables (--c2pa-primary-color) + ::part() pseudo-element for external theming"
+      },
+      "workspace_relevance": "iHIM UI can embed C2PA components. Quick Notes shows trust badge. Pattern applicable to other widgets."
+    },
+    {
+      "swarm": "swarm_6_architecture",
+      "category": "workspace_integration",
+      "title": "workspace Integration Architecture",
+      "summary": "C2PA integrates via 3 systems: feedback aggregator (events), blackboard (deliverables), compliance (policy). Data flow: upload -> verify -> event -> policy -> deliverable.",
+      "integration_points": {
+        "feedback_aggregator": {
+          "events": ["manifest.uploaded", "manifest.verified", "manifest.signature_failed", "manifest.hash_mismatch", "manifest.cert_untrusted"],
+          "storage": "JSONL append-only log (IHIM/data/feedback.jsonl)",
+          "use_cases": ["Audit trail", "Anomaly detection", "Compliance reporting"]
+        },
+        "blackboard_deliverables": {
+          "pattern": "Agent A uploads -> Agent B verifies -> Agent C consumes via blackboard",
+          "lifecycle": "SPAWN -> ACTIVE (read/write) -> RESOLVE (synthesis) -> DISSOLVE (archive)",
+          "endpoints": ["POST /api/blackboard", "GET /api/blackboard/{id}", "PATCH /api/blackboard/{id}", "DELETE /api/blackboard/{id}"]
+        },
+        "compliance_modules": {
+          "location": "IHIM/configs/compliance/modules/",
+          "example_rules": ["reject_untrusted_signatures", "require_known_creator", "log_all_manifests"],
+          "hot_reload": "Modules updatable without server restart",
+          "middleware": "Intercepts /api/manifest/* routes"
+        },
+        "data_flow": "POST /api/manifest/upload -> c2pa verify -> feedback event -> compliance check -> blackboard deliverable",
+        "security": ["File type/size validation", "Rate limiting", "Separate manifest storage", "Auth required", "PII-aware logging"]
+      },
+      "workspace_relevance": "C2PA becomes first-class: events tracked, data shared, policies enforced. No major refactor needed."
+    }
+  ],
+  "cross_swarm_patterns": [
+    {
+      "pattern": "Synchronous API Handlers Required",
+      "swarms": ["swarm_2_implementation", "swarm_6_architecture"],
+      "insight": "c2pa-python is blocking I/O. All /api/manifest/* routes need def (not async def) or ThreadPoolExecutor wrapper.",
+      "impact": "API design constraint across workspace. Create c2pa_async.py utility module."
+    },
+    {
+      "pattern": "JSON-LD Semantic Structure",
+      "swarms": ["swarm_1_c2pa_spec", "swarm_3_json_ld", "swarm_6_architecture"],
+      "insight": "C2PA uses JSON-LD for assertions. workspace could adopt @context for blackboard deliverables and feedback events.",
+      "impact": "Semantic interop between agents. Create workspace-context.jsonld vocabulary file."
+    },
+    {
+      "pattern": "Active vs Store Pattern",
+      "swarms": ["swarm_1_c2pa_spec", "swarm_4_verification"],
+      "insight": "Active manifest = current state, store = provenance history. Mirrors blackboard ACTIVE vs DISSOLVED states.",
+      "impact": "Blackboard deliverables could track history: active data + archived updates array."
+    },
+    {
+      "pattern": "Encapsulated UI Components",
+      "swarms": ["swarm_5_web_components", "swarm_6_architecture"],
+      "insight": "Shadow DOM + Custom Elements = reusable, isolated components. Applicable to iHIM widgets.",
+      "impact": "Refactor Quick Notes, Stopwatches, MC tabs as Web Components. Progressive enhancement approach."
+    },
+    {
+      "pattern": "Trust-Based Policy Enforcement",
+      "swarms": ["swarm_4_verification", "swarm_6_architecture"],
+      "insight": "Verification produces trust levels. Compliance modules can enforce thresholds (e.g., reject untrusted).",
+      "impact": "workspace becomes trust-aware, not just rule-based. Agents query trust before using external data."
+    },
+    {
+      "pattern": "Event-Driven Audit Trail",
+      "swarms": ["swarm_6_architecture"],
+      "insight": "Feedback aggregator uses JSONL for manifest events. Same pattern for compliance, swarms, debriefs.",
+      "impact": "Unified event log enables cross-system analysis (correlate manifest failures with swarm metrics)."
+    }
+  ],
+  "observer_notes": [
+    {
+      "observer": "observer-c2pa-spec",
+      "insight": "Manifest store pattern (active + history) is powerful provenance abstraction.",
+      "recommendation": "Adopt for blackboard: each deliverable has active state + archived update history."
+    },
+    {
+      "observer": "observer-implementation",
+      "insight": "c2pa-python blocking I/O is constraint, not blocker.",
+      "recommendation": "Create IHIM/api/c2pa_async.py with ThreadPoolExecutor wrappers for async routes."
+    },
+    {
+      "observer": "observer-jsonld",
+      "insight": "JSON-LD enables semantic queries and cross-agent understanding.",
+      "recommendation": "Create IHIM/data/workspace-context.jsonld mapping workspace terms to IRIs."
+    },
+    {
+      "observer": "observer-verification",
+      "insight": "Partial trust states exist (e.g., valid sig but expired cert). Binary trust insufficient.",
+      "recommendation": "Compliance modules define trust thresholds, not just pass/fail."
+    },
+    {
+      "observer": "observer-webcomponents",
+      "insight": "iHIM uses server-rendered HTML + HTMX. Web Components require JavaScript.",
+      "recommendation": "Hybrid: server renders initial state, Web Components enhance interactivity (progressive)."
+    },
+    {
+      "observer": "observer-architecture",
+      "insight": "C2PA fits naturally into existing workspace patterns. No architectural changes needed.",
+      "recommendation": "Implement as compliance module first (low risk), then feedback events, then blackboard."
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": "high",
+      "area": "API",
+      "action": "Create IHIM/api/c2pa_async.py with ThreadPoolExecutor wrappers (async def read_manifest, verify_manifest, create_manifest)"
+    },
+    {
+      "priority": "high",
+      "area": "Compliance",
+      "action": "Create IHIM/configs/compliance/modules/c2pa_trust_policy.json with reject_untrusted_signatures, require_known_creator, log_all_manifests rules"
+    },
+    {
+      "priority": "medium",
+      "area": "Feedback",
+      "action": "Add manifest event types to IHIM/api/feedback/routes.py (manifest.uploaded, verified, signature_failed, hash_mismatch, cert_untrusted)"
+    },
+    {
+      "priority": "medium",
+      "area": "Blackboard",
+      "action": "Update IHIM/team/blackboard.py to track deliverable history: add get_active_deliverable() and get_deliverable_history() methods"
+    },
+    {
+      "priority": "medium",
+      "area": "UI",
+      "action": "Create IHIM/ui/static/components/c2pa-manifest.js with Custom Elements (<c2pa-manifest>, <c2pa-badge>, <c2pa-timeline>)"
+    },
+    {
+      "priority": "low",
+      "area": "Semantics",
+      "action": "Create IHIM/data/workspace-context.jsonld with JSON-LD vocabulary for workspace terms (blackboard, deliverable, feedback, swarm)"
+    },
+    {
+      "priority": "low",
+      "area": "Refactor",
+      "action": "Gradually migrate existing widgets (Quick Notes, Stopwatches) to Web Components for modularity"
+    }
+  ],
+  "next_steps": [
+    "Implement c2pa_async.py wrapper",
+    "Create C2PA compliance module",
+    "Add manifest event types to feedback aggregator",
+    "Build <c2pa-manifest> Web Component",
+    "Update blackboard.py for history tracking",
+    "Document C2PA integration in FLIGHT_PATH.md",
+    "Add routes: POST /api/manifest/upload, GET /api/manifest/{id}/verify, GET /api/manifest/{id}/display"
+  ],
+  "metadata": {
+    "total_swarms": 6,
+    "total_workers": 12,
+    "total_observers": 6,
+    "findings_count": 6,
+    "cross_swarm_patterns_count": 6,
+    "observer_notes_count": 6,
+    "recommendations_count": 7,
+    "completion_timestamp": "2025-12-31T08:30:00Z",
+    "estimated_effort": "3-5 days (high priority), 1-2 weeks (all recommendations)",
+    "synthesized_by": "yellow-operator-2"
+  }
+}

@@ -91,6 +91,14 @@ except ImportError as e:
     print(f"Warning: Agents module not available: {e}")
     AGENTS_AVAILABLE = False
 
+# Import C2PA module (Content Provenance)
+try:
+    from api.c2pa.routes import router as c2pa_router
+    C2PA_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: C2PA module not available: {e}")
+    C2PA_AVAILABLE = False
+
 app = FastAPI(title="iHIM", description="Your Command Center - with Blackboard API")
 
 # CORS middleware for Chrome extension access
@@ -189,6 +197,10 @@ if TERMINAL_AVAILABLE:
 # Include the agents router (Agent Workshop)
 if AGENTS_AVAILABLE:
     app.include_router(agents_router)
+
+# Include the C2PA router (Content Provenance)
+if C2PA_AVAILABLE:
+    app.include_router(c2pa_router)
 
 
 # Request models
@@ -2244,6 +2256,26 @@ async def compliance_health_check():
         }
     except Exception as e:
         return error_response(f"Health check failed: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.get("/api/standards/references")
+async def get_standards_references():
+    """
+    Get reference links for various standards and frameworks.
+
+    Returns a curated list of standards with their official documentation,
+    guides, tools, and other reference materials.
+    """
+    references_path = Path(__file__).parent.parent / "data" / "standards_library" / "references" / "references.json"
+    try:
+        if references_path.exists():
+            with open(references_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {"success": True, **data}
+        else:
+            return {"success": False, "error": "References file not found", "standards": []}
+    except Exception as e:
+        return {"success": False, "error": str(e), "standards": []}
 
 
 # =============================================================================

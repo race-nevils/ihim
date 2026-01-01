@@ -82,6 +82,13 @@ ACTIONS = {
         "category": "tools",
         "has_modal": True,
     },
+    "c2pa_verify": {
+        "name": "C2PA Verify",
+        "description": "Verify content authenticity and provenance",
+        "icon": "verified",
+        "category": "tools",
+        "has_modal": True,
+    },
     # Team actions (consolidated into Mission Control)
     "software_dev_team": {
         "name": "Feature Builder",
@@ -153,6 +160,10 @@ def run_action(action_id: str) -> dict:
     elif action_id == "standards_library":
         # Handled by UI (modal for managing compliance modules)
         return {"success": True, "message": "Opening Standards Library..."}
+
+    elif action_id == "c2pa_verify":
+        # Handled by UI (modal for verifying C2PA content)
+        return {"success": True, "message": "Opening C2PA Verify..."}
 
     elif action_id == "software_dev_team":
         # This action is handled by the UI (shows input modal)

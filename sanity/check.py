@@ -112,7 +112,6 @@ def check_ihim_imports(report: SanityReport):
         ("team.spawner", "Agent spawner"),
         ("team.templates", "Agent templates"),
         ("team.state", "Team state management"),
-        ("team.blackboard", "Agent coordination"),
         ("team.feedback.schemas", "Feedback data models"),
         ("team.feedback.processor", "Result processor"),
         ("team.feedback.aggregator", "Feedback aggregator"),
@@ -182,7 +181,7 @@ def check_template_formatting(report: SanityReport):
     """Check that templates don't have formatting issues."""
     try:
         from team.templates import AGENT_TEMPLATES
-        from team.blackboard import BLACKBOARD_INSTRUCTIONS
+        BLACKBOARD_INSTRUCTIONS = ""  # Blackboard archived
 
         # Test that templates can be formatted without KeyErrors
         test_vars = {

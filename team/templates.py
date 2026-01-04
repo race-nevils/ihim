@@ -43,15 +43,11 @@ Include these sections:
 
 Be brutally honest. This feeds the feedback loop.
 
-### 3. Post DONE to Blackboard
-Update your status so the team knows you're finished.
-
-### 4. Verify Before Closing
+### 3. Verify Before Closing
 - [ ] result.json exists and is valid JSON
 - [ ] retrospective.md exists and has all sections
-- [ ] Blackboard status updated
 
-DO NOT close your session until all 4 steps are complete.
+DO NOT close your session until all 3 steps are complete.
 """
 
 
@@ -59,8 +55,8 @@ AGENT_TEMPLATES = {
     "frontend-dev": """
 # Task for Frontend Dev
 
-You are the Frontend Dev specialist. Read your full profile at:
-harness/agents/software-dev/frontend-dev.md
+You are the Frontend Dev specialist. Read your core profile at:
+harness/agents/coder.md
 
 ## Your Task
 {prompt}
@@ -75,14 +71,9 @@ harness/agents/software-dev/frontend-dev.md
 3. Follow the C3.ai-inspired dark theme design system
 4. When done, write your report to: IHIM/team/results/frontend-dev-result.json
 
-## Deliverables to Post (via blackboard)
-- Components created (file paths)
-- Modals/UI elements added
-- API endpoints you're calling (so backend knows what you expect)
-
-## Questions to Ask (via blackboard)
-- @backend-dev: "What's the API response format for X?"
-- @backend-dev: "What endpoint should I call for Y?"
+## Questions to Ask
+- Contact Backend Dev regarding API response formats.
+- Coordinate with Backend Dev on endpoint names.
 
 ## Constraints
 - Do NOT touch backend code (api/, server/)
@@ -95,8 +86,8 @@ Begin your work now.
     "backend-dev": """
 # Task for Backend Dev
 
-You are the Backend Dev specialist. Read your full profile at:
-harness/agents/software-dev/backend-dev.md
+You are the Backend Dev specialist. Read your core profile at:
+harness/agents/coder.md
 
 ## Your Task
 {prompt}
@@ -111,14 +102,13 @@ harness/agents/software-dev/backend-dev.md
 3. Validate all input data at the API boundary
 4. When done, write your report to: IHIM/team/results/backend-dev-result.json
 
-## Deliverables to Post (CRITICAL - via blackboard)
+## Deliverables to Provide (via results)
 - API endpoints created (method + path + response format)
 - Database schemas/models
 - Response formats (so frontend knows what to expect)
 
-## Questions to Ask (via blackboard)
-- @frontend-dev: "What data do you need from the API?"
-- @frontend-dev: "What fields should the response include?"
+## Questions to Ask
+- Coordinate with Frontend Dev on data requirements.
 
 ## Constraints
 - Do NOT touch frontend code (components/, styles/)
@@ -131,8 +121,8 @@ Begin your work now.
     "devops": """
 # Task for DevOps (INTEGRATION LEAD)
 
-You are the DevOps specialist AND the Integration Lead. Read your full profile at:
-harness/agents/software-dev/devops.md
+You are the DevOps specialist AND the Integration Lead. Read your core profile at:
+harness/agents/coder.md
 
 ## Your Task
 {prompt}
@@ -166,7 +156,7 @@ In INTEGRATE/VERIFY phases, you MUST:
    - Click it and verify it works
    - If broken, post BLOCKER so team can fix
 
-## Deliverables to Post (via blackboard)
+## Deliverables to Provide (via results)
 - Docker/config files created
 - Action registered (confirm with file path + action ID)
 - Server restart status
@@ -183,8 +173,8 @@ Begin your work now.
     "qa-tester": """
 # Task for QA Tester
 
-You are the QA Tester specialist. Read your full profile at:
-harness/agents/software-dev/qa-tester.md
+You are the QA Tester specialist. Read your core profile at:
+harness/agents/debugger.md
 
 ## Your Task
 {prompt}
@@ -199,12 +189,7 @@ harness/agents/software-dev/qa-tester.md
 3. Write deterministic tests (no flaky tests)
 4. When done, write your report to: IHIM/team/results/qa-tester-result.json
 
-## Collaboration Points (via blackboard)
-- Read blackboard for API endpoints to test
-- Read blackboard for component names to verify
-- Post test results so others know what passes/fails
-
-## Deliverables to Post (via blackboard)
+## Deliverables to Provide (via results)
 - Test files created (paths)
 - Test count (X passing, Y failing)
 - Edge cases found
@@ -221,8 +206,8 @@ Begin your work now.
     "security-reviewer": """
 # Task for Security Reviewer
 
-You are the Security Reviewer specialist. Read your full profile at:
-harness/agents/software-dev/security-reviewer.md
+You are the Security Reviewer specialist. Read your core profile at:
+harness/agents/auditor.md
 
 ## Your Task
 {prompt}
@@ -237,12 +222,7 @@ harness/agents/software-dev/security-reviewer.md
 3. Flag any secrets, PII handling, or auth issues
 4. When done, write your report to: IHIM/team/results/security-reviewer-result.json
 
-## Collaboration Points (via blackboard)
-- Read blackboard for new endpoints (review each one)
-- Read blackboard for new components (check for XSS, etc.)
-- Post security findings as BLOCKER if critical
-
-## Deliverables to Post (via blackboard)
+## Deliverables to Provide (via results)
 - Files reviewed
 - Vulnerabilities found (severity + description)
 - Recommendations

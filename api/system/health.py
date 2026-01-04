@@ -362,36 +362,6 @@ def check_team_state() -> ComponentHealth:
     )
 
 
-def check_blackboard() -> ComponentHealth:
-    """Check blackboard file."""
-    file_path = IHIM_ROOT / "team" / "blackboard.json"
-
-    if not file_path.exists():
-        return ComponentHealth(
-            id="blackboard",
-            status=HealthStatus.INACTIVE,
-            message="No active session",
-            last_check=datetime.now().isoformat(),
-        )
-
-    status, msg, metrics = check_json_file(file_path)
-
-    # Get additional blackboard info
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            metrics["phase"] = data.get("phase", "unknown")
-            metrics["message_count"] = len(data.get("messages", []))
-    except Exception:
-        pass
-
-    return ComponentHealth(
-        id="blackboard",
-        status=status,
-        message=msg,
-        last_check=datetime.now().isoformat(),
-        metrics=metrics
-    )
 
 
 def check_feedback_system() -> ComponentHealth:
@@ -914,7 +884,6 @@ HEALTH_CHECKS: Dict[str, callable] = {
     "team-spawner": check_team_spawner,
     "team-router": check_team_router,
     "team-state": check_team_state,
-    "blackboard": check_blackboard,
     "feedback-system": check_feedback_system,
     "feedback-processor": check_feedback_processor,
     "feedback-aggregator": check_feedback_aggregator,

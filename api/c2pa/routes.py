@@ -1,4 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse
+
 from typing import Optional, Dict, Any
 import tempfile
 import os
@@ -9,68 +11,200 @@ router = APIRouter(prefix="/api/c2pa", tags=["C2PA"])
 
 
 def _extract_manifest_data(manifest: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract structured data from C2PA manifest."""
+    """Extract structured data from C2PA manifest - comprehensive extraction."""
     result = {
+        # Basic Info
+        "title": None,
         "date_created": None,
         "author": None,
+        "creator": None,
+        
+        # Claim Info
         "claim_generator": None,
+        "claim_generator_info": None,
+        "active_manifest": None,
+        
+        # AI & Software Assertions
+        "assertion": None,
+        "software_agent": None,
+        "software_agent_version": None,
+        "action": None,
+        
+        # Relationships
+        "relationship": None,
+        
+        # Cryptographic Details
+        "hash_algorithm": None,
+        "pad": None,
+        "alg": None,
+        "ta": None,
+        "tst": None,
         "cert_issuer": None,
+        
+        # File Info
         "format": None,
+        "file_name": None,
+        "file_size": None,
+        "file_type": None,
+        
+        # Validation
         "validation_status": None,
     }
 
     try:
+        # Extract title
+        if "title" in manifest:
+            result["title"] = manifest["title"]
+        
         # Extract claim generator
         if "claim_generator" in manifest:
-            result["claim_generator"] = manifest["claim_generator"]
+            cg = manifest["claim_generator"]
+            result["claim_generator"] = cg
+            # Try to extract version from claim_generator string (e.g., "Lightroom/6.5")
+            if isinstance(cg, str) and "/" in cg:
+                parts = cg.split("/", 1)
+                result["claim_generator"] = parts[0]
+                if len(parts) > 1:
+                    result["claim_generator_info"] = parts[1]
+        
+        # Extract active manifest label
+        if "label" in manifest:
+            result["active_manifest"] = manifest["label"]
+        
+        # Extract format
+        if "format" in manifest:
+            result["format"] = manifest["format"]
+            result["file_type"] = manifest["format"]
+        
+        # Extract instance_id for file info
+        if "instance_id" in manifest:
+            result["file_name"] = manifest["instance_id"]
 
         # Extract assertions
         if "assertions" in manifest:
             assertions = manifest["assertions"]
 
-            # Look for creation date in various assertion types
             for assertion in assertions:
-                if "label" in assertion:
-                    label = assertion["label"]
-                    data = assertion.get("data", {})
+                if not isinstance(assertion, dict):
+                    continue
+                    
+                label = assertion.get("label", "")
+                data = assertion.get("data", {})
 
-                    # Date created
-                    if "stds.schema-org.CreativeWork" in label:
+                # Store assertion type
+                if label and not result["assertion"]:
+                    result["assertion"] = label
+
+                # Creative Work assertion
+                if "stds.schema-org.CreativeWork" in label:
+                    if isinstance(data, dict):
                         if "dateCreated" in data:
                             result["date_created"] = data["dateCreated"]
                         if "author" in data:
-                            result["author"] = data["author"]
+                            author = data["author"]
+                            if isinstance(author, list) and len(author) > 0:
+                                first_author = author[0]
+                                if isinstance(first_author, dict):
+                                    result["author"] = first_author.get("name", str(first_author))
+                                    result["creator"] = first_author.get("name", str(first_author))
+                                else:
+                                    result["author"] = str(first_author)
+                                    result["creator"] = str(first_author)
+                            else:
+                                result["author"] = str(author)
+                                result["creator"] = str(author)
 
-                    # Format information
-                    if "c2pa.format" in label or "stds.exif" in label:
-                        if "format" in data:
-                            result["format"] = data["format"]
+                # Actions assertion
+                if "c2pa.actions" in label:
+                    if isinstance(data, dict) and "actions" in data:
+                        actions = data["actions"]
+                        if isinstance(actions, list) and len(actions) > 0:
+                            first_action = actions[0]
+                            if isinstance(first_action, dict):
+                                result["action"] = first_action.get("action")
+                                
+                                # Extract software agent
+                                agent = first_action.get("softwareAgent", {})
+                                if isinstance(agent, dict):
+                                    result["software_agent"] = agent.get("name")
+                                    result["software_agent_version"] = agent.get("version")
+                                elif isinstance(agent, str):
+                                    result["software_agent"] = agent
+                
+                # AI assertions
+                if "c2pa.ai" in label or "ai.generative" in label:
+                    result["assertion"] = label
+                    if isinstance(data, dict):
+                        if "softwareAgent" in data:
+                            agent = data["softwareAgent"]
+                            if isinstance(agent, dict):
+                                result["software_agent"] = agent.get("name")
+                                result["software_agent_version"] = agent.get("version")
+                            else:
+                                result["software_agent"] = str(agent)
+                
+                # Hash data assertion
+                if "c2pa.hash" in label:
+                    if isinstance(data, dict):
+                        result["hash_algorithm"] = data.get("alg") or data.get("algorithm")
+                        result["pad"] = data.get("pad")
+                
+                # Ingredient assertions (relationships)
+                if "c2pa.ingredient" in label:
+                    if isinstance(data, dict):
+                        result["relationship"] = data.get("relationship")
 
         # Extract signature info
         if "signature_info" in manifest:
             sig_info = manifest["signature_info"]
-
-            # Timestamp
-            if "time" in sig_info:
-                result["date_created"] = sig_info["time"]
-
-            # Certificate issuer
-            if "issuer" in sig_info:
-                result["cert_issuer"] = sig_info["issuer"]
+            if isinstance(sig_info, dict):
+                # Timestamp
+                if "time" in sig_info:
+                    result["date_created"] = sig_info["time"]
+                
+                # Algorithm
+                if "alg" in sig_info:
+                    result["alg"] = sig_info["alg"]
+                
+                # Certificate issuer
+                if "issuer" in sig_info:
+                    result["cert_issuer"] = sig_info["issuer"]
+                
+                # Time stamp authority
+                if "ta_url" in sig_info:
+                    result["ta"] = sig_info["ta_url"]
+                
+                # Time stamp token
+                if "tsa" in sig_info:
+                    result["tst"] = sig_info["tsa"]
+        
+        # Extract claim info
+        if "claim" in manifest:
+            claim = manifest["claim"]
+            if isinstance(claim, dict):
+                if "alg" in claim:
+                    result["alg"] = claim["alg"]
+                if "hash" in claim:
+                    result["hash_algorithm"] = claim["hash"]
 
         # Validation status
         if "validation_status" in manifest:
             status_list = manifest["validation_status"]
-            if isinstance(status_list, list) and len(status_list) > 0:
-                # Check if any validation failed
-                has_error = any("error" in str(s).lower() for s in status_list)
-                result["validation_status"] = "invalid" if has_error else "valid"
+            if isinstance(status_list, list):
+                if len(status_list) == 0:
+                    result["validation_status"] = "valid"
+                else:
+                    # Check if any validation failed
+                    has_error = any("error" in str(s).lower() or "fail" in str(s).lower() for s in status_list)
+                    result["validation_status"] = "invalid" if has_error else "valid"
             else:
                 result["validation_status"] = "valid"
+        else:
+            result["validation_status"] = "valid"  # Assume valid if no status field
 
     except Exception as e:
         # If extraction fails, return partial data
-        pass
+        print(f"Warning: Manifest extraction failed: {e}")
 
     return result
 
@@ -198,7 +332,7 @@ def verify_c2pa(
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
-            except:
+            except (OSError, IOError):
                 pass  # Best effort cleanup
 
 
@@ -207,82 +341,47 @@ SIGNED_OUTPUT_DIR = Path("C:/Users/<user>/OneDrive/Pictures/Signed")
 DEFAULT_CREATOR = "the operator James [scrubbed]"
 
 
-def _get_test_signer():
-    """Generate a test ES256 signer for local development.
+# C2PA Tool paths
+C2PA_TOOL_DIR = Path(__file__).parent.parent.parent / "tools" / "c2pa"
+C2PATOOL_EXE = C2PA_TOOL_DIR / "c2patool" / "c2patool.exe"
+C2PA_MANIFEST_TEMPLATE = C2PA_TOOL_DIR / "signing_manifest.json"
 
-    In production, this would use real certificates from a CA.
-    For local use, we generate self-signed credentials with proper C2PA extensions.
 
-    Returns:
-        Tuple of (private_key_pem, cert_pem, alg) as bytes
-    """
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.hazmat.primitives import serialization, hashes
-    from cryptography import x509
-    from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
-    from datetime import datetime, timedelta, timezone
+def _ensure_signing_manifest():
+    """Ensure the signing manifest template exists."""
+    manifest = {
+        "alg": "es256",
+        "private_key": "c2patool/sample/es256_private.key",
+        "sign_cert": "c2patool/sample/es256_certs.pem",
+        "ta_url": "http://timestamp.digicert.com",
+        "claim_generator_info": [{
+            "name": "iHIM",
+            "version": "1.0.0"
+        }],
+        "title": "{{TITLE}}",
+        "assertions": [
+            {
+                "label": "stds.schema-org.CreativeWork",
+                "data": {
+                    "@type": "CreativeWork",
+                    "author": [{"@type": "Person", "name": "{{CREATOR}}"}],
+                    "dateCreated": "{{DATE}}"
+                }
+            },
+            {
+                "label": "c2pa.actions",
+                "data": {
+                    "actions": [{"action": "{{ACTION}}"}]
+                }
+            }
+        ]
+    }
 
-    # Generate ECDSA P-256 key pair (ES256)
-    private_key = ec.generate_private_key(ec.SECP256R1())
+    if not C2PA_MANIFEST_TEMPLATE.exists():
+        with open(C2PA_MANIFEST_TEMPLATE, "w") as f:
+            json.dump(manifest, f, indent=2)
 
-    # Create self-signed certificate with C2PA-compatible extensions
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
-        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Florida"),
-        x509.NameAttribute(NameOID.LOCALITY_NAME, "Local"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "iHIM"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "iHIM C2PA Signer"),
-    ])
-
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(private_key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.now(timezone.utc))
-        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
-        # Add basic constraints (CA:FALSE for end-entity cert)
-        .add_extension(
-            x509.BasicConstraints(ca=False, path_length=None),
-            critical=True
-        )
-        # Add key usage for digital signatures
-        .add_extension(
-            x509.KeyUsage(
-                digital_signature=True,
-                key_encipherment=False,
-                content_commitment=True,  # Non-repudiation
-                data_encipherment=False,
-                key_agreement=False,
-                key_cert_sign=False,
-                crl_sign=False,
-                encipher_only=False,
-                decipher_only=False
-            ),
-            critical=True
-        )
-        # Add extended key usage
-        .add_extension(
-            x509.ExtendedKeyUsage([
-                ExtendedKeyUsageOID.CODE_SIGNING,
-                ExtendedKeyUsageOID.EMAIL_PROTECTION,
-            ]),
-            critical=False
-        )
-        .sign(private_key, hashes.SHA256())
-    )
-
-    # Serialize to PEM format (as bytes for c2pa ctypes)
-    private_key_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()
-    )
-
-    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
-
-    return private_key_pem, cert_pem
+    return manifest
 
 
 @router.post("/sign")
@@ -293,7 +392,11 @@ def sign_image(
     action: Optional[str] = Form("c2pa.created")
 ):
     """
-    Sign an image with C2PA metadata and save to local Signed folder.
+    Sign an image with C2PA metadata using c2patool.exe (Rust CLI).
+
+    Note: Uses c2patool.exe instead of c2pa-python due to certificate
+    validation differences. The Rust CLI works with self-signed certs,
+    enabling sovereign signing without CA fees.
 
     Parameters:
     - image_file: Image to sign (required)
@@ -303,18 +406,19 @@ def sign_image(
 
     Returns the path to the signed image.
     """
+    import subprocess
+    from datetime import datetime
+
     temp_file_path = None
+    temp_manifest_path = None
 
     try:
-        # Check if c2pa-python is available
-        try:
-            from c2pa import Builder, Signer, C2paSignerInfo, C2paSigningAlg
-            c2pa_available = True
-        except ImportError as e:
+        # Check if c2patool.exe exists
+        if not C2PATOOL_EXE.exists():
             return {
                 "success": False,
-                "error": f"c2pa-python import error: {e}",
-                "message": "Install with: pip install c2pa-python"
+                "error": f"c2patool.exe not found at {C2PATOOL_EXE}",
+                "message": "C2PA signing tool not available"
             }
 
         # Ensure output directory exists
@@ -327,7 +431,6 @@ def sign_image(
             ext = '.jpg'
 
         # Generate output filename with timestamp
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = os.path.splitext(original_filename)[0]
         output_filename = f"{base_name}_signed_{timestamp}{ext}"
@@ -339,72 +442,78 @@ def sign_image(
             content = image_file.file.read()
             tmp.write(content)
 
-        # Build C2PA manifest
-        manifest_json = {
-            "claim_generator": "iHIM/1.0",
+        # Create manifest JSON with actual values (absolute paths)
+        manifest = {
+            "alg": "es256",
+            "private_key": str(C2PA_TOOL_DIR / "c2patool" / "sample" / "es256_private.key"),
+            "sign_cert": str(C2PA_TOOL_DIR / "c2patool" / "sample" / "es256_certs.pem"),
+            "ta_url": "http://timestamp.digicert.com",
+            "claim_generator_info": [{
+                "name": "iHIM",
+                "version": "1.0.0"
+            }],
             "title": title or original_filename,
             "assertions": [
                 {
                     "label": "stds.schema-org.CreativeWork",
                     "data": {
                         "@type": "CreativeWork",
-                        "author": [
-                            {
-                                "@type": "Person",
-                                "name": creator or DEFAULT_CREATOR
-                            }
-                        ],
+                        "author": [{"@type": "Person", "name": creator or DEFAULT_CREATOR}],
                         "dateCreated": datetime.now().isoformat()
                     }
                 },
                 {
                     "label": "c2pa.actions",
                     "data": {
-                        "actions": [
-                            {
-                                "action": action or "c2pa.created",
-                                "when": datetime.now().isoformat(),
-                                "softwareAgent": {
-                                    "name": "iHIM Dashboard",
-                                    "version": "1.0"
-                                }
-                            }
-                        ]
+                        "actions": [{"action": action or "c2pa.created"}]
                     }
                 }
             ]
         }
 
-        # Create builder
-        builder = Builder(json.dumps(manifest_json))
+        # Write temp manifest
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w") as tmp:
+            temp_manifest_path = tmp.name
+            json.dump(manifest, tmp, indent=2)
 
-        # Generate test signer credentials (returns bytes)
-        private_key_pem, cert_pem = _get_test_signer()
+        # Run c2patool.exe
+        cmd = [
+            str(C2PATOOL_EXE),
+            temp_file_path,
+            "-m", temp_manifest_path,
+            "-o", str(output_path),
+            "-f"  # Force overwrite
+        ]
 
-        # Create signer info (ES256 = ECDSA with P-256)
-        signer_info = C2paSignerInfo(
-            alg=C2paSigningAlg.ES256,
-            sign_cert=cert_pem,
-            private_key=private_key_pem,
-            ta_url=b""  # Empty bytes = no timestamp authority
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(C2PA_TOOL_DIR)  # Run from tool dir so relative paths work
         )
 
-        # Create signer and sign the image
-        with Signer.from_info(signer_info) as signer:
-            # sign_file(source_path, dest_path, signer)
-            result = builder.sign_file(
-                temp_file_path,
-                str(output_path),
-                signer
-            )
+        if result.returncode != 0:
+            return {
+                "success": False,
+                "error": result.stderr or "Unknown error",
+                "stdout": result.stdout,
+                "message": "C2PA signing failed"
+            }
+
+        # Parse output JSON for manifest info
+        try:
+            manifest_info = json.loads(result.stdout) if result.stdout else {}
+        except json.JSONDecodeError:
+            manifest_info = {"raw_output": result.stdout}
 
         return {
             "success": True,
-            "message": "Image signed successfully",
+            "message": "Image signed successfully (sovereign signing)",
             "output_path": str(output_path),
             "output_filename": output_filename,
             "creator": creator or DEFAULT_CREATOR,
-            "manifest_bytes": len(result) if result else 0
+            "manifest_info": manifest_info,
+            "note": "Signed with self-signed certificate. Verifiers will show 'Unknown Source' - this is expected for sovereign signing."
         }
 
     except HTTPException:
@@ -412,21 +521,21 @@ def sign_image(
 
     except Exception as e:
         import traceback
-        error_msg = str(e)
         return {
             "success": False,
-            "error": error_msg,
+            "error": str(e),
             "traceback": traceback.format_exc(),
             "message": "Error signing image"
         }
 
     finally:
-        # Clean up temp file
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.unlink(temp_file_path)
-            except:
-                pass
+        # Clean up temp files
+        for path in [temp_file_path, temp_manifest_path]:
+            if path and os.path.exists(path):
+                try:
+                    os.unlink(path)
+                except (OSError, IOError):
+                    pass
 
 
 @router.get("/signed-images")
@@ -463,6 +572,20 @@ def list_signed_images():
         }
 
 
+@router.get("/download/{filename}")
+def download_signed_image(filename: str):
+    """Download a specific signed image."""
+    file_path = SIGNED_OUTPUT_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/octet-stream"
+    )
+
+
 @router.get("/status")
 def c2pa_status():
     """C2PA module status check."""
@@ -471,5 +594,5 @@ def c2pa_status():
         "status": "active",
         "output_dir": str(SIGNED_OUTPUT_DIR),
         "default_creator": DEFAULT_CREATOR,
-        "features": ["verify", "sign", "list signed images"]
+        "features": ["verify", "sign", "list signed images", "download"]
     }

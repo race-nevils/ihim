@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
     <!-- HUD Corner Decorations -->
     <div class="hud-corners">
@@ -56,7 +58,8 @@
         <div class="bar-spacer"></div>
 
         <!-- Periodic Table Toggle -->
-        <div class="bar-widget bar-clickable" id="periodic-toggle" onclick="togglePeriodicTable()" title="Toggle Periodic Table">
+        <div class="bar-widget bar-clickable" id="periodic-toggle" onclick="togglePeriodicTable()"
+            title="Toggle Periodic Table">
             <span class="bar-label">⚛ Elements</span>
         </div>
     </div>
@@ -162,7 +165,8 @@
                 <button class="close-btn" onclick="closeTeamModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="modal-desc">Enter your task. It will be morphed into 5 tailored prompts for each specialist.</p>
+                <p class="modal-desc">Enter your task. It will be morphed into 5 tailored prompts for each specialist.
+                </p>
                 <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow"></textarea>
                 <div class="team-agents">
                     <span class="agent-badge">Frontend</span>
@@ -196,9 +200,6 @@
         <div class="notes-footer">
             <span id="notes-count">0 notes</span>
         </div>
-        <div class="widget-resize-handle corner-tl" data-widget="notes-window" data-corner="tl"></div>
-        <div class="widget-resize-handle corner-bl" data-widget="notes-window" data-corner="bl"></div>
-        <div class="widget-resize-handle corner-br" data-widget="notes-window" data-corner="br"></div>
     </div>
 
     <!-- Heuristics Window (Draggable) -->
@@ -211,8 +212,10 @@
             <div class="heuristics-input-section">
                 <div class="heuristics-form" id="heuristics-form">
                     <input type="text" id="heuristic-trigger" placeholder="When... (e.g., 'agents can't find bug')">
-                    <input type="text" id="heuristic-action" placeholder="Do this... (e.g., 'Press F12 → Console → copy errors')">
-                    <input type="text" id="heuristic-antiaction" placeholder="Don't... (e.g., 'keep asking agents blindly')">
+                    <input type="text" id="heuristic-action"
+                        placeholder="Do this... (e.g., 'Press F12 → Console → copy errors')">
+                    <input type="text" id="heuristic-antiaction"
+                        placeholder="Don't... (e.g., 'keep asking agents blindly')">
                     <div class="heuristic-form-footer">
                         <select id="heuristic-pattern">
                             <option value="general">General</option>
@@ -234,9 +237,6 @@
             <span id="heuristics-count">0 tricks</span>
             <span id="heuristics-savings">Est. 0 tokens saved</span>
         </div>
-        <div class="widget-resize-handle corner-tl" data-widget="heuristics-window" data-corner="tl"></div>
-        <div class="widget-resize-handle corner-bl" data-widget="heuristics-window" data-corner="bl"></div>
-        <div class="widget-resize-handle corner-br" data-widget="heuristics-window" data-corner="br"></div>
     </div>
 
     <!-- Edit Note Modal -->
@@ -264,14 +264,17 @@
         <div class="standards-library-body">
             <!-- Tabs -->
             <div class="standards-library-tabs">
-                <button class="sl-tab-btn active" data-tab="modules" onclick="switchStandardsLibraryTab('modules')">Modules</button>
-                <button class="sl-tab-btn" data-tab="references" onclick="switchStandardsLibraryTab('references')">References</button>
+                <button class="sl-tab-btn active" data-tab="modules"
+                    onclick="switchStandardsLibraryTab('modules')">Modules</button>
+                <button class="sl-tab-btn" data-tab="references"
+                    onclick="switchStandardsLibraryTab('references')">References</button>
             </div>
 
             <!-- Modules Panel -->
             <div class="sl-tab-panel active" id="sl-modules-panel">
                 <div class="standards-library-search">
-                    <input type="text" id="standards-library-search-input" placeholder="Search modules..." oninput="filterStandardsLibraryModules()">
+                    <input type="text" id="standards-library-search-input" placeholder="Search modules..."
+                        oninput="filterStandardsLibraryModules()">
                 </div>
                 <div class="standards-library-content">
                     <div class="standards-library-list-panel">
@@ -299,9 +302,6 @@
         <div class="standards-library-footer">
             <span id="standards-library-count">0 modules</span>
         </div>
-        <div class="widget-resize-handle corner-tl" data-widget="standards-library-window" data-corner="tl"></div>
-        <div class="widget-resize-handle corner-bl" data-widget="standards-library-window" data-corner="bl"></div>
-        <div class="widget-resize-handle corner-br" data-widget="standards-library-window" data-corner="br"></div>
     </div>
 
     <!-- Flight Path Window (Draggable) -->
@@ -351,9 +351,6 @@
         <div class="flightpath-footer">
             <span id="fp-status">Click system for details • Auto-refresh every 5s</span>
         </div>
-        <div class="widget-resize-handle corner-tl" data-widget="flightpath-window" data-corner="tl"></div>
-        <div class="widget-resize-handle corner-bl" data-widget="flightpath-window" data-corner="bl"></div>
-        <div class="widget-resize-handle corner-br" data-widget="flightpath-window" data-corner="br"></div>
     </div>
 
     <!-- Agent Team Builder Modal -->
@@ -364,7 +361,8 @@
                 <button class="close-btn" onclick="closeAgentTeamModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="modal-desc">Describe your goal. We'll spawn a specialized agent team (3-5 agents) to accomplish it.</p>
+                <p class="modal-desc">Describe your goal. We'll spawn a specialized agent team (3-5 agents) to
+                    accomplish it.</p>
 
                 <!-- Team Type Selector -->
                 <div class="team-type-selector">
@@ -389,14 +387,16 @@
                 <!-- Task Description -->
                 <div class="team-input-section">
                     <label class="team-input-label">What do you want to accomplish?</label>
-                    <textarea id="agent-team-prompt" placeholder="e.g., Create a compliance monitoring dashboard for RIA clients&#10;e.g., Research best practices for document automation in financial advisory"></textarea>
+                    <textarea id="agent-team-prompt"
+                        placeholder="e.g., Create a compliance monitoring dashboard for RIA clients&#10;e.g., Research best practices for document automation in financial advisory"></textarea>
                 </div>
 
                 <!-- Complexity Slider -->
                 <div class="complexity-section">
                     <label class="team-input-label">Team Size</label>
                     <div class="complexity-slider-row">
-                        <input type="range" id="team-size-slider" min="3" max="5" value="3" oninput="updateTeamSizeDisplay()">
+                        <input type="range" id="team-size-slider" min="3" max="5" value="3"
+                            oninput="updateTeamSizeDisplay()">
                         <span id="team-size-display" class="team-size-value">3 agents</span>
                     </div>
                     <div class="complexity-hints">
@@ -433,12 +433,6 @@
                     <div class="agent-config-content">
                         <div class="config-row">
                             <label>
-                                <input type="checkbox" id="config-blackboard" checked>
-                                Use shared blackboard
-                            </label>
-                        </div>
-                        <div class="config-row">
-                            <label>
                                 <input type="checkbox" id="config-feedback" checked>
                                 Enable feedback loop
                             </label>
@@ -473,7 +467,8 @@
                 <p class="slash-intro">the agent harness commands for workspace. Click to copy, then paste in the agent harness.</p>
 
                 <div class="slash-search-row">
-                    <input type="text" id="slash-search" placeholder="Search commands..." oninput="filterSlashCommands()">
+                    <input type="text" id="slash-search" placeholder="Search commands..."
+                        oninput="filterSlashCommands()">
                 </div>
 
                 <div id="slash-list" class="slash-list">
@@ -483,7 +478,8 @@
                 <div class="slash-brainstorm">
                     <h3>Brainstorm New Commands</h3>
                     <div class="brainstorm-input-row">
-                        <textarea id="brainstorm-input" placeholder="Describe a commands idea...&#10;e.g., '/standup - Generate a daily standup summary from git commits and task list'"></textarea>
+                        <textarea id="brainstorm-input"
+                            placeholder="Describe a commands idea...&#10;e.g., '/standup - Generate a daily standup summary from git commits and task list'"></textarea>
                         <button class="save-idea-btn" onclick="saveSlashIdea()">Save Idea</button>
                     </div>
                     <div id="slash-ideas" class="slash-ideas">
@@ -498,6 +494,144 @@
         </div>
     </div>
 
+    <!-- C2PA Verification System Window (Draggable) -->
+    <div id="c2pa-window" class="c2pa-window" style="display: none;">
+        <div class="c2pa-header c2pa-drag-handle">
+            <span class="c2pa-badge">C2PA</span>
+            <span class="c2pa-label">Content Authenticity</span>
+            <button class="c2pa-close" onclick="closeC2PAWindow()">&times;</button>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="c2pa-tabs">
+            <button class="c2pa-tab active" data-tab="verify" onclick="switchC2PATab('verify')">
+                🔍 Verify
+            </button>
+            <button class="c2pa-tab" data-tab="sign" onclick="switchC2PATab('sign')">
+                ✍️ Sign
+            </button>
+        </div>
+
+        <div class="c2pa-body">
+            <!-- VERIFY TAB -->
+            <div class="c2pa-panel active" id="c2pa-verify-panel">
+                <p class="c2pa-desc">Upload an image to verify C2PA metadata</p>
+
+                <!-- Drop Zone -->
+                <div class="c2pa-dropzone" id="c2pa-verify-dropzone">
+                    <div class="dropzone-icon">📁</div>
+                    <div class="dropzone-text">Drop image or click to upload</div>
+                    <div class="dropzone-hint">JPEG, PNG, WebP supported</div>
+                </div>
+                <input type="file" id="c2pa-verify-file" accept="image/*" style="display:none">
+
+                <!-- URL Input -->
+                <div class="c2pa-url-row">
+                    <input type="url" id="c2pa-verify-url" placeholder="Or enter image URL...">
+                    <button class="c2pa-btn-gold" onclick="verifyC2PAFromURL()">Load</button>
+                </div>
+
+                <!-- Results Section -->
+                <div id="c2pa-verify-results" class="c2pa-results" style="display:none;">
+                    <div id="c2pa-verify-status" class="c2pa-status"></div>
+
+                    <!-- Image Preview -->
+                    <div id="c2pa-verify-preview" class="c2pa-preview"></div>
+
+                    <!-- Metadata Fields -->
+                    <div id="c2pa-verify-fields" class="c2pa-fields">
+                        <div class="c2pa-field"><span class="field-label">Validation State</span><span
+                                class="field-value" id="v-validation">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">Active Manifest</span><span
+                                class="field-value" id="v-manifest">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">Date Created</span><span class="field-value"
+                                id="v-date">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">Author/Creator</span><span class="field-value"
+                                id="v-author">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">Claim Generator</span><span
+                                class="field-value" id="v-generator">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">Title</span><span class="field-value"
+                                id="v-title">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">Certificate Issuer</span><span
+                                class="field-value" id="v-issuer">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">File Name</span><span class="field-value"
+                                id="v-filename">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">File Size</span><span class="field-value"
+                                id="v-filesize">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">File Type</span><span class="field-value"
+                                id="v-filetype">-</span></div>
+                        <div class="c2pa-field"><span class="field-label">C2PA Segments</span><span class="field-value"
+                                id="v-segments">-</span></div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="c2pa-actions">
+                        <button class="c2pa-btn" onclick="viewManifestJSON()">View Manifest JSON</button>
+                        <button class="c2pa-btn" onclick="viewImageBlob()">View Image Blob</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SIGN TAB -->
+            <div class="c2pa-panel" id="c2pa-sign-panel">
+                <p class="c2pa-desc">Add C2PA metadata to an image</p>
+
+                <!-- Drop Zone -->
+                <div class="c2pa-dropzone" id="c2pa-sign-dropzone">
+                    <div class="dropzone-icon">📁</div>
+                    <div class="dropzone-text">Drop image to sign</div>
+                    <div class="dropzone-hint">JPEG, PNG, WebP supported</div>
+                </div>
+                <input type="file" id="c2pa-sign-file" accept="image/*" style="display:none">
+
+                <!-- Sign Form Fields (same as verify display) -->
+                <div class="c2pa-form" id="c2pa-sign-form">
+                    <div class="c2pa-form-row">
+                        <label>Author/Creator</label>
+                        <input type="text" id="s-author" placeholder="Your name">
+                    </div>
+                    <div class="c2pa-form-row">
+                        <label>Claim Generator</label>
+                        <input type="text" id="s-generator" value="iHIM/1.0" placeholder="e.g. Lightroom">
+                    </div>
+                    <div class="c2pa-form-row">
+                        <label>Title</label>
+                        <input type="text" id="s-title" placeholder="Content title">
+                    </div>
+                    <div class="c2pa-form-row">
+                        <label>Certificate Issuer</label>
+                        <input type="text" id="s-issuer" value="iHIM Self-Signed" readonly>
+                    </div>
+                    <div class="c2pa-form-row">
+                        <label>Action Type</label>
+                        <select id="s-action">
+                            <option value="c2pa.created">Created</option>
+                            <option value="c2pa.edited">Edited</option>
+                            <option value="c2pa.published">Published</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Sign Button -->
+                <div class="c2pa-sign-actions">
+                    <button class="c2pa-btn-gold" id="c2pa-sign-btn" onclick="signC2PAImage()" disabled>Sign
+                        Image</button>
+                </div>
+
+                <!-- Sign Results -->
+                <div id="c2pa-sign-results" class="c2pa-results" style="display:none;">
+                    <div id="c2pa-sign-status" class="c2pa-status"></div>
+                    <div id="c2pa-sign-output"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="c2pa-footer">
+            <span class="c2pa-footer-status">Ready</span>
+        </div>
+    </div>
+
+
     <!-- Task List Window (Draggable) -->
     <div id="task-window" class="task-window" style="display: none;">
         <div class="task-header task-drag-handle">
@@ -506,7 +640,8 @@
         </div>
         <div class="task-body">
             <div class="task-input-row">
-                <input type="text" id="new-task-input" placeholder="Add a new task..." onkeypress="if(event.key==='Enter')addTask()">
+                <input type="text" id="new-task-input" placeholder="Add a new task..."
+                    onkeypress="if(event.key==='Enter')addTask()">
                 <select id="new-task-priority">
                     <option value="low">Low</option>
                     <option value="medium" selected>Medium</option>
@@ -525,9 +660,6 @@
             <span id="task-count">0 tasks</span>
             <button class="clear-btn" onclick="clearCompleted()">Clear Completed</button>
         </div>
-        <div class="widget-resize-handle corner-tl" data-widget="task-window" data-corner="tl"></div>
-        <div class="widget-resize-handle corner-bl" data-widget="task-window" data-corner="bl"></div>
-        <div class="widget-resize-handle corner-br" data-widget="task-window" data-corner="br"></div>
     </div>
 
     <!-- Edit Task Modal -->
@@ -559,9 +691,11 @@
             <div class="mc-left-panel">
                 <!-- Section Tabs -->
                 <div class="mc-workshop-tabs">
-                    <button class="mc-tab-btn active" data-section="agents" onclick="switchMCSection('agents')">Agents</button>
+                    <button class="mc-tab-btn active" data-section="agents"
+                        onclick="switchMCSection('agents')">Agents</button>
                     <button class="mc-tab-btn" data-section="teams" onclick="switchMCSection('teams')">Teams</button>
-                    <button class="mc-tab-btn" data-section="workflows" onclick="switchMCSection('workflows')">Workflows</button>
+                    <button class="mc-tab-btn" data-section="workflows"
+                        onclick="switchMCSection('workflows')">Workflows</button>
                 </div>
 
                 <!-- Agents Section -->
@@ -599,12 +733,14 @@
 
                         <div class="mc-form-group">
                             <label>Description / Prompt</label>
-                            <textarea id="agent-description" placeholder="What does this agent do? This becomes the agent's system context..."></textarea>
+                            <textarea id="agent-description"
+                                placeholder="What does this agent do? This becomes the agent's system context..."></textarea>
                         </div>
 
                         <div class="mc-form-group">
                             <label>Skills</label>
-                            <input type="text" id="agent-skills" placeholder="e.g., security-audit, code-review" oninput="updateSkillPreviews()">
+                            <input type="text" id="agent-skills" placeholder="e.g., security-audit, code-review"
+                                oninput="updateSkillPreviews()">
                             <div class="skill-preview-container" id="skill-preview">
                                 <!-- Skill pills populated dynamically -->
                             </div>
@@ -677,9 +813,6 @@
                 </button>
             </div>
         </div>
-        <div class="widget-resize-handle corner-tl" data-widget="mc-window" data-corner="tl"></div>
-        <div class="widget-resize-handle corner-bl" data-widget="mc-window" data-corner="bl"></div>
-        <div class="widget-resize-handle corner-br" data-widget="mc-window" data-corner="br"></div>
     </div>
 
     <!-- xterm.js from CDN (SRI removed - hashes were stale) -->
@@ -739,6 +872,9 @@
             'slash': 'command',
             'restart': 'refresh-cw',
             'timer': 'timer',
+            'verified': 'badge-check',
+            'shield': 'shield-check',
+            'lightbulb': 'lightbulb',
             'default': 'zap'
         };
 
@@ -860,6 +996,10 @@
             }
             if (actionId === 'standards_library') {
                 openStandardsLibraryWindow();
+                return;
+            }
+            if (actionId === 'c2pa_verify') {
+                openC2PAWindow();
                 return;
             }
 
@@ -2092,9 +2232,9 @@
                 ` : ''}
                 <div class="standards-library-detail-actions">
                     ${isActive ?
-                        `<button class="deactivate-module-btn" onclick="deactivateStandardsLibraryModule('${fullModule.id}')">Deactivate</button>` :
-                        `<button class="activate-module-btn" onclick="activateStandardsLibraryModule('${fullModule.id}')">Activate</button>`
-                    }
+                    `<button class="deactivate-module-btn" onclick="deactivateStandardsLibraryModule('${fullModule.id}')">Deactivate</button>` :
+                    `<button class="activate-module-btn" onclick="activateStandardsLibraryModule('${fullModule.id}')">Activate</button>`
+                }
                 </div>
             `;
         }
@@ -2219,6 +2359,156 @@
                 icon.textContent = '▶';
             }
         }
+
+
+        // =====================
+        // C2PA Verification Window
+        // =====================
+        function openC2PAVerifyModal() {
+            const win = document.getElementById('c2pa-verify-window');
+            if (!win) {
+                console.error('C2PA verify window element not found');
+                return;
+            }
+
+            // Load position from localStorage or center it
+            const saved = localStorage.getItem('c2paVerifyWindowPosition');
+            if (saved) {
+                try {
+                    const { x, y } = JSON.parse(saved);
+                    win.style.left = x + 'px';
+                    win.style.top = y + 'px';
+                } catch (e) {
+                    console.warn('Failed to parse saved C2PA window position:', e);
+                    // Fall back to centering
+                    const rect = win.getBoundingClientRect();
+                    win.style.left = (window.innerWidth - rect.width) / 2 + 'px';
+                    win.style.top = (window.innerHeight - rect.height) / 2 + 'px';
+                }
+            } else {
+                // Center on screen
+                const rect = win.getBoundingClientRect();
+                win.style.left = (window.innerWidth - rect.width) / 2 + 'px';
+                win.style.top = (window.innerHeight - rect.height) / 2 + 'px';
+            }
+
+            win.style.display = 'block';
+
+            // Initialize drag if not already done
+            if (!win.dataset.dragInitialized) {
+                initializeC2PAVerifyDrag();
+                initializeC2PAEventHandlers();
+                win.dataset.dragInitialized = 'true';
+            }
+        }
+
+        function closeC2PAVerifyWindow() {
+            const win = document.getElementById('c2pa-verify-window');
+            if (win) {
+                win.style.display = 'none';
+            }
+        }
+
+        function initializeC2PAVerifyDrag() {
+            const win = document.getElementById('c2pa-verify-window');
+            if (!win) {
+                console.error('C2PA verify window element not found');
+                return;
+            }
+
+            const handle = win.querySelector('.c2pa-verify-drag-handle');
+            if (!handle) {
+                console.error('C2PA verify drag handle not found');
+                return;
+            }
+
+            let isDragging = false;
+            let startX, startY, startLeft, startTop;
+
+            handle.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                const rect = win.getBoundingClientRect();
+                startLeft = rect.left;
+                startTop = rect.top;
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                win.style.left = (startLeft + dx) + 'px';
+                win.style.top = (startTop + dy) + 'px';
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    const rect = win.getBoundingClientRect();
+                    try {
+                        localStorage.setItem('c2paVerifyWindowPosition', JSON.stringify({
+                            x: rect.left,
+                            y: rect.top
+                        }));
+                    } catch (e) {
+                        console.warn('Failed to save C2PA window position:', e);
+                    }
+                }
+                isDragging = false;
+            });
+        }
+
+        // Initialize event handlers for dropzone and file input
+        function initializeC2PAEventHandlers() {
+            const dropZone = document.getElementById('c2pa-verify-dropzone');
+            const fileInput = document.getElementById('c2pa-verify-file-input');
+
+            if (!dropZone || !fileInput) {
+                console.error('C2PA dropzone or file input not found');
+                return;
+            }
+
+            // Click dropzone to trigger file input
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            // Drag and drop handlers
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.add('drag-over');
+            });
+
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('drag-over');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('drag-over');
+
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    handleC2PAFileUpload(files[0]);
+                }
+            });
+
+            // File input change handler
+            fileInput.addEventListener('change', (e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                    handleC2PAFileUpload(files[0]);
+                }
+            });
+        }
+
+        // [Obsolete C2PA code removed]
+
 
 
         // =====================
@@ -2490,8 +2780,8 @@
 
                 const overall = data.overall_status || 'unknown';
                 const label = overall === 'healthy' ? 'All Systems Healthy' :
-                             overall === 'degraded' ? 'Some Issues' :
-                             overall === 'error' ? 'Errors Detected' : 'Unknown';
+                    overall === 'degraded' ? 'Some Issues' :
+                        overall === 'error' ? 'Errors Detected' : 'Unknown';
                 document.getElementById('fp-overall-status').textContent = label;
             },
 
@@ -2588,7 +2878,7 @@
 
                 // Render workspace children (Memory, Skills, Commands, etc.)
                 const workspaceChildren = ['memory-system', 'skills-system', 'commands-system',
-                                     'guardrails-system', 'projects-system', 'learning-system', 'ihim-root'];
+                    'guardrails-system', 'projects-system', 'learning-system', 'ihim-root'];
 
                 workspaceChildren.forEach(groupId => {
                     const group = groups[groupId];
@@ -2615,7 +2905,7 @@
                         // If this is ihim-root, render its sub-groups
                         if (groupId === 'ihim-root') {
                             const ihimChildren = ['api-server', 'team-system', 'feedback-system',
-                                                  'data-stores', 'ui-assets', 'sanity-check'];
+                                'data-stores', 'ui-assets', 'sanity-check'];
                             ihimChildren.forEach(subId => {
                                 const subGroup = groups[subId];
                                 const subComp = subGroup?.component || this.components.find(c => c.id === subId);
@@ -2701,8 +2991,8 @@
 
                 const name = comp.id.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 const statusDot = comp.status === 'healthy' ? '●' :
-                                  comp.status === 'degraded' ? '●' :
-                                  comp.status === 'error' ? '●' : '○';
+                    comp.status === 'degraded' ? '●' :
+                        comp.status === 'error' ? '●' : '○';
 
                 let metricsHtml = '';
                 if (comp.metrics && Object.keys(comp.metrics).length > 0) {
@@ -2711,22 +3001,22 @@
                             <div class="fp-detail-section-title">Metrics</div>
                             <div class="fp-detail-metrics">
                                 ${Object.entries(comp.metrics).map(([key, value]) => {
-                                    let displayValue = value;
-                                    if (Array.isArray(value)) {
-                                        displayValue = value.length > 3 ? value.slice(0, 3).join(', ') + '...' : value.join(', ');
-                                    } else if (typeof value === 'boolean') {
-                                        displayValue = value ? '✓' : '✗';
-                                    } else if (typeof value === 'number' && key.includes('size')) {
-                                        displayValue = value > 1024 ? (value / 1024).toFixed(1) + ' KB' : value + ' B';
-                                    }
-                                    const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                                    return `
+                        let displayValue = value;
+                        if (Array.isArray(value)) {
+                            displayValue = value.length > 3 ? value.slice(0, 3).join(', ') + '...' : value.join(', ');
+                        } else if (typeof value === 'boolean') {
+                            displayValue = value ? '✓' : '✗';
+                        } else if (typeof value === 'number' && key.includes('size')) {
+                            displayValue = value > 1024 ? (value / 1024).toFixed(1) + ' KB' : value + ' B';
+                        }
+                        const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        return `
                                         <div class="fp-metric">
                                             <div class="fp-metric-key">${escapeHtml(label)}</div>
                                             <div class="fp-metric-val">${escapeHtml(String(displayValue))}</div>
                                         </div>
                                     `;
-                                }).join('')}
+                    }).join('')}
                             </div>
                         </div>
                     `;
@@ -2894,9 +3184,9 @@
                 if (!filter) return true;
                 const searchLower = filter.toLowerCase();
                 return cmd.name.toLowerCase().includes(searchLower) ||
-                       cmd.title.toLowerCase().includes(searchLower) ||
-                       cmd.description.toLowerCase().includes(searchLower) ||
-                       cmd.tags.some(t => t.toLowerCase().includes(searchLower));
+                    cmd.title.toLowerCase().includes(searchLower) ||
+                    cmd.description.toLowerCase().includes(searchLower) ||
+                    cmd.tags.some(t => t.toLowerCase().includes(searchLower));
             });
 
             if (filtered.length === 0) {
@@ -3173,7 +3463,7 @@
             }
 
             const size = parseInt(document.getElementById('team-size-slider').value);
-            const useBlackboard = document.getElementById('config-blackboard').checked;
+            const useBlackboard = false; // Blackboard archived
             const useFeedback = document.getElementById('config-feedback').checked;
             const allowParallel = document.getElementById('config-parallel').checked;
 
@@ -3932,7 +4222,8 @@
                 'metrics-modal',
                 'team-modal',
                 'agent-team-modal',
-                'terminal-modal'
+                'terminal-modal',
+                'c2pa-window'
             ],
 
             // Get current workspace state
@@ -4664,7 +4955,7 @@
                 const res = await fetch('/api/periodic-elements');
                 const data = await res.json();
                 renderPeriodicTable(data.elements || [], data.layout || []);
-            } catch(e) {
+            } catch (e) {
                 console.error('Periodic load failed:', e);
                 renderFallbackTable();
             }
@@ -4693,9 +4984,9 @@
         function renderFallbackTable() {
             const grid = document.getElementById('periodic-grid');
             const fallback = [
-                {symbol: 'H', name: 'the agent', category: 'tiers', row: 1, col: 1, description: 'Scout tier - READ-ONLY'},
-                {symbol: 'S', name: 'the agent', category: 'tiers', row: 2, col: 1, description: 'Operator tier - Read/Write'},
-                {symbol: 'O', name: 'the agent', category: 'tiers', row: 3, col: 1, description: 'Architect tier - Full'}
+                { symbol: 'H', name: 'the agent', category: 'tiers', row: 1, col: 1, description: 'Scout tier - READ-ONLY' },
+                { symbol: 'S', name: 'the agent', category: 'tiers', row: 2, col: 1, description: 'Operator tier - Read/Write' },
+                { symbol: 'O', name: 'the agent', category: 'tiers', row: 3, col: 1, description: 'Architect tier - Full' }
             ];
             fallback.forEach(el => {
                 const div = document.createElement('div');
@@ -4741,14 +5032,13 @@
         function initializeWidgetResize() {
             const MIN_WIDTH = 200;
             const MIN_HEIGHT = 150;
-            const MAX_WIDTH_VW = 100;
-            const MAX_HEIGHT_VH = 100;
-            const FOOTER_HEIGHT = 36;
+            const EDGE_THRESHOLD = 8;
 
             let activeResize = null;
 
-            // Restore saved sizes and positions from localStorage
-            const widgetIds = ['notes-window', 'heuristics-window', 'flightpath-window', 'task-window', 'mc-window'];
+            const widgetIds = ['notes-window', 'heuristics-window', 'flightpath-window', 'task-window', 'mc-window', 'c2pa-window', 'standards-library-window'];
+
+            // Restore saved sizes from localStorage
             widgetIds.forEach(widgetId => {
                 const savedSize = localStorage.getItem(`${widgetId}-size`);
                 if (savedSize) {
@@ -4767,55 +5057,71 @@
                 }
             });
 
-            // Set up resize handlers for all resize handles
-            document.querySelectorAll('.widget-resize-handle').forEach(handle => {
-                handle.addEventListener('mousedown', (e) => {
+            // Detect which edge/corner mouse is near
+            function getResizeEdge(widget, e) {
+                const rect = widget.getBoundingClientRect();
+                const x = e.clientX;
+                const y = e.clientY;
+
+                const nearLeft = x - rect.left < EDGE_THRESHOLD;
+                const nearRight = rect.right - x < EDGE_THRESHOLD;
+                const nearTop = y - rect.top < EDGE_THRESHOLD;
+                const nearBottom = rect.bottom - y < EDGE_THRESHOLD;
+
+                if (nearTop && nearLeft) return 'nw';
+                if (nearTop && nearRight) return 'ne';
+                if (nearBottom && nearLeft) return 'sw';
+                if (nearBottom && nearRight) return 'se';
+                if (nearTop) return 'n';
+                if (nearBottom) return 's';
+                if (nearLeft) return 'w';
+                if (nearRight) return 'e';
+                return null;
+            }
+
+            function getCursorForEdge(edge) {
+                const cursors = {
+                    'n': 'ns-resize', 's': 'ns-resize',
+                    'e': 'ew-resize', 'w': 'ew-resize',
+                    'nw': 'nwse-resize', 'se': 'nwse-resize',
+                    'ne': 'nesw-resize', 'sw': 'nesw-resize'
+                };
+                return cursors[edge] || '';
+            }
+
+            // Add edge detection to each widget
+            widgetIds.forEach(widgetId => {
+                const widget = document.getElementById(widgetId);
+                if (!widget) return;
+
+                widget.addEventListener('mousemove', (e) => {
+                    if (activeResize) return;
+                    const edge = getResizeEdge(widget, e);
+                    widget.style.cursor = edge ? getCursorForEdge(edge) : '';
+                });
+
+                widget.addEventListener('mouseleave', () => {
+                    if (!activeResize) widget.style.cursor = '';
+                });
+
+                widget.addEventListener('mousedown', (e) => {
+                    const edge = getResizeEdge(widget, e);
+                    if (!edge) return;
+
                     e.preventDefault();
                     e.stopPropagation();
 
-                    const widgetId = handle.getAttribute('data-widget');
-                    const corner = handle.getAttribute('data-corner');
-                    const widget = document.getElementById(widgetId);
-                    if (!widget) return;
-
-                    const startX = e.clientX;
-                    const startY = e.clientY;
-                    const startWidth = widget.offsetWidth;
-                    const startHeight = widget.offsetHeight;
-                    const startTop = widget.offsetTop;
-                    const startLeft = widget.offsetLeft;
-                    const aspectRatio = startWidth / startHeight;
-
-                    // Calculate max dimensions based on viewport
-                    const maxWidth = window.innerWidth;
-                    const maxHeight = window.innerHeight - FOOTER_HEIGHT;
-
+                    const rect = widget.getBoundingClientRect();
                     activeResize = {
-                        widget,
-                        widgetId,
-                        corner,
-                        startX,
-                        startY,
-                        startWidth,
-                        startHeight,
-                        startTop,
-                        startLeft,
-                        aspectRatio,
-                        maxWidth,
-                        maxHeight
+                        widget, widgetId, edge,
+                        startX: e.clientX, startY: e.clientY,
+                        startWidth: rect.width, startHeight: rect.height,
+                        startTop: widget.offsetTop, startLeft: widget.offsetLeft
                     };
 
-                    // Add visual feedback with appropriate cursor based on corner
+                    document.body.style.cursor = getCursorForEdge(edge);
                     widget.style.userSelect = 'none';
-                    widget.style.pointerEvents = 'none';
-                    const cursorMap = {
-                        'corner-tl': 'nwse-resize',
-                        'corner-bl': 'nesw-resize',
-                        'corner-br': 'nwse-resize'
-                    };
-                    document.body.style.cursor = cursorMap[corner] || 'nwse-resize';
 
-                    // Attach global event listeners
                     document.addEventListener('mousemove', onMouseMove);
                     document.addEventListener('mouseup', onMouseUp);
                 });
@@ -4824,115 +5130,152 @@
             function onMouseMove(e) {
                 if (!activeResize) return;
 
-                const { widget, corner, startX, startY, startWidth, startHeight, startTop, startLeft, aspectRatio, maxWidth, maxHeight } = activeResize;
-
-                // Calculate delta from start position
+                const { widget, edge, startX, startY, startWidth, startHeight, startTop, startLeft } = activeResize;
                 const deltaX = e.clientX - startX;
                 const deltaY = e.clientY - startY;
 
-                // Use the average delta to maintain aspect ratio (uniform scaling)
-                const avgDelta = (deltaX + deltaY) / 2;
+                let newWidth = startWidth;
+                let newHeight = startHeight;
+                let newTop = startTop;
+                let newLeft = startLeft;
 
-                // Calculate new dimensions and position based on corner
-                let newWidth, newHeight, newTop, newLeft;
+                if (edge.includes('e')) newWidth = startWidth + deltaX;
+                if (edge.includes('w')) { newWidth = startWidth - deltaX; newLeft = startLeft + deltaX; }
+                if (edge.includes('s')) newHeight = startHeight + deltaY;
+                if (edge.includes('n')) { newHeight = startHeight - deltaY; newTop = startTop + deltaY; }
 
-                switch (corner) {
-                    case 'corner-br': // Bottom-right: width += deltaX, height += deltaY
-                        newWidth = startWidth + avgDelta;
-                        newHeight = startHeight + avgDelta;
-                        newTop = startTop;
-                        newLeft = startLeft;
-                        break;
-
-                    case 'corner-bl': // Bottom-left: width -= deltaX, left += deltaX, height += deltaY
-                        newWidth = startWidth - avgDelta;
-                        newHeight = startHeight + avgDelta;
-                        newTop = startTop;
-                        newLeft = startLeft + avgDelta;
-                        break;
-
-                    case 'corner-tl': // Top-left: width -= deltaX, left += deltaX, height -= deltaY, top += deltaY
-                        newWidth = startWidth - avgDelta;
-                        newHeight = startHeight - avgDelta;
-                        newTop = startTop + avgDelta;
-                        newLeft = startLeft + avgDelta;
-                        break;
-
-                    default:
-                        return;
+                // Apply min constraints
+                if (newWidth < MIN_WIDTH) {
+                    if (edge.includes('w')) newLeft -= (MIN_WIDTH - newWidth);
+                    newWidth = MIN_WIDTH;
+                }
+                if (newHeight < MIN_HEIGHT) {
+                    if (edge.includes('n')) newTop -= (MIN_HEIGHT - newHeight);
+                    newHeight = MIN_HEIGHT;
                 }
 
-                // Apply constraints
-                newWidth = Math.max(MIN_WIDTH, Math.min(newWidth, maxWidth));
-                newHeight = Math.max(MIN_HEIGHT, Math.min(newHeight, maxHeight));
+                // Boundary clamping
+                newLeft = Math.max(0, newLeft);
+                newTop = Math.max(0, newTop);
 
-                // Apply proportional scaling (maintain aspect ratio)
-                if (newWidth / newHeight > aspectRatio) {
-                    newWidth = newHeight * aspectRatio;
-                } else {
-                    newHeight = newWidth / aspectRatio;
-                }
-
-                // Adjust position when resizing from left or top edges
-                if (corner === 'corner-bl' || corner === 'corner-tl') {
-                    const widthDiff = newWidth - widget.offsetWidth;
-                    newLeft = startLeft - widthDiff;
-                }
-                if (corner === 'corner-tl') {
-                    const heightDiff = newHeight - widget.offsetHeight;
-                    newTop = startTop - heightDiff;
-                }
-
-                // Boundary clamping: ensure window doesn't overlap footer or go off-screen
-                newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - newWidth));
-                newTop = Math.max(0, Math.min(newTop, window.innerHeight - FOOTER_HEIGHT - newHeight));
-
-                // Apply new dimensions and position
                 widget.style.width = `${newWidth}px`;
                 widget.style.height = `${newHeight}px`;
                 widget.style.top = `${newTop}px`;
                 widget.style.left = `${newLeft}px`;
 
-                // Prevent text selection during resize
                 e.preventDefault();
             }
 
-            function onMouseUp(e) {
+            function onMouseUp() {
                 if (!activeResize) return;
 
                 const { widget, widgetId } = activeResize;
 
-                // Save final size and position to localStorage
-                const finalWidth = widget.offsetWidth;
-                const finalHeight = widget.offsetHeight;
-                const finalTop = widget.offsetTop;
-                const finalLeft = widget.offsetLeft;
                 localStorage.setItem(`${widgetId}-size`, JSON.stringify({
-                    width: finalWidth,
-                    height: finalHeight,
-                    top: finalTop,
-                    left: finalLeft
+                    width: widget.offsetWidth,
+                    height: widget.offsetHeight,
+                    top: widget.offsetTop,
+                    left: widget.offsetLeft
                 }));
 
-                // Remove visual feedback
                 widget.style.userSelect = '';
-                widget.style.pointerEvents = '';
                 document.body.style.cursor = '';
 
-                // Cleanup event listeners
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
 
                 activeResize = null;
             }
-
-            console.log('Widget resize functionality initialized');
         }
 
         // =====================
         // INITIALIZATION (After all object definitions)
         // =====================
         // Wrap initialization in DOMContentLoaded to ensure all elements exist
+        // =====================
+        // UTILITIES
+        // =====================
+
+        // Initialize reusable drag functionality for any window
+        function initDraggable(el, handle) {
+            if (!el || !handle) return;
+            handle.style.cursor = 'move';
+
+            let isDragging = false;
+            let currentHandlers = null;
+
+            handle.addEventListener('mousedown', (e) => {
+                // Ignore clicks on buttons inside the handle
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+
+                e.preventDefault();
+
+                // Clean up stale handlers if any
+                if (currentHandlers) {
+                    document.removeEventListener('mousemove', currentHandlers.move);
+                    document.removeEventListener('mouseup', currentHandlers.up);
+                    currentHandlers = null;
+                }
+
+                // Fix: Freeze current visual position to absolute pixels (removes transform conflict)
+                const rect = el.getBoundingClientRect();
+
+                el.style.transform = 'none';
+                el.style.right = 'auto';
+                el.style.bottom = 'auto';
+
+                el.style.left = rect.left + 'px';
+                el.style.top = rect.top + 'px';
+
+                const mouseDownTime = Date.now();
+                isDragging = false;
+
+                const offsetX = e.clientX - rect.left;
+                const offsetY = e.clientY - rect.top;
+                const startX = e.clientX;
+                const startY = e.clientY;
+
+                const onMouseMove = (e) => {
+                    e.preventDefault();
+                    const dx = Math.abs(e.clientX - startX);
+                    const dy = Math.abs(e.clientY - startY);
+                    const elapsed = Date.now() - mouseDownTime;
+
+                    if ((dx > 5 || dy > 5 || elapsed > 150) && !isDragging) {
+                        isDragging = true;
+                        el.style.opacity = '0.9';
+                        el.style.zIndex = '1000';
+                    }
+
+                    if (isDragging) {
+                        el.style.left = (e.clientX - offsetX) + 'px';
+                        el.style.top = (e.clientY - offsetY) + 'px';
+                    }
+                };
+
+                const cleanup = () => {
+                    isDragging = false;
+                    el.style.opacity = '1';
+                    el.style.zIndex = '';
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    currentHandlers = null;
+                };
+
+                const onMouseUp = () => cleanup();
+
+                currentHandlers = { move: onMouseMove, up: onMouseUp };
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         function initializeApp() {
             loadActions();
             updateSystemMonitor();
@@ -4979,5 +5322,303 @@
         </div>
     </div>
 
+    <!-- C2PA MODULE SCRIPT -->
+    <script>
+        // ==========================================
+        // C2PA MODULE LOGIC
+        // ==========================================
+
+        // --- Window Management ---
+        function openC2PAWindow() {
+            const win = document.getElementById('c2pa-window');
+            if (win) {
+                win.style.display = 'flex';
+                // Center window explicitly (resetting potential drag offsets)
+                win.style.top = '50%';
+                win.style.left = '50%';
+                win.style.transform = 'translate(-50%, -50%)';
+                win.style.right = '';
+                win.style.bottom = '';
+
+                // Initialize drag functionality if not already
+                if (!win.hasAttribute('data-drag-init')) {
+                    // Try to find the drag init function or implement a simple one
+                    if (typeof initDraggable === 'function') {
+                        initDraggable(win, win.querySelector('.c2pa-header'));
+                    } else {
+                        console.warn('initDraggable not found, drag disabled');
+                    }
+                    win.setAttribute('data-drag-init', 'true');
+                }
+            }
+        }
+
+        function closeC2PAWindow() {
+            const win = document.getElementById('c2pa-window');
+            if (win) win.style.display = 'none';
+        }
+
+        // --- Tab Management ---
+        function switchC2PATab(tabId) {
+            // Update tabs
+            document.querySelectorAll('.c2pa-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.tab === tabId);
+            });
+
+            // Update panels
+            document.querySelectorAll('.c2pa-panel').forEach(p => {
+                p.classList.remove('active');
+            });
+            document.getElementById('c2pa-' + tabId + '-panel').classList.add('active');
+        }
+
+        // --- Verify Tab Logic ---
+
+        // Drag and Drop
+        const verifyDrop = document.getElementById('c2pa-verify-dropzone');
+        const verifyInput = document.getElementById('c2pa-verify-file');
+
+        if (verifyDrop && verifyInput) {
+            verifyDrop.addEventListener('click', () => verifyInput.click());
+
+            verifyDrop.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                verifyDrop.classList.add('dragover');
+            });
+
+            verifyDrop.addEventListener('dragleave', () => verifyDrop.classList.remove('dragover'));
+
+            verifyDrop.addEventListener('drop', (e) => {
+                e.preventDefault();
+                verifyDrop.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    handleVerifyFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            verifyInput.addEventListener('change', (e) => {
+                if (e.target.files.length) {
+                    handleVerifyFile(e.target.files[0]);
+                }
+            });
+        }
+
+        function verifyC2PAFromURL() {
+            const url = document.getElementById('c2pa-verify-url').value;
+            if (!url) return;
+
+            const formData = new FormData();
+            formData.append('image_url', url);
+            performVerification(formData, url);
+        }
+
+        function handleVerifyFile(file) {
+            const formData = new FormData();
+            formData.append('image_file', file);
+
+            // Show preview safely
+            const preview = document.getElementById('c2pa-verify-preview');
+            preview.innerHTML = '';
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                preview.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+
+            performVerification(formData);
+        }
+
+        async function performVerification(formData, imageUrl = null) {
+            const results = document.getElementById('c2pa-verify-results');
+            const status = document.getElementById('c2pa-verify-status');
+
+            results.style.display = 'flex';
+            status.innerHTML = 'Verifying...';
+            status.className = 'c2pa-status';
+
+            // Store current image for viewing
+            if (imageUrl) {
+                window.currentVerifyImage = imageUrl;
+            } else if (formData.has('image_file')) {
+                // If it's a file, we already have it in the preview logic, 
+                // but let's store it explicitly for the 'View Blob' button
+                const file = formData.get('image_file');
+                if (window.currentVerifyBlob) URL.revokeObjectURL(window.currentVerifyBlob);
+                window.currentVerifyBlob = URL.createObjectURL(file);
+                window.currentVerifyImage = window.currentVerifyBlob;
+            }
+
+            // Clear fields
+            document.querySelectorAll('.field-value').forEach(el => el.textContent = '-');
+
+
+            try {
+                const API = window.API || 'http://127.0.0.1:7777';
+                const res = await fetch(API + '/api/c2pa/verify', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+
+                if (data.success && data.has_c2pa) {
+                    status.innerHTML = '✅ C2PA Metadata Verified';
+                    status.className = 'c2pa-status valid';
+                    populateMetadata(data.manifest);
+
+                    // Store manifest for JSON view
+                    window.currentManifest = data.manifest;
+                } else {
+                    status.innerHTML = '❌ No C2PA Metadata Found';
+                    status.className = 'c2pa-status invalid';
+                    document.getElementById('v-validation').textContent = 'Invalid / None';
+                }
+
+                // Show URL image preview if applicable
+                if (imageUrl) {
+                    const preview = document.getElementById('c2pa-verify-preview');
+                    if (!preview.hasChildNodes()) {
+                        const img = document.createElement('img');
+                        img.src = imageUrl;
+                        preview.appendChild(img);
+                    }
+                }
+
+            } catch (e) {
+                console.error(e);
+                status.innerHTML = 'Error verifying image';
+                status.className = 'c2pa-status invalid';
+            }
+        }
+
+        function populateMetadata(m) {
+            const setText = (id, txt) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = txt || '-';
+            };
+
+            setText('v-validation', m.validation_status || 'Valid');
+            setText('v-manifest', m.active_manifest || m.label || 'UUID-...');
+            setText('v-date', m.date_created);
+            setText('v-author', m.author || m.creator);
+            setText('v-generator', m.claim_generator);
+            setText('v-title', m.title);
+            setText('v-issuer', m.cert_issuer);
+            setText('v-filename', m.file_name || 'image.jpg'); // Fallback
+            setText('v-filesize', m.file_size ? (m.file_size / 1024).toFixed(1) + ' KB' : '-');
+            setText('v-filetype', m.format || m.file_type || 'image/jpeg');
+            setText('v-segments', m.assertions ? m.assertions.length + ' segments' : '1 segment');
+        }
+
+        function viewManifestJSON() {
+            if (window.currentManifest) {
+                // Open new window with JSON
+                const w = window.open('', '_blank');
+                w.document.write('<pre>' + JSON.stringify(window.currentManifest, null, 2) + '</pre>');
+            } else {
+                alert('No manifest loaded');
+            }
+        }
+
+        function viewImageBlob() {
+            if (window.currentVerifyImage) {
+                window.open(window.currentVerifyImage, '_blank');
+            } else {
+                alert('No image loaded to view. Please verify an image first.');
+            }
+        }
+
+
+        // --- Sign Tab Logic ---
+
+        const signDrop = document.getElementById('c2pa-sign-dropzone');
+        const signInput = document.getElementById('c2pa-sign-file');
+        let fileToSign = null;
+
+        if (signDrop && signInput) {
+            signDrop.addEventListener('click', () => signInput.click());
+
+            signDrop.addEventListener('dragover', (e) => { e.preventDefault(); signDrop.classList.add('dragover'); });
+            signDrop.addEventListener('dragleave', () => signDrop.classList.remove('dragover'));
+
+            signDrop.addEventListener('drop', (e) => {
+                e.preventDefault();
+                signDrop.classList.remove('dragover');
+                if (e.dataTransfer.files.length) handleSignFile(e.dataTransfer.files[0]);
+            });
+
+            signInput.addEventListener('change', (e) => {
+                if (e.target.files.length) handleSignFile(e.target.files[0]);
+            });
+        }
+
+        function handleSignFile(file) {
+            fileToSign = file;
+            document.querySelector('#c2pa-sign-dropzone .dropzone-text').textContent = 'Selected: ' + file.name;
+            const btn = document.getElementById('c2pa-sign-btn');
+            if (btn) btn.disabled = false;
+        }
+
+        async function signC2PAImage() {
+            if (!fileToSign) return;
+
+            const btn = document.getElementById('c2pa-sign-btn');
+            const status = document.getElementById('c2pa-sign-status');
+            const results = document.getElementById('c2pa-sign-results');
+
+            btn.disabled = true;
+            btn.textContent = 'Signing...';
+            results.style.display = 'block';
+            status.innerHTML = 'Signing image...';
+            status.className = 'c2pa-status';
+
+            const formData = new FormData();
+            formData.append('image_file', fileToSign);
+            formData.append('creator', document.getElementById('s-author').value);
+            formData.append('title', document.getElementById('s-title').value);
+            formData.append('action', document.getElementById('s-action').value);
+
+            // Add other fields to match verify tab if needed
+            formData.append('claim_generator', document.getElementById('s-generator').value);
+
+            try {
+                const API = window.API || 'http://127.0.0.1:7777';
+                const res = await fetch(API + '/api/c2pa/sign', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    status.innerHTML = '✅ Image Signed Successfully';
+                    status.className = 'c2pa-status valid';
+
+                    const output = document.getElementById('c2pa-sign-output');
+                    output.innerHTML = `
+                        <p style="margin-bottom: 10px;">File saved to: ${data.output_filename}</p>
+                        <div class="c2pa-actions" style="margin-top: 15px;">
+                            <button class="c2pa-btn-gold" onclick="window.open('${API}/api/c2pa/download/${data.output_filename}')">Download Signed Image</button>
+                            <button class="c2pa-btn" onclick="window.open('${API}/api/c2pa/signed-images')">Manage Signed Folder</button>
+                        </div>
+                    `;
+
+                } else {
+
+                    throw new Error(data.error || 'Signing failed');
+                }
+            } catch (e) {
+                status.innerHTML = '❌ Signing Failed: ' + e.message;
+                status.className = 'c2pa-status invalid';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sign Image';
+            }
+        }
+    </script>
+
 </body>
+
 </html>

@@ -217,18 +217,6 @@ def build_topology() -> SystemTopology:
     ))
 
     # =========================================================================
-    # BLACKBOARD (Agent Coordination)
-    # =========================================================================
-    nodes.append(ComponentNode(
-        id="blackboard",
-        name="Blackboard",
-        type=ComponentType.DATA,
-        parent="ihim-root",
-        description="Shared coordination space for agents",
-        file_path=str(IHIM_ROOT / "team" / "blackboard.json"),
-    ))
-
-    # =========================================================================
     # FEEDBACK SYSTEM
     # =========================================================================
     nodes.append(ComponentNode(
@@ -376,10 +364,6 @@ def build_topology() -> SystemTopology:
     ))
 
     # =========================================================================
-    # Note: Guardrails and Memory System are now workspace-level systems (above)
-    # =========================================================================
-
-    # =========================================================================
     # UI ASSETS
     # =========================================================================
     nodes.append(ComponentNode(
@@ -430,13 +414,13 @@ def build_topology() -> SystemTopology:
     edges.append(SystemEdge(source="api-server", target="actions-registry", edge_type="dependency"))
     edges.append(SystemEdge(source="api-server", target="team-system", edge_type="dependency"))
     edges.append(SystemEdge(source="api-server", target="data-stores", edge_type="data-flow"))
-    edges.append(SystemEdge(source="team-spawner", target="blackboard", edge_type="data-flow"))
     edges.append(SystemEdge(source="team-spawner", target="team-state", edge_type="data-flow"))
     edges.append(SystemEdge(source="feedback-processor", target="feedback-aggregator", edge_type="data-flow"))
     edges.append(SystemEdge(source="feedback-aggregator", target="feedback-optimizer", edge_type="data-flow"))
     edges.append(SystemEdge(source="feedback-optimizer", target="team-spawner", edge_type="data-flow"))
     edges.append(SystemEdge(source="sanity-check", target="api-server", edge_type="dependency"))
     edges.append(SystemEdge(source="slash-commands", target="data-slash-commands", edge_type="data-flow"))
+    # corrected edge
     edges.append(SystemEdge(source="api-server", target="heuristics-bank", edge_type="data-flow"))
 
     # Self-Improvement System edges (Swiss Cheese Layer connections)
@@ -476,4 +460,3 @@ def get_node_by_id(node_id: str) -> Optional[ComponentNode]:
     """
     topology = get_system_topology()
     return next((n for n in topology.nodes if n.id == node_id), None)
-# trigger reload

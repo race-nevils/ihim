@@ -28,11 +28,7 @@ try:
     from team.feedback.metrics import get_metrics, get_metrics_summary, update_metrics
     from team.feedback.processor import process_session_results, save_feedback_entry
     from team.feedback.optimizer import generate_optimizations, get_optimizations_for_agent
-    from team.blackboard import (
-        get_blackboard_summary, get_messages, get_blockers, get_done_agents,
-        post_message, update_status, add_deliverable, agent_done, agent_blocked,
-        init_blackboard, load_blackboard, clear_blackboard
-    )
+
     FEEDBACK_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Feedback system not available: {e}")
@@ -99,7 +95,7 @@ except ImportError as e:
     print(f"Warning: C2PA module not available: {e}")
     C2PA_AVAILABLE = False
 
-app = FastAPI(title="iHIM", description="Your Command Center - with Blackboard API")
+app = FastAPI(title="iHIM", description="Your Command Center")
 
 # CORS middleware for Chrome extension access
 app.add_middleware(
@@ -225,58 +221,6 @@ class SpawnRequest(BaseModel):
         return v
 
 
-# =============================================================================
-# BLACKBOARD REQUEST MODELS
-# =============================================================================
-
-class BlackboardMessageRequest(BaseModel):
-    """Request model for posting a message to the blackboard."""
-    agent: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$', description="Agent ID posting the message (e.g., 'frontend-dev')")
-    message: str = Field(..., min_length=1, max_length=5000, description="The message content")
-    msg_type: Optional[str] = Field(None, min_length=1, max_length=50, pattern=r'^[A-Z_]+$', description="Message type: DONE, QUESTION, DELIVERABLE, BLOCKER, etc.")
-    to: Optional[str] = Field(None, min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$', description="Target agent for directed messages")
-
-
-class BlackboardStatusRequest(BaseModel):
-    """Request model for updating agent status."""
-    agent: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$', description="Agent ID to update")
-    status: str = Field(..., min_length=1, max_length=50, description="New status (e.g., 'working', 'blocked', 'complete')")
-
-
-class BlackboardDeliverableRequest(BaseModel):
-    """Request model for recording a deliverable."""
-    agent: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$', description="Agent ID that created the deliverable")
-    deliverable: str = Field(..., min_length=1, max_length=500, description="Description of what was created (file path, endpoint, etc.)")
-
-
-class BlackboardDoneRequest(BaseModel):
-    """Request model for marking an agent as done."""
-    agent: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$', description="Agent ID that is done")
-    summary: str = Field(..., min_length=1, max_length=2000, description="Summary of work completed")
-
-
-class BlackboardBlockedRequest(BaseModel):
-    """Request model for reporting a blocker."""
-    agent: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$', description="Agent ID that is blocked")
-    blocker: str = Field(..., min_length=1, max_length=1000, description="Description of what is blocking progress")
-
-
-class BlackboardInitRequest(BaseModel):
-    """Request model for initializing a new blackboard."""
-    feature: str = Field(..., min_length=1, max_length=500, description="Description of the feature being built")
-    agents: List[str] = Field(..., min_items=1, max_items=20, description="List of agent IDs participating")
-
-    @field_validator('agents')
-    @classmethod
-    def validate_agent_names(cls, v):
-        """Validate agent names to prevent injection attacks."""
-        pattern = re.compile(r'^[a-zA-Z0-9_-]+$')
-        for agent in v:
-            if not pattern.match(agent):
-                raise ValueError(f"Invalid agent name '{agent}'. Only alphanumeric, dash, and underscore allowed.")
-            if len(agent) > 50:
-                raise ValueError(f"Agent name '{agent}' exceeds max length of 50 characters.")
-        return v
 
 # Serve static files
 UI_DIR = Path(__file__).parent.parent / "ui"
@@ -703,328 +647,6 @@ async def get_agent_optimizations(agent: str):
         return {"error": str(e)}
 
 
-# =============================================================================
-# BLACKBOARD ENDPOINTS (Agent Coordination)
-# =============================================================================
-
-@app.get("/api/blackboard")
-async def get_blackboard():
-    """
-    Get current blackboard status.
-
-    Shows feature being built, current phase, agent statuses,
-    and coordination metrics.
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    return get_blackboard_summary()
-
-
-@app.get("/api/blackboard/messages")
-async def get_blackboard_messages(
-    message_type: Optional[str] = None,
-    for_agent: Optional[str] = None
-):
-    """
-    Get messages from the blackboard.
-
-    Optional filters:
-    - message_type: Filter by type (BLOCKED, DONE, QUESTION, etc.)
-    - for_agent: Get messages targeted at specific agent
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        messages = get_messages(message_type=message_type, for_agent=for_agent)
-        return {
-            "count": len(messages),
-            "messages": [m.to_dict() for m in messages]
-        }
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
-
-
-@app.get("/api/blackboard/blockers")
-async def get_current_blockers():
-    """
-    Get currently unresolved blockers.
-
-    Useful for monitoring agent coordination issues.
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        blockers = get_blockers()
-        done_agents = get_done_agents()
-        return {
-            "blockers": [b.to_dict() for b in blockers],
-            "blocker_count": len(blockers),
-            "done_agents": done_agents
-        }
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
-
-
-# -----------------------------------------------------------------------------
-# BLACKBOARD POST ENDPOINTS (Agent Write Operations)
-# -----------------------------------------------------------------------------
-
-@app.post("/api/blackboard")
-async def post_blackboard_message(request: BlackboardMessageRequest):
-    """
-    Post a message to the blackboard.
-
-    This is the primary endpoint for agents to communicate.
-    Agents can post status updates, questions, deliverables, etc.
-
-    Example request:
-    ```json
-    {
-        "agent": "frontend-dev",
-        "message": "Modal component complete with search functionality",
-        "msg_type": "DONE"
-    }
-    ```
-
-    Message types:
-    - DONE: Agent has completed their work
-    - QUESTION: Asking another agent something (use 'to' field)
-    - DELIVERABLE: Recording a file/endpoint created
-    - BLOCKER: Reporting being blocked
-    - (none): General status update
-
-    Returns:
-        success: Whether the message was posted
-        message: Confirmation or error message
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        result = post_message(
-            agent=request.agent,
-            message=request.message,
-            msg_type=request.msg_type,
-            to=request.to
-        )
-        if result:
-            return {
-                "success": True,
-                "message": f"Message posted by {request.agent}",
-                "msg_type": request.msg_type or "status"
-            }
-        else:
-            return error_response("Failed to post message - blackboard may not be initialized", status_code=400, error_type="BlackboardNotInitialized")
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
-
-
-@app.post("/api/blackboard/status")
-async def update_agent_status(request: BlackboardStatusRequest):
-    """
-    Update an agent's status on the blackboard.
-
-    Example request:
-    ```json
-    {
-        "agent": "backend-dev",
-        "status": "working"
-    }
-    ```
-
-    Common statuses: starting, working, blocked, complete
-
-    Returns:
-        success: Whether status was updated
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        result = update_status(request.agent, request.status)
-        if result:
-            return {
-                "success": True,
-                "agent": request.agent,
-                "status": request.status
-            }
-        else:
-            return error_response("Failed to update status - blackboard may not be initialized", status_code=400, error_type="BlackboardNotInitialized")
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
-
-
-@app.post("/api/blackboard/deliverable")
-async def record_deliverable(request: BlackboardDeliverableRequest):
-    """
-    Record a deliverable (file, endpoint, component) created by an agent.
-
-    Example request:
-    ```json
-    {
-        "agent": "frontend-dev",
-        "deliverable": "IHIM/ui/components/Modal.js"
-    }
-    ```
-
-    Returns:
-        success: Whether deliverable was recorded
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        result = add_deliverable(request.agent, request.deliverable)
-        if result:
-            return {
-                "success": True,
-                "agent": request.agent,
-                "deliverable": request.deliverable
-            }
-        else:
-            return error_response("Failed to record deliverable - blackboard may not be initialized", status_code=400, error_type="BlackboardNotInitialized")
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
-
-
-@app.post("/api/blackboard/done")
-async def mark_agent_done(request: BlackboardDoneRequest):
-    """
-    Mark an agent as done with a summary of their work.
-
-    This is a convenience endpoint that:
-    1. Updates agent status to 'complete'
-    2. Posts a DONE message with the summary
-
-    Example request:
-    ```json
-    {
-        "agent": "qa-tester",
-        "summary": "All 47 tests passing. Added edge case coverage for modal."
-    }
-    ```
-
-    Returns:
-        success: Whether agent was marked done
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        result = agent_done(request.agent, request.summary)
-        if result:
-            return {
-                "success": True,
-                "agent": request.agent,
-                "summary": request.summary,
-                "status": "complete"
-            }
-        else:
-            return error_response("Failed to mark done - blackboard may not be initialized", status_code=400, error_type="BlackboardNotInitialized")
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
-
-
-@app.post("/api/blackboard/blocked")
-async def report_blocker(request: BlackboardBlockedRequest):
-    """
-    Report that an agent is blocked.
-
-    This is a convenience endpoint that:
-    1. Updates agent status to 'blocked'
-    2. Posts a BLOCKER message describing the issue
-
-    Example request:
-    ```json
-    {
-        "agent": "frontend-dev",
-        "blocker": "Waiting for backend API endpoint /api/users to be implemented"
-    }
-    ```
-
-    Returns:
-        success: Whether blocker was recorded
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        result = agent_blocked(request.agent, request.blocker)
-        if result:
-            return {
-                "success": True,
-                "agent": request.agent,
-                "blocker": request.blocker,
-                "status": "blocked"
-            }
-        else:
-            return error_response("Failed to report blocker - blackboard may not be initialized", status_code=400, error_type="BlackboardNotInitialized")
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
-
-
-@app.post("/api/blackboard/init")
-async def initialize_blackboard(request: BlackboardInitRequest):
-    """
-    Initialize a new blackboard for a feature build.
-
-    This creates a fresh blackboard, replacing any existing one.
-    Should be called at the start of a spawn session.
-
-    Example request:
-    ```json
-    {
-        "feature": "Slash Command Modal with search and categories",
-        "agents": ["frontend-dev", "backend-dev", "qa-tester", "devops", "security-reviewer"]
-    }
-    ```
-
-    Returns:
-        success: Whether blackboard was initialized
-        feature: The feature description
-        agents: List of participating agents
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        board = init_blackboard(request.feature, request.agents)
-        return {
-            "success": True,
-            "feature": board.feature,
-            "agents": list(board.agent_status.keys()),
-            "phase": board.phase.value if hasattr(board.phase, 'value') else board.phase,
-            "started_at": board.started_at
-        }
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
-
-
-@app.delete("/api/blackboard")
-async def clear_blackboard_endpoint():
-    """
-    Clear/reset the blackboard.
-
-    Removes all messages, statuses, and deliverables.
-    Use when starting fresh or after a session is complete.
-
-    Returns:
-        success: Whether blackboard was cleared
-    """
-    if not FEEDBACK_AVAILABLE:
-        return error_response("Blackboard system not available", status_code=503, error_type="ServiceUnavailable")
-
-    try:
-        result = clear_blackboard()
-        if result:
-            return {"success": True, "message": "Blackboard cleared"}
-        else:
-            return error_response("Failed to clear blackboard", status_code=500, error_type="InternalError")
-    except Exception as e:
-        return error_response(str(e), status_code=500, error_type="InternalError")
 
 
 # =============================================================================
@@ -1050,8 +672,8 @@ def load_stopwatches() -> list:
         try:
             data = json.loads(STOPWATCHES_FILE.read_text(encoding="utf-8"))
             return data.get("stopwatches", [])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Failed to load stopwatches: {e}")
     return []
 
 
@@ -1261,8 +883,8 @@ def load_tasks() -> list:
                 if "description" not in task:
                     task["description"] = ""
             return tasks
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Failed to load tasks: {e}")
     return []
 
 
@@ -1359,8 +981,8 @@ def load_notes() -> list:
         try:
             data = json.loads(NOTES_FILE.read_text(encoding="utf-8"))
             return data.get("notes", [])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Failed to load notes: {e}")
     return []
 
 
@@ -1480,7 +1102,7 @@ async def get_periodic_elements():
 
     try:
         if os.path.exists(elements_path):
-            with open(elements_path, 'r') as f:
+            with open(elements_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 # Handle wrapper object: {"meta": {...}, "elements": [...]}
                 elements = data.get("elements", data) if isinstance(data, dict) else data
@@ -1489,7 +1111,7 @@ async def get_periodic_elements():
 
     try:
         if os.path.exists(layout_path):
-            with open(layout_path, 'r') as f:
+            with open(layout_path, 'r', encoding='utf-8') as f:
                 layout_data = json.load(f)
                 layout = layout_data.get('layout', [])
     except Exception as e:
@@ -1551,8 +1173,8 @@ def load_heuristics() -> dict:
     if HEURISTICS_FILE.exists():
         try:
             return json.loads(HEURISTICS_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Failed to load heuristics: {e}")
     return {"heuristics": [], "meta": {"last_updated": "", "total_heuristics": 0}}
 
 
@@ -2060,7 +1682,7 @@ except ImportError as e:
         from compliance.loader import ComplianceLoader
         compliance_loader = ComplianceLoader()
         COMPLIANCE_AVAILABLE = True
-    except ImportError:
+    except ImportError as e:
         print(f"Warning: Compliance system not available: {e}")
         compliance_loader = None
         COMPLIANCE_AVAILABLE = False

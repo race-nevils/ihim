@@ -84,7 +84,7 @@ ACTIONS = {
     },
     "c2pa_verify": {
         "name": "C2PA Verify",
-        "description": "Verify content authenticity and provenance",
+        "description": "Verify C2PA content authenticity and sign images",
         "icon": "verified",
         "category": "tools",
         "has_modal": True,
@@ -162,7 +162,7 @@ def run_action(action_id: str) -> dict:
         return {"success": True, "message": "Opening Standards Library..."}
 
     elif action_id == "c2pa_verify":
-        # Handled by UI (modal for verifying C2PA content)
+        # Handled by UI (modal for C2PA verification and signing)
         return {"success": True, "message": "Opening C2PA Verify..."}
 
     elif action_id == "software_dev_team":

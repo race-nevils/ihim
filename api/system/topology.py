@@ -3,14 +3,16 @@ System topology builder - defines all workspace components and their connections
 workspace is the root. iHIM is one system within workspace.
 """
 
+import os
 from pathlib import Path
 from typing import Optional
 from .models import ComponentNode, SystemEdge, SystemTopology, ComponentType
 
 
-# Base paths
-WORKSPACE_ROOT = Path("C:/Users/<user>/workspace")
-IHIM_ROOT = WORKSPACE_ROOT / "IHIM"
+# Base paths - derive from file location or environment
+# __file__ is in IHIM/api/system/topology.py, so IHIM is 3 levels up
+IHIM_ROOT = Path(__file__).parent.parent.parent.resolve()
+WORKSPACE_ROOT = Path(os.getenv("WORKSPACE_ROOT", IHIM_ROOT.parent))
 
 
 def build_topology() -> SystemTopology:

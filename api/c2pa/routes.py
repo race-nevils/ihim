@@ -336,9 +336,10 @@ def verify_c2pa(
                 pass  # Best effort cleanup
 
 
-# Configuration
-SIGNED_OUTPUT_DIR = Path("C:/Users/<user>/OneDrive/Pictures/Signed")
-DEFAULT_CREATOR = "the operator James [scrubbed]"
+# Configuration - use environment variables with sensible defaults
+import os
+SIGNED_OUTPUT_DIR = Path(os.getenv("C2PA_SIGNED_OUTPUT_DIR", Path.home() / "Pictures" / "Signed"))
+DEFAULT_CREATOR = os.getenv("C2PA_DEFAULT_CREATOR", "the operator James [scrubbed]")
 
 
 # C2PA Tool paths

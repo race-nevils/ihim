@@ -2070,3 +2070,350 @@ async def calculate_vpt_post(request: VPTCalculateRequest):
         }
     except Exception as e:
         return error_response(f"Calculation failed: {str(e)}", status_code=500, error_type="CalculationError")
+
+
+# =============================================================================
+# PRIVILEGE SYSTEM ENDPOINTS (Governance Infrastructure)
+# =============================================================================
+
+# Import privilege system components
+try:
+    from privilege import (
+        PrivilegeLevel,
+        get_trust_state,
+        update_trust,
+        can_perform_operation,
+        classify_operation,
+        OperationType,
+    )
+    from privilege.escalation import (
+        request_escalation,
+        approve_escalation,
+        deny_escalation,
+        get_pending_escalations,
+        get_escalation_by_id,
+    )
+    from privilege.monitor import (
+        check_for_anomalies,
+        get_recent_alerts,
+        get_unacknowledged_alerts,
+        acknowledge_alert,
+        get_monitor_status,
+    )
+    from privilege.rollback import (
+        create_checkpoint,
+        rollback_to_checkpoint,
+        list_checkpoints,
+        get_rollback_status,
+        CheckpointTrigger,
+    )
+    PRIVILEGE_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Privilege system not available: {e}")
+    PRIVILEGE_AVAILABLE = False
+
+
+class PrivilegeCheckRequest(BaseModel):
+    """Request model for privilege boundary check."""
+    operation_type: str = Field(..., description="Type of operation (file_read, file_write, etc.)")
+    target: Optional[str] = Field(None, description="Target path, process name, etc.")
+    details: Optional[dict] = Field(None, description="Additional operation details")
+
+
+class EscalationRequestModel(BaseModel):
+    """Request model for privilege escalation."""
+    from_level: str = Field(..., pattern=r'^L[012]$', description="Current level (L0, L1, L2)")
+    to_level: str = Field(..., pattern=r'^L[012]$', description="Requested level (L0, L1, L2)")
+    reason: str = Field(..., min_length=1, max_length=500, description="Why escalation is needed")
+    operation: str = Field(..., min_length=1, max_length=200, description="What operation requires this")
+
+
+@app.get("/api/privilege/status")
+async def privilege_status():
+    """
+    Get current privilege status.
+
+    Returns current trust score, privilege level, and system health.
+    """
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        state = get_trust_state()
+        monitor = get_monitor_status()
+        rollback = get_rollback_status()
+
+        return {
+            "success": True,
+            "trust": {
+                "score": state.current_score,
+                "level": state.current_level,
+                "level_display": PrivilegeLevel(state.current_level).display_name,
+                "successful_ops": state.total_successful_ops,
+                "failed_ops": state.total_failed_ops,
+                "in_recovery": state.is_in_recovery(),
+                "recovery_until": state.recovery_until,
+            },
+            "monitor": monitor,
+            "rollback": rollback,
+        }
+    except Exception as e:
+        return error_response(f"Failed to get privilege status: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.post("/api/privilege/check")
+async def privilege_check(request: PrivilegeCheckRequest):
+    """
+    Check if an operation is allowed at current privilege level.
+
+    Use this before attempting operations that might hit privilege boundaries.
+
+    Returns whether the operation is allowed, required level, and escalation path if denied.
+    """
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        # Parse operation type
+        try:
+            op_type = OperationType(request.operation_type)
+        except ValueError:
+            return error_response(
+                f"Unknown operation type: {request.operation_type}. "
+                f"Valid types: {[ot.value for ot in OperationType]}",
+                status_code=400
+            )
+
+        result = can_perform_operation(op_type, request.target, request.details)
+
+        return {
+            "success": True,
+            "allowed": result.allowed,
+            "required_level": result.required_level.value,
+            "required_level_display": result.required_level.display_name,
+            "current_level": result.current_level.value,
+            "current_level_display": result.current_level.display_name,
+            "reason": result.reason,
+            "trust_score": result.trust_score,
+            "can_escalate": result.can_escalate,
+            "escalation_path": result.escalation_path,
+        }
+    except Exception as e:
+        return error_response(f"Privilege check failed: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.post("/api/privilege/escalate")
+async def privilege_escalate(request: EscalationRequestModel):
+    """
+    Request privilege escalation.
+
+    L0 -> L1 may auto-approve if trust threshold is met.
+    L2 requests always require human approval.
+    """
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        from_level = PrivilegeLevel(request.from_level)
+        to_level = PrivilegeLevel(request.to_level)
+
+        result = request_escalation(from_level, to_level, request.reason, request.operation)
+
+        return {
+            "success": True,
+            "request_id": result.id,
+            "status": result.status,
+            "auto_approved": result.status == "auto_approved",
+            "message": f"Escalation request {result.status}",
+            "created_at": result.created_at,
+            "resolved_at": result.resolved_at,
+        }
+    except Exception as e:
+        return error_response(f"Escalation request failed: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.get("/api/privilege/escalations")
+async def get_escalations():
+    """Get all pending escalation requests."""
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        pending = get_pending_escalations()
+        return {
+            "success": True,
+            "count": len(pending),
+            "requests": [r.to_dict() for r in pending],
+        }
+    except Exception as e:
+        return error_response(f"Failed to get escalations: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.post("/api/privilege/escalations/{request_id}/approve")
+async def approve_escalation_endpoint(request_id: str):
+    """
+    Approve a pending escalation request.
+
+    Only used for manual L2 approvals.
+    """
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        result = approve_escalation(request_id, approver="human")
+        if result:
+            return {
+                "success": True,
+                "request": result.to_dict(),
+                "message": "Escalation approved",
+            }
+        return error_response(f"Escalation request not found: {request_id}", status_code=404, error_type="NotFound")
+    except Exception as e:
+        return error_response(f"Approval failed: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.post("/api/privilege/escalations/{request_id}/deny")
+async def deny_escalation_endpoint(request_id: str, reason: str = ""):
+    """Deny a pending escalation request."""
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        result = deny_escalation(request_id, reason)
+        if result:
+            return {
+                "success": True,
+                "request": result.to_dict(),
+                "message": "Escalation denied",
+            }
+        return error_response(f"Escalation request not found: {request_id}", status_code=404, error_type="NotFound")
+    except Exception as e:
+        return error_response(f"Denial failed: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.get("/api/privilege/alerts")
+async def get_privilege_alerts(hours: int = 24, unacknowledged_only: bool = False):
+    """
+    Get privilege system alerts.
+
+    Args:
+        hours: Get alerts from the last N hours (default 24)
+        unacknowledged_only: Only return unacknowledged alerts
+    """
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        if unacknowledged_only:
+            alerts = get_unacknowledged_alerts()
+        else:
+            alerts = get_recent_alerts(hours)
+
+        return {
+            "success": True,
+            "count": len(alerts),
+            "alerts": [a.to_dict() for a in alerts],
+        }
+    except Exception as e:
+        return error_response(f"Failed to get alerts: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.post("/api/privilege/alerts/{alert_id}/acknowledge")
+async def acknowledge_privilege_alert(alert_id: str):
+    """Acknowledge a privilege alert."""
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        result = acknowledge_alert(alert_id)
+        if result:
+            return {
+                "success": True,
+                "alert": result.to_dict(),
+                "message": "Alert acknowledged",
+            }
+        return error_response(f"Alert not found: {alert_id}", status_code=404, error_type="NotFound")
+    except Exception as e:
+        return error_response(f"Acknowledgment failed: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.post("/api/privilege/anomaly-check")
+async def run_anomaly_check():
+    """
+    Run anomaly detection on current privilege state.
+
+    Checks for unusual patterns like trust manipulation,
+    boundary probing, or escalation abuse.
+    """
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        new_alerts = check_for_anomalies()
+        return {
+            "success": True,
+            "alerts_generated": len(new_alerts),
+            "alerts": [a.to_dict() for a in new_alerts],
+        }
+    except Exception as e:
+        return error_response(f"Anomaly check failed: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.get("/api/privilege/checkpoints")
+async def get_checkpoints(limit: int = 20):
+    """List recent privilege state checkpoints."""
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        checkpoints = list_checkpoints(limit)
+        return {
+            "success": True,
+            "count": len(checkpoints),
+            "checkpoints": [c.to_dict() for c in checkpoints],
+        }
+    except Exception as e:
+        return error_response(f"Failed to list checkpoints: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.post("/api/privilege/checkpoints")
+async def create_checkpoint_endpoint(description: str = "Manual checkpoint"):
+    """Create a manual privilege state checkpoint."""
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        checkpoint = create_checkpoint(CheckpointTrigger.MANUAL, description)
+        return {
+            "success": True,
+            "checkpoint": checkpoint.to_dict(),
+            "message": "Checkpoint created",
+        }
+    except Exception as e:
+        return error_response(f"Checkpoint creation failed: {str(e)}", status_code=500, error_type="InternalError")
+
+
+@app.post("/api/privilege/checkpoints/{checkpoint_id}/rollback")
+async def rollback_checkpoint(checkpoint_id: str):
+    """
+    Rollback to a specific checkpoint.
+
+    Restores trust state to the checkpoint's state.
+    """
+    if not PRIVILEGE_AVAILABLE:
+        return error_response("Privilege system not available", status_code=503, error_type="ServiceUnavailable")
+
+    try:
+        result = rollback_to_checkpoint(checkpoint_id)
+        if result:
+            return {
+                "success": True,
+                "restored_state": {
+                    "trust_score": result.current_score,
+                    "level": result.current_level,
+                },
+                "message": f"Rolled back to checkpoint {checkpoint_id}",
+            }
+        return error_response(f"Checkpoint not found: {checkpoint_id}", status_code=404, error_type="NotFound")
+    except Exception as e:
+        return error_response(f"Rollback failed: {str(e)}", status_code=500, error_type="InternalError")

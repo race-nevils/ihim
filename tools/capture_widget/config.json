@@ -1,0 +1,18 @@
+{
+    "hotkey": "alt+space",
+    "inbox_path": "C:/Users/<user>/workspace/IHIM/data/local/brain/inbox",
+    "window": {
+        "width": 600,
+        "height": 50,
+        "opacity": 0.95,
+        "position": "center_top",
+        "offset_y": 100
+    },
+    "appearance": {
+        "bg_color": "#1e1e2e",
+        "fg_color": "#cdd6f4",
+        "placeholder": "Capture thought... (Enter to save, Esc to cancel)",
+        "font_family": "Segoe UI",
+        "font_size": 14
+    }
+}

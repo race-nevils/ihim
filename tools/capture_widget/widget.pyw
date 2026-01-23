@@ -1,0 +1,486 @@
+"""
+Second Brain Capture Widget
+===========================
+System tray app with floating search bar for quick thought capture.
+
+- Alt+Space opens floating input bar (configurable)
+- Enter saves to inbox/, Esc cancels
+- Runs in system tray
+
+Usage:
+    pythonw widget.pyw
+    # or
+    python widget.pyw
+"""
+import atexit
+import json
+import logging
+import signal
+import socket
+import sys
+import threading
+import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+import tkinter as tk
+from tkinter import font as tkfont
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Third-party
+import pystray
+from PIL import Image, ImageDraw
+from pynput import keyboard as pynput_keyboard
+from pynput import mouse as pynput_mouse
+
+# TCP trigger port for external hotkey activation
+TRIGGER_PORT = 7778
+
+
+# Load config
+CONFIG_PATH = Path(__file__).parent / "config.json"
+DEFAULT_CONFIG = {
+    "hotkey": "<alt>+<space>",  # pynput format
+    "inbox_path": "C:/Users/<user>/workspace/IHIM/data/local/brain/inbox",
+    "window": {
+        "width": 600,
+        "height": 50,
+        "opacity": 0.95,
+        "position": "center_top",
+        "offset_y": 100
+    },
+    "appearance": {
+        "bg_color": "#1e1e2e",
+        "fg_color": "#cdd6f4",
+        "placeholder": "Capture thought... (Enter to save, Esc to cancel)",
+        "font_family": "Segoe UI",
+        "font_size": 14
+    }
+}
+
+
+def load_config() -> dict:
+    """Load config from file or use defaults."""
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH, "r") as f:
+            user_config = json.load(f)
+            # Merge with defaults
+            config = {**DEFAULT_CONFIG, **user_config}
+            # Merge nested dicts
+            for key in ["window", "appearance"]:
+                if key in user_config:
+                    config[key] = {**DEFAULT_CONFIG[key], **user_config[key]}
+            return config
+    return DEFAULT_CONFIG
+
+
+class CaptureWidget:
+    """Floating capture widget with system tray integration."""
+
+    def __init__(self):
+        self.config = load_config()
+        self.inbox_path = Path(self.config["inbox_path"])
+        self.inbox_path.mkdir(parents=True, exist_ok=True)
+
+        # Hotkey listener
+        self.hotkey_listener = None
+        self.current_keys = set()
+
+        # Mouse listener for click-outside-to-close
+        self.mouse_listener = None
+
+        # Debounce state
+        self._is_visible = False
+        self._last_show_time = 0
+
+        # Tkinter root (hidden)
+        self.root = tk.Tk()
+        self.root.withdraw()  # Hide main window
+
+        # Create floating input window
+        self.input_window = None
+        self.entry = None
+        self._create_input_window()
+
+        # System tray
+        self.tray_icon = None
+        self._create_tray_icon()
+
+        # Register cleanup handlers
+        self._register_cleanup()
+
+        # Register hotkey
+        self._register_hotkey()
+
+        # Start TCP trigger listener for AHK
+        self._start_trigger_listener()
+
+    def _start_trigger_listener(self):
+        """Start TCP socket listener for external triggers (AHK hotkey)."""
+        def listener_thread():
+            try:
+                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                server.bind(("127.0.0.1", TRIGGER_PORT))
+                server.listen(1)
+                print(f"Trigger listener on port {TRIGGER_PORT}")
+                while True:
+                    try:
+                        conn, addr = server.accept()
+                        conn.close()  # Just need the connection signal
+                        self.root.after(0, self.show)
+                    except Exception as e:
+                        logger.debug(f"Trigger listener accept error: {e}")
+            except Exception as e:
+                logger.error(f"Trigger listener failed to start: {e}")
+
+        thread = threading.Thread(target=listener_thread, daemon=True)
+        thread.start()
+
+    def _register_cleanup(self):
+        """Register cleanup handlers for graceful shutdown."""
+        atexit.register(self._cleanup)
+
+        # Handle Ctrl+C
+        def signal_handler(signum, frame):
+            print("\nShutting down...")
+            self._cleanup()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+    def _stop_listener(self, listener_attr: str):
+        """Stop a listener by attribute name and set to None."""
+        listener = getattr(self, listener_attr, None)
+        if listener is not None:
+            try:
+                listener.stop()
+            except Exception as e:
+                print(f"Error stopping {listener_attr}: {e}")
+            setattr(self, listener_attr, None)
+
+    def _cleanup(self):
+        """Clean up all resources."""
+        print("Cleaning up...")
+        self._stop_listener("hotkey_listener")
+        self._stop_listener("mouse_listener")
+        # Stop tray icon if running
+        if self.tray_icon:
+            try:
+                self.tray_icon.stop()
+            except Exception:
+                pass
+            self.tray_icon = None
+
+    def _create_input_window(self):
+        """Create the floating input window (initially hidden)."""
+        cfg = self.config["window"]
+        appearance = self.config["appearance"]
+
+        # Create toplevel window
+        self.input_window = tk.Toplevel(self.root)
+        self.input_window.withdraw()  # Start hidden
+
+        # Window properties
+        self.input_window.overrideredirect(True)  # No title bar
+        self.input_window.attributes("-topmost", True)  # Always on top
+        self.input_window.attributes("-alpha", cfg.get("opacity", 0.95))
+
+        # Background
+        self.input_window.configure(bg=appearance["bg_color"])
+
+        # Calculate position
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        win_width = cfg["width"]
+        win_height = cfg["height"]
+
+        # X is always centered
+        x = (screen_width - win_width) // 2
+        # Y depends on position setting
+        if cfg["position"] == "center":
+            y = (screen_height - win_height) // 2
+        else:  # "center_top" or default
+            y = cfg.get("offset_y", 100)
+
+        self.input_window.geometry(f"{win_width}x{win_height}+{x}+{y}")
+
+        # Create frame with padding
+        frame = tk.Frame(
+            self.input_window,
+            bg=appearance["bg_color"],
+            padx=10,
+            pady=10
+        )
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        # Create entry widget
+        entry_font = tkfont.Font(
+            family=appearance.get("font_family", "Segoe UI"),
+            size=appearance.get("font_size", 14)
+        )
+
+        self.entry = tk.Entry(
+            frame,
+            font=entry_font,
+            bg=appearance["bg_color"],
+            fg=appearance["fg_color"],
+            insertbackground=appearance["fg_color"],  # Cursor color
+            relief=tk.FLAT,
+            highlightthickness=0
+        )
+        self.entry.pack(fill=tk.BOTH, expand=True)
+
+        # Placeholder text
+        self.placeholder = appearance.get("placeholder", "Capture thought...")
+        self._set_placeholder()
+
+        # Bindings
+        self.entry.bind("<Return>", self._on_submit)
+        self.entry.bind("<Escape>", self._on_cancel)
+        self.entry.bind("<FocusIn>", self._on_focus_in)
+        self.entry.bind("<FocusOut>", self._on_focus_out)
+
+    def _set_placeholder(self):
+        """Set placeholder text in entry."""
+        self.entry.delete(0, tk.END)
+        self.entry.insert(0, self.placeholder)
+        self.entry.config(fg="#6c7086")  # Dimmed color for placeholder
+
+    def _on_focus_in(self, event):
+        """Clear placeholder on focus."""
+        if self.entry.get() == self.placeholder:
+            self.entry.delete(0, tk.END)
+            self.entry.config(fg=self.config["appearance"]["fg_color"])
+
+    def _on_focus_out(self, event):
+        """Restore placeholder if empty."""
+        if not self.entry.get():
+            self._set_placeholder()
+
+    def _create_tray_icon(self):
+        """Create system tray icon."""
+        # Create a simple brain icon
+        icon_size = 64
+        image = Image.new("RGBA", (icon_size, icon_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+
+        # Draw a simple brain shape (circle with squiggle)
+        margin = 8
+        draw.ellipse(
+            [margin, margin, icon_size - margin, icon_size - margin],
+            fill="#89b4fa",
+            outline="#cdd6f4",
+            width=2
+        )
+        # Add a simple line to suggest brain folds
+        draw.arc(
+            [margin + 10, margin + 5, icon_size - margin - 10, icon_size - margin - 5],
+            start=0,
+            end=180,
+            fill="#1e1e2e",
+            width=2
+        )
+
+        # Create menu
+        menu = pystray.Menu(
+            pystray.MenuItem("Capture (Alt+Space)", self._show_from_tray, default=True),
+            pystray.MenuItem("---", None),
+            pystray.MenuItem("Exit", self._exit_app)
+        )
+
+        self.tray_icon = pystray.Icon(
+            "SecondBrain",
+            image,
+            "Second Brain Capture",
+            menu
+        )
+
+    def _register_hotkey(self):
+        """Register global hotkey using pynput."""
+        # Define the hotkey combination: Alt + Space
+        # pynput uses a different approach - we listen for key combinations
+
+        def on_press(key):
+            try:
+                self.current_keys.add(key)
+                # Check for Alt + Space
+                if (pynput_keyboard.Key.alt in self.current_keys or
+                    pynput_keyboard.Key.alt_l in self.current_keys or
+                    pynput_keyboard.Key.alt_r in self.current_keys):
+                    if pynput_keyboard.Key.space in self.current_keys:
+                        # Trigger on main thread
+                        self.root.after(0, self.show)
+                        # Clear to prevent repeat triggers
+                        self.current_keys.clear()
+            except Exception as e:
+                logger.debug(f"Hotkey on_press error: {e}")
+
+        def on_release(key):
+            try:
+                self.current_keys.discard(key)
+            except Exception as e:
+                logger.debug(f"Hotkey on_release error: {e}")
+
+        # Start listener (non-blocking)
+        self.hotkey_listener = pynput_keyboard.Listener(
+            on_press=on_press,
+            on_release=on_release,
+            suppress=False  # IMPORTANT: Don't suppress keys
+        )
+        self.hotkey_listener.start()
+        print("Registered hotkey: Alt+Space")
+
+    def _show_from_tray(self, icon=None, item=None):
+        """Show from tray menu click."""
+        self.root.after(0, self.show)
+
+    def show(self):
+        """Show the capture input window."""
+        # Debounce: prevent rapid triggers (200ms cooldown)
+        now = time.time()
+        if self._is_visible or (now - self._last_show_time) < 0.2:
+            return
+        self._last_show_time = now
+        self._is_visible = True
+
+        self._set_placeholder()
+        self.input_window.deiconify()
+        self.input_window.lift()
+        self.input_window.focus_force()
+        # Delay focus to ensure window is fully rendered
+        self.root.after(50, self._focus_entry)
+        # Start mouse listener for click-outside-to-close
+        self._start_mouse_listener()
+
+    def _focus_entry(self):
+        """Set focus to entry widget after window is visible."""
+        self.entry.focus_force()  # focus_force implies focus_set
+        # Clear placeholder (entry already has focus, so simulate focus-in)
+        if self.entry.get() == self.placeholder:
+            self.entry.delete(0, tk.END)
+            self.entry.config(fg=self.config["appearance"]["fg_color"])
+
+    def hide(self):
+        """Hide the capture input window."""
+        if not self._is_visible:
+            return  # Already hidden
+        self._is_visible = False
+        self._stop_mouse_listener()
+        self.input_window.withdraw()
+        self._set_placeholder()
+
+    def _start_mouse_listener(self):
+        """Start listening for mouse clicks to detect click-outside."""
+        # Check if listener exists and is still alive
+        if self.mouse_listener is not None:
+            if self.mouse_listener.is_alive():
+                return  # Already running
+            # Dead listener, clean it up
+            self.mouse_listener = None
+
+        def on_click(x, y, button, pressed):
+            if not pressed:  # Only handle button press, not release
+                return
+            # Schedule check on main thread
+            self.root.after(0, lambda: self._check_click_outside(x, y))
+
+        self.mouse_listener = pynput_mouse.Listener(on_click=on_click)
+        self.mouse_listener.start()
+
+    def _stop_mouse_listener(self):
+        """Stop the mouse click listener."""
+        if self.mouse_listener is not None:
+            self.mouse_listener.stop()
+            self.mouse_listener = None
+
+    def _check_click_outside(self, x, y):
+        """Check if a click was outside the window and hide if so."""
+        if not self.input_window.winfo_viewable():
+            return
+
+        # Get window bounds
+        win_x = self.input_window.winfo_rootx()
+        win_y = self.input_window.winfo_rooty()
+        win_width = self.input_window.winfo_width()
+        win_height = self.input_window.winfo_height()
+
+        # Check if click is outside
+        if not (win_x <= x <= win_x + win_width and
+                win_y <= y <= win_y + win_height):
+            self.hide()
+
+    def _on_submit(self, event):
+        """Handle Enter key - save to inbox."""
+        text = self.entry.get().strip()
+        if text and text != self.placeholder:
+            self._save_to_inbox(text)
+        self.hide()
+        return "break"
+
+    def _on_cancel(self, event):
+        """Handle Escape key - cancel."""
+        self.hide()
+        return "break"
+
+    def _save_to_inbox(self, text: str):
+        """Save captured text to inbox as markdown file."""
+        timestamp = datetime.now(timezone.utc)
+        date_str = timestamp.strftime("%Y%m%d_%H%M%S")
+        short_id = uuid.uuid4().hex[:8]
+        filename = f"{date_str}_{short_id}.md"
+
+        filepath = self.inbox_path / filename
+
+        # Create markdown with frontmatter
+        content = f"""---
+captured_at: "{timestamp.isoformat()}"
+source: "capture_widget"
+---
+
+{text}
+"""
+        filepath.write_text(content, encoding="utf-8")
+        print(f"Saved: {filepath.name}")
+
+    def _exit_app(self, icon=None, item=None):
+        """Exit the application."""
+        self._cleanup()
+        self.root.quit()
+
+    def run(self):
+        """Run the widget."""
+        print("=" * 50)
+        print("Second Brain Capture Widget")
+        print("=" * 50)
+        print(f"Inbox: {self.inbox_path}")
+        print(f"Hotkey: Alt+Space")
+        print("Running in system tray. Right-click tray icon to exit.")
+        print("=" * 50)
+
+        try:
+            # Run tray icon in separate thread
+            tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+            tray_thread.start()
+
+            # Run tkinter mainloop
+            self.root.mainloop()
+        finally:
+            self._cleanup()
+
+
+def main():
+    """Main entry point."""
+    widget = CaptureWidget()
+    widget.run()
+
+
+if __name__ == "__main__":
+    main()

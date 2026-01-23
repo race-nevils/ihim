@@ -1,0 +1,47 @@
+# Second Brain Orchestrator Configuration
+
+# Ollama settings
+ollama:
+  base_url: "http://localhost:11434"
+  models:
+    fast: "qwen2.5:7b-fast"      # Intent detection, classification
+    reason: "qwen2.5:14b-reason"  # Deep reasoning, chat
+
+# Brain handler settings
+brain:
+  confidence_threshold: 0.7  # Below this -> needs_review
+  categories:
+    - People
+    - Projects
+    - Ideas
+    - Admin
+
+# Inbox watcher settings
+watcher:
+  poll_interval: 2.0  # Seconds between polls
+  file_pattern: "*.md"
+
+# Data paths (relative to IHIM root)
+paths:
+  data_root: "data/local/brain"
+  inbox: "data/local/brain/inbox"
+  processed: "data/local/brain/processed"
+  needs_review: "data/local/brain/needs_review"
+  logs: "data/local/brain/logs"
+
+# Intent routing
+intents:
+  brain:
+    description: "Store thought, note, memory, observation"
+    handler: "handlers.brain"
+  chat:
+    description: "Ask question, have conversation"
+    handler: "handlers.chat"
+  calendar:
+    description: "Schedule meeting, appointment, reminder"
+    handler: "handlers.calendar"
+    status: "stub"
+  task:
+    description: "Create todo, action item"
+    handler: "handlers.task"
+    status: "stub"

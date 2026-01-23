@@ -8,6 +8,27 @@
 
 ---
 
+## Context
+
+This guardrails system is the operational security layer for workspace development. It implements boundaries for autonomous the agent agent operation.
+
+### ARLM Invariant Alignment
+
+Several ARLM invariants are directly supported by this guardrails system:
+
+| ARLM Invariant | Guardrails Implementation |
+|----------------|---------------------------|
+| #3: Append-only event ledger | Hard stops log all violations, overrides, and near-misses |
+| #4: Provenance is first-class | All actions traced to agent tier and approval chain |
+| #12: Tool calls logged | Execution logging captures all guardrail checks |
+| #16: No silent mutation | Every change logged, no hidden state |
+| #19: Security boundaries logged | Privileged operations require explicit approval |
+| #20: Recursion safety envelope | Soft stops implement propose → test → accept pattern |
+
+The guardrails themselves are iHIM-specific implementation choices, but they demonstrate ARLM-compatible practices for any deployment.
+
+---
+
 ## 1. System Overview
 
 ### Purpose

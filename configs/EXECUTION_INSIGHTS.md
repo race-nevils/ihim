@@ -1,5 +1,11 @@
 # Execution Insights
 
+## Context
+
+These are execution insights from the agent harness agent mode runs—operational learnings from our current development tooling. They inform how we use the agent effectively, not ARLM architecture itself.
+
+---
+
 Central learnings from agent mode executions. Updated after each significant run.
 
 ---

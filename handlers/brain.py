@@ -26,12 +26,14 @@ from data.database import (
     update_entry,
     get_entry_by_source_filename,
     check_file_changed,
-    update_file_tracking
+    update_file_tracking,
+    get_recent_entries
 )
 from data.jsonld import (
     create_brain_entry_jsonld,
     write_jsonld,
     update_jsonld,
+    update_jsonld_content,
     compute_jsonld_hash
 )
 
@@ -108,6 +110,82 @@ def compute_content_hash(content: str) -> str:
     Returns first 16 chars of hex digest (enough for uniqueness).
     """
     return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+
+
+def find_matching_entry(source_filename: Optional[str], content: str) -> Optional[dict]:
+    """Find existing entry this content should update (timestamp-first hierarchy).
+
+    Uses weighted scoring to determine if incoming content matches an existing entry:
+    - Priority 1: first_seen_at within 5 min (weight 0.5) - timestamp is most stable
+    - Priority 2: Content prefix match (weight 0.3) - same opening = same thought
+    - Priority 3: source_filename exact match (weight 0.15) - filenames can change
+    - Priority 4: Title similarity (weight 0.05) - titles change most often
+
+    Args:
+        source_filename: Original inbox filename (may be None)
+        content: Current content text
+
+    Returns:
+        Matching entry dict if found (score >= 0.5), None otherwise
+    """
+    recent = get_recent_entries(minutes=10)
+    if not recent:
+        return None
+
+    now = datetime.now(timezone.utc)
+    best_match = None
+    best_score = 0.0
+    content_prefix = content[:50] if content else ""
+
+    for entry in recent:
+        score = 0.0
+
+        # Priority 1: Time proximity (highest weight - 0.5)
+        first_seen = entry.get("first_seen_at")
+        if first_seen:
+            try:
+                # Parse ISO timestamp
+                if isinstance(first_seen, str):
+                    first_seen_dt = datetime.fromisoformat(first_seen.replace('Z', '+00:00'))
+                    if first_seen_dt.tzinfo is None:
+                        first_seen_dt = first_seen_dt.replace(tzinfo=timezone.utc)
+                    age_seconds = (now - first_seen_dt).total_seconds()
+                    age_minutes = age_seconds / 60
+                    if age_minutes < 5:
+                        # Newer = higher score (linear decay)
+                        score += 0.5 * (1 - age_minutes / 5)
+            except (ValueError, TypeError):
+                pass
+
+        # Priority 2: Content prefix match (weight 0.3)
+        entry_content = entry.get("content", "")
+        entry_prefix = entry_content[:50] if entry_content else ""
+        if content_prefix and entry_prefix and content_prefix == entry_prefix:
+            score += 0.3
+
+        # Priority 3: Source filename match (weight 0.15)
+        if source_filename and source_filename == entry.get("source_filename"):
+            score += 0.15
+
+        # Priority 4: Title similarity (weight 0.05) - simple prefix match
+        entry_title = entry.get("title", "")
+        if entry_title and content:
+            # Check if content starts with something similar to title
+            content_start = content[:30].lower().strip()
+            title_lower = entry_title.lower().strip()
+            if title_lower in content_start or content_start.startswith(title_lower[:10]):
+                score += 0.05
+
+        if score > best_score:
+            best_score = score
+            best_match = entry
+
+    # Threshold: 0.5 = "probably the same thought"
+    if best_score >= 0.5:
+        logger.info(f"Found matching entry (score={best_score:.2f}): {best_match.get('id')}")
+        return best_match
+
+    return None
 
 
 def yaml_escape(text: str) -> str:
@@ -194,7 +272,8 @@ def write_to_brain(content: str, classification: dict, source_file: Optional[str
             "classifier": OllamaAdapter.FAST_MODEL,
             "source_filename": source_filename,
             "content_hash": content_hash,
-            "jsonld_path": str(jsonld_path) if jsonld_path else None
+            "jsonld_path": str(jsonld_path) if jsonld_path else None,
+            "first_seen_at": timestamp.isoformat()  # Stable identity for dedup
         })
         logger.info(f"Written to SQLite: {note_id}")
     except Exception as e:
@@ -281,7 +360,8 @@ def write_to_needs_review(content: str, classification: dict, source_file: Optio
             "classifier": OllamaAdapter.FAST_MODEL,
             "source_filename": source_filename,
             "content_hash": content_hash,
-            "jsonld_path": str(jsonld_path) if jsonld_path else None
+            "jsonld_path": str(jsonld_path) if jsonld_path else None,
+            "first_seen_at": timestamp.isoformat()  # Stable identity for dedup
         })
         logger.info(f"Written to SQLite (needs_review): {note_id}")
     except Exception as e:
@@ -416,12 +496,13 @@ def log_receipt(state: OrchestratorState, classification: dict, action: str, des
 def handle(state: OrchestratorState) -> OrchestratorState:
     """Handle brain intent: classify and store the note.
 
-    Supports Living Editable Zone pattern:
-    - New files: Classify and create new entries
-    - Existing files (detected via database): Update in-place
+    Query-first pattern with timestamp-based identity:
+    1. Find matching entry using find_matching_entry() (timestamp-first hierarchy)
+    2. If match found AND unchanged → skip
+    3. If match found AND changed → UPDATE existing (JSON-LD, DB, Obsidian)
+    4. If no match → NEW FILE: LLM classify and create
 
-    File tracking uses database columns (source_filename, content_hash)
-    instead of a separate staging registry.
+    Data flow: JSON-LD (source) → Database (derived) → Obsidian (derived, read-only)
 
     Args:
         state: Current orchestrator state
@@ -447,68 +528,69 @@ def handle(state: OrchestratorState) -> OrchestratorState:
     content_hash = compute_content_hash(content)
 
     try:
-        # Check if we've seen this file before (database lookup replaces staging)
-        is_new, has_changed = check_file_changed(source_filename, content_hash) if source_filename else (True, False)
+        # === QUERY FIRST: Find matching entry using timestamp-first hierarchy ===
+        existing = find_matching_entry(source_filename, content)
 
-        # If unchanged, skip processing
-        if not is_new and not has_changed:
-            state["result"] = {"action": "skipped", "reason": "unchanged"}
+        if existing:
+            # Check if content actually changed
+            if existing.get("content_hash") == content_hash:
+                # Unchanged - skip
+                state["result"] = {"action": "skipped", "reason": "unchanged"}
+                return state
+
+            # === UPDATE EXISTING ENTRY ===
+            # No LLM reclassification - just update content
+            entry_id = existing["id"]
+            jsonld_path = existing.get("jsonld_path")
+            category = existing.get("category", "Ideas")
+            title = existing.get("title", "untitled")
+
+            # 1. Update JSON-LD (SOURCE OF TRUTH)
+            if jsonld_path and Path(jsonld_path).exists():
+                update_jsonld_content(Path(jsonld_path), content)
+                logger.info(f"Updated JSON-LD: {jsonld_path}")
+
+            # 2. Update database (DERIVED from JSON-LD)
+            update_entry(entry_id, {
+                "content": content,
+                "content_hash": content_hash
+            })
+            logger.info(f"Updated database entry: {entry_id}")
+
+            # 3. Regenerate Obsidian (DERIVED from JSON-LD)
+            obsidian_path = OBSIDIAN_MEMORY / category / f"{sanitize_title(title)}.md"
+            obsidian_path.parent.mkdir(parents=True, exist_ok=True)
+            obsidian_path.write_text(content, encoding="utf-8")
+            logger.info(f"Updated Obsidian: {obsidian_path}")
+
+            # Log receipt for update
+            log_receipt(state, {
+                "category": category,
+                "title": title,
+                "confidence": existing.get("confidence", 0.0),
+                "summary": existing.get("summary", "")
+            }, "updated", obsidian_path)
+
+            state["result"] = {
+                "action": "updated",
+                "category": category,
+                "confidence": existing.get("confidence", 0.0),
+                "title": title,
+                "summary": existing.get("summary", ""),
+                "destination": str(obsidian_path),
+                "processed_id": entry_id
+            }
             return state
 
-        # Always reclassify to detect category changes
+        # === NEW FILE: LLM classify and create ===
         classification = adapter.generate_json(
             CLASSIFY_PROMPT.format(content=content),
             model=OllamaAdapter.FAST_MODEL
         )
 
         confidence = float(classification.get("confidence", 0.0))
-
-        # === LIVING EDITABLE ZONE: Update-in-place ===
-        if not is_new and has_changed:
-            # Existing file with changes - update instead of create new
-            existing = get_entry_by_source_filename(source_filename)
-            if existing:
-                entry_id = existing.get("id", "")
-                # Derive obsidian path from category and title
-                old_category = existing.get("category", "Ideas")
-                old_title = existing.get("title", "untitled")
-                old_slug = slugify(old_title)
-                # Find the file in the old category folder
-                old_dir = OBSIDIAN_MEMORY / old_category
-                possible_files = list(old_dir.glob(f"{old_slug}*.md")) if old_dir.exists() else []
-                obsidian_path = str(possible_files[0]) if possible_files else ""
-
-                if entry_id and obsidian_path:
-                    dest_path, category_changed = update_brain_entry(
-                        entry_id=entry_id,
-                        obsidian_path=obsidian_path,
-                        content=content,
-                        classification=classification,
-                        source_file=source_file
-                    )
-                    action = "updated"
-                    if category_changed:
-                        action = "updated_reclassified"
-
-                    # Update content hash in database
-                    update_file_tracking(entry_id, source_filename, content_hash)
-
-                    # Log receipt for update
-                    log_receipt(state, classification, action, dest_path)
-
-                    state["result"] = {
-                        "action": action,
-                        "category": classification.get("category"),
-                        "confidence": confidence,
-                        "title": classification.get("title"),
-                        "summary": classification.get("summary"),
-                        "destination": str(dest_path),
-                        "processed_id": entry_id
-                    }
-                    return state
-
-        # === NEW FILE: Create new entry ===
         processed_id = None
+
         # Apply bouncer (confidence gating)
         if confidence >= CONFIDENCE_THRESHOLD:
             # High confidence: store in brain
@@ -538,6 +620,7 @@ def handle(state: OrchestratorState) -> OrchestratorState:
         }
 
     except Exception as e:
+        logger.error(f"Brain handler error: {e}", exc_info=True)
         state["error"] = f"Brain handler error: {str(e)}"
         state["result"] = {"action": "error", "error": str(e)}
 

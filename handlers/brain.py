@@ -217,23 +217,8 @@ def write_to_brain(content: str, classification: dict, source_file: Optional[str
         file_path = target_dir / filename
         counter += 1
 
-    # Create note with frontmatter (escape values to prevent YAML breakage)
-    # Include jsonld_path for traceability back to source of truth
-    jsonld_ref = str(jsonld_path) if jsonld_path else "none"
-    frontmatter = f"""---
-id: "{note_id}"
-title: "{yaml_escape(title)}"
-category: "{category}"
-confidence: {confidence:.2f}
-summary: "{yaml_escape(summary)}"
-classified_at: "{timestamp.isoformat()}"
-classifier: "{OllamaAdapter.FAST_MODEL}"
-source_file: "{yaml_escape(source_file) if source_file else 'direct'}"
-jsonld_source: "{yaml_escape(jsonld_ref)}"
----
-
-"""
-    file_path.write_text(frontmatter + content, encoding="utf-8")
+    # Content only - no frontmatter (metadata lives in JSON-LD, the source of truth)
+    file_path.write_text(content, encoding="utf-8")
     logger.info(f"Written to Obsidian: {file_path}")
     return file_path, note_id
 
@@ -317,24 +302,8 @@ def write_to_needs_review(content: str, classification: dict, source_file: Optio
         file_path = NEEDS_REVIEW_DIR / filename
         counter += 1
 
-    # Create note with classification metadata for manual review (escape values)
-    jsonld_ref = str(jsonld_path) if jsonld_path else "none"
-    frontmatter = f"""---
-id: "{note_id}"
-suggested_category: "{classification.get('category', 'unknown')}"
-confidence: {classification.get('confidence', 0.0):.2f}
-suggested_title: "{yaml_escape(title)}"
-suggested_summary: "{yaml_escape(classification.get('summary', ''))}"
-classified_at: "{timestamp.isoformat()}"
-classifier: "{OllamaAdapter.FAST_MODEL}"
-source_file: "{yaml_escape(source_file) if source_file else 'direct'}"
-jsonld_source: "{yaml_escape(jsonld_ref)}"
-needs_review: true
----
-
-{content}
-"""
-    file_path.write_text(frontmatter, encoding="utf-8")
+    # Content only - no frontmatter (metadata lives in JSON-LD, the source of truth)
+    file_path.write_text(content, encoding="utf-8")
     logger.info(f"Written to Obsidian (needs_review): {file_path}")
     return file_path
 
@@ -409,22 +378,8 @@ def update_brain_entry(
         logger.error(f"Failed to update SQLite: {e}")
 
     # === UPDATE 2: Obsidian File ===
-    timestamp = datetime.now(timezone.utc)
-
-    # Recreate frontmatter with updated info
-    frontmatter = f"""---
-id: "{entry_id}"
-title: "{yaml_escape(title)}"
-category: "{new_category}"
-confidence: {confidence:.2f}
-summary: "{yaml_escape(summary)}"
-classified_at: "{timestamp.isoformat()}"
-classifier: "{OllamaAdapter.FAST_MODEL}"
-source_file: "{yaml_escape(source_file) if source_file else 'direct'}"
----
-
-"""
-    old_path.write_text(frontmatter + content, encoding="utf-8")
+    # Content only - no frontmatter (metadata lives in JSON-LD, the source of truth)
+    old_path.write_text(content, encoding="utf-8")
     logger.info(f"Updated Obsidian file: {old_path}")
 
     return old_path, category_changed

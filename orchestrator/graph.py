@@ -1,4 +1,12 @@
-"""LangGraph workflow definition for the Second Brain orchestrator."""
+"""LangGraph workflow definition for the Second Brain orchestrator.
+
+Pipeline flow:
+    detect_intent → route_by_intent → handler (brain/task) → END
+
+Simplified to 2 handlers:
+- brain: notes, ideas, memories, references, questions
+- task: todos, action items, reminders, appointments (stub for now)
+"""
 import sys
 from pathlib import Path
 
@@ -7,31 +15,29 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from langgraph.graph import StateGraph, END
 
-from orchestrator.state import OrchestratorState
+from orchestrator.state import PipelineState
 from orchestrator.intent import detect_intent, route_by_intent
-from handlers import brain, chat, calendar, task
+from handlers import brain, task
 
 
 def create_orchestrator():
     """Create and compile the LangGraph orchestrator workflow.
 
     The workflow:
-    1. Receives input text
+    1. Receives input text (from a READY file)
     2. Detects intent using the fast model
-    3. Routes to appropriate handler based on intent
+    3. Routes to brain or task handler based on intent
     4. Handler processes the input and returns result
 
     Returns:
         Compiled LangGraph workflow ready for invocation
     """
     # Create the state graph
-    graph = StateGraph(OrchestratorState)
+    graph = StateGraph(PipelineState)
 
     # Add nodes
     graph.add_node("detect_intent", detect_intent)
     graph.add_node("brain_handler", brain.handle)
-    graph.add_node("chat_handler", chat.handle)
-    graph.add_node("calendar_handler", calendar.handle)
     graph.add_node("task_handler", task.handle)
 
     # Set entry point
@@ -43,16 +49,12 @@ def create_orchestrator():
         route_by_intent,
         {
             "brain_handler": "brain_handler",
-            "chat_handler": "chat_handler",
-            "calendar_handler": "calendar_handler",
             "task_handler": "task_handler"
         }
     )
 
     # All handlers terminate the graph
     graph.add_edge("brain_handler", END)
-    graph.add_edge("chat_handler", END)
-    graph.add_edge("calendar_handler", END)
     graph.add_edge("task_handler", END)
 
     # Compile and return
@@ -65,10 +67,10 @@ if __name__ == "__main__":
 
     # Test cases
     test_inputs = [
-        "Meeting with John at 5pm Thursday",
-        "What's the capital of France?",
         "Remember to buy milk",
+        "What's the capital of France?",
         "Interesting idea about neural networks and consciousness...",
+        "Meeting with John at 5pm Thursday",
     ]
 
     print("Testing orchestrator with sample inputs:\n")

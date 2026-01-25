@@ -1,22 +1,25 @@
 """File watcher logic for inbox processing.
 
-Simple flow:
-1. New file appears → process → write to Memory folder
-2. Same file gets edited → update the processed version immediately
-3. No timers, no graduation - just seamless updates
+Flow with debounce:
+1. New file appears → enters SETTLING state
+2. File stable for 10s → transitions to READY → process
+3. File edited again → back to SETTLING → wait for quiet
+4. Idle 1 hour → STALE → archive to processed folder
 
-File tracking (deduplication, change detection) is handled by the
-database via source_filename + content_hash columns. No separate
-staging registry needed.
+The FileTracker provides the debounce to prevent mid-type interruptions.
+Deduplication (new vs update) is handled by database via content_hash.
 """
 import logging
 import time
 import re
+import hashlib
 import traceback
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Callable
 from dataclasses import dataclass, field
+
+from .file_tracker import FileTracker, FileState
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +49,7 @@ class InboxWatcher:
         self.file_pattern = file_pattern
         self.cleanup_days = cleanup_days
         self._running = False
+        self.tracker = FileTracker()
 
         # Ensure directories exist
         for source in self.sources:
@@ -58,6 +62,11 @@ class InboxWatcher:
         frontmatter_pattern = r'^---\s*\n.*?\n---\s*\n'
         content = re.sub(frontmatter_pattern, '', content, flags=re.DOTALL)
         return content.strip()
+
+    def _get_content_hash(self, file_path: Path) -> str:
+        """Get SHA-256 hash of file content (first 16 chars)."""
+        content = file_path.read_text(encoding="utf-8")
+        return hashlib.sha256(content.encode()).hexdigest()[:16]
 
     def move_to_processed(self, file_path: Path) -> Path:
         """Move a file to the processed directory."""
@@ -113,17 +122,48 @@ class InboxWatcher:
 
         return deleted
 
+    def cleanup_stale_files(self) -> int:
+        """Archive files that have been idle for 1 hour (STALE state).
+
+        These are 'finished' notes - user stopped editing, safe to archive.
+        The FileTracker manages the STALE state based on last modification time.
+        """
+        archived = 0
+
+        for file_path in self.tracker.get_stale():
+            try:
+                self.move_to_processed(file_path)
+                self.tracker.remove(file_path)
+                archived += 1
+                logger.info(f"Archived stale file: {file_path.name}")
+            except Exception as e:
+                logger.error(f"Failed to archive {file_path.name}: {e}")
+
+        return archived
+
     def process_files(self, processor: Callable) -> list[dict]:
         """Process files through the brain handler.
 
-        File tracking (new vs update, change detection) is handled by
-        the brain handler via database lookups. The watcher just passes
-        files to the processor and moves them when done.
+        Uses FileTracker for debounce:
+        1. Update all file states based on modification time
+        2. Only process files in READY state (stable for 10s)
+        3. Mark processed files so they don't re-process until edited
         """
         results = []
-        files_to_process = self.scan_sources()
 
-        for file_path, source in files_to_process:
+        # First pass: update all file states
+        for file_path, source in self.scan_sources():
+            try:
+                mtime = file_path.stat().st_mtime
+                state = self.tracker.update(file_path, mtime)
+
+                if state == FileState.SETTLING:
+                    logger.debug(f"Settling: {file_path.name}")
+            except Exception as e:
+                logger.error(f"Failed to stat {file_path.name}: {e}")
+
+        # Second pass: process only READY files
+        for file_path in self.tracker.get_ready():
             original_name = file_path.name
             try:
                 content = self.read_file_content(file_path)
@@ -131,25 +171,23 @@ class InboxWatcher:
                 if not content:
                     logger.info(f"Skipping empty file: {original_name}")
                     self.move_to_processed(file_path)
+                    self.tracker.remove(file_path)
                     results.append({
                         "file": original_name,
-                        "source": str(source.path),
                         "result": {"action": "skipped", "reason": "empty content"}
                     })
                     continue
 
                 # Process the file - brain handler does deduplication via database
                 result = processor(content, str(file_path))
-
                 action = result.get("result", {}).get("action", "unknown")
 
-                # Move to processed unless skipped (unchanged)
-                if action != "skipped":
-                    self.move_to_processed(file_path)
+                # Mark as processed (stays in inbox for potential re-editing)
+                content_hash = self._get_content_hash(file_path)
+                self.tracker.mark_processed(file_path, content_hash)
 
                 results.append({
                     "file": original_name,
-                    "source": str(source.path),
                     "result": result,
                     "action_type": action
                 })
@@ -159,7 +197,6 @@ class InboxWatcher:
                 logger.error(f"Failed to process {original_name}: {e}\n{error_tb}")
                 results.append({
                     "file": original_name,
-                    "source": str(source.path),
                     "error": str(e),
                     "traceback": error_tb
                 })
@@ -174,6 +211,8 @@ class InboxWatcher:
             exclude_info = f", excluding: {', '.join(source.exclude_folders)}" if source.exclude_folders else ""
             print(f"  - {source.path}{exclude_info}")
         print(f"Poll interval: {self.poll_interval}s")
+        print(f"Debounce: {FileTracker.SETTLE_SECONDS}s settle before process")
+        print(f"Archive: after {FileTracker.STALE_SECONDS // 3600}hr idle")
         if self.cleanup_days > 0:
             print(f"Cleanup: processed files older than {self.cleanup_days} days")
         print("Press Ctrl+C to stop\n")
@@ -183,6 +222,11 @@ class InboxWatcher:
                 deleted = self.cleanup_old_processed()
                 if deleted > 0:
                     print(f"[CLEANUP] Deleted {deleted} old processed file(s)")
+
+                # Archive stale files (1 hour without edits)
+                stale = self.cleanup_stale_files()
+                if stale > 0:
+                    print(f"[ARCHIVE] Moved {stale} stale file(s) to processed")
 
                 results = self.process_files(processor)
 

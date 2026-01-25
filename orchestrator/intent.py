@@ -1,4 +1,9 @@
-"""Intent detection for the orchestrator."""
+"""Intent detection for the orchestrator.
+
+Simplified to 2 intents:
+- brain: notes, ideas, memories, references, questions
+- task: todos, action items, reminders, appointments
+"""
 import sys
 from pathlib import Path
 
@@ -6,34 +11,34 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from adapters.ollama import OllamaAdapter
-from orchestrator.state import OrchestratorState
+from orchestrator.state import PipelineState
 
 
 INTENT_PROMPT = """Analyze this input and determine the user's intent.
 Return ONLY valid JSON with no extra text: {"intent": "<type>", "confidence": <0.0-1.0>}
 
 Intent types:
-- brain: storing a thought, note, memory, observation, idea, reference
-- chat: asking a question, wanting a conversation, seeking information
-- calendar: scheduling, meetings, appointments, dates, reminders with specific times
-- task: creating a todo, action item, task without specific time
+- brain: storing a thought, note, memory, observation, idea, reference, question
+- task: creating a todo, action item, task, reminder, appointment
 
 Examples:
-- "Meeting with John at 5pm Thursday" -> {"intent": "calendar", "confidence": 0.95}
-- "What's the capital of France?" -> {"intent": "chat", "confidence": 0.90}
-- "Remember to buy milk" -> {"intent": "task", "confidence": 0.85}
+- "What's the capital of France?" -> {"intent": "brain", "confidence": 0.85}
+- "Remember to buy milk" -> {"intent": "task", "confidence": 0.90}
+- "Meeting with John at 5pm Thursday" -> {"intent": "task", "confidence": 0.95}
 - "Interesting idea about neural networks..." -> {"intent": "brain", "confidence": 0.88}
+- "Research shows that climate patterns..." -> {"intent": "brain", "confidence": 0.92}
+- "Call mom tomorrow" -> {"intent": "task", "confidence": 0.88}
 
 Input: {input_text}
 
 JSON response:"""
 
 
-def detect_intent(state: OrchestratorState) -> OrchestratorState:
+def detect_intent(state: PipelineState) -> PipelineState:
     """Detect the intent of the input text using the fast model.
 
     Args:
-        state: Current orchestrator state
+        state: Current pipeline state
 
     Returns:
         Updated state with intent and confidence
@@ -55,9 +60,9 @@ def detect_intent(state: OrchestratorState) -> OrchestratorState:
         state["intent_confidence"] = float(result.get("confidence", 0.0))
 
         # Validate intent type
-        valid_intents = {"brain", "chat", "calendar", "task", "unknown"}
+        valid_intents = {"brain", "task", "unknown"}
         if state["intent"] not in valid_intents:
-            state["intent"] = "unknown"
+            state["intent"] = "brain"  # Default to brain for unknown intents
 
     except Exception as e:
         # On error, default to brain (safest fallback)
@@ -68,11 +73,11 @@ def detect_intent(state: OrchestratorState) -> OrchestratorState:
     return state
 
 
-def route_by_intent(state: OrchestratorState) -> str:
+def route_by_intent(state: PipelineState) -> str:
     """Route to the appropriate handler based on detected intent.
 
     Args:
-        state: Current orchestrator state with intent
+        state: Current pipeline state with intent
 
     Returns:
         Handler node name to route to
@@ -82,8 +87,6 @@ def route_by_intent(state: OrchestratorState) -> str:
     # Map intent to handler node names
     routes = {
         "brain": "brain_handler",
-        "chat": "chat_handler",
-        "calendar": "calendar_handler",
         "task": "task_handler",
         "unknown": "brain_handler"  # Default to brain for unknown
     }

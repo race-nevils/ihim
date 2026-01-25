@@ -30,6 +30,9 @@ OBSIDIAN_INBOX = InboxSource(
 def create_processor(orchestrator):
     """Create a processor function that uses the orchestrator.
 
+    Living Editable Zone pattern is handled by the brain handler via
+    database lookups (source_filename + content_hash columns).
+
     Args:
         orchestrator: Compiled LangGraph orchestrator
 
@@ -37,10 +40,21 @@ def create_processor(orchestrator):
         Processor function compatible with InboxWatcher
     """
     def processor(content: str, source_file: str) -> dict:
-        result = orchestrator.invoke({
+        """Process content through orchestrator.
+
+        Args:
+            content: File content to process
+            source_file: Path to source file
+
+        Returns:
+            Orchestrator result dict
+        """
+        state = {
             "input_text": content,
             "source_file": source_file
-        })
+        }
+
+        result = orchestrator.invoke(state)
         return result
 
     return processor
@@ -63,7 +77,7 @@ def main():
         sources=[DESKTOP_INBOX, OBSIDIAN_INBOX],
         processed_path=PROCESSED_PATH,
         poll_interval=2.0,
-        cleanup_days=7  # Auto-delete processed files older than 7 days
+        cleanup_days=14  # Auto-delete processed files older than 14 days
     )
 
     # Create processor

@@ -1,4 +1,20 @@
-"""State schema for the orchestrator graph."""
+"""State schema for the orchestrator graph.
+
+ARCHITECTURE NOTE
+=================
+This state flows through the LangGraph orchestrator pipeline:
+    detect_intent → route → handler → result
+
+The result ultimately drives:
+1. JSON-LD file creation (source of truth)
+2. Database index update (derived)
+3. Markdown generation (derived, for Obsidian)
+
+File tracking (deduplication, update-in-place) is handled by the
+database via source_filename + content_hash columns.
+
+See CLAUDE.md → iHIM Data Architecture for full context.
+"""
 from typing import TypedDict, Literal, Optional, Any
 
 

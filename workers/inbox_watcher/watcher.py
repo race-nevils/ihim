@@ -165,20 +165,24 @@ class InboxWatcher:
         # Second pass: process only READY files
         for file_path in self.tracker.get_ready():
             original_name = file_path.name
+
+            # Mark as PROCESSING immediately to prevent race condition
+            # Other poll cycles will see PROCESSING and skip this file
+            self.tracker.mark_processing(file_path)
+
             try:
                 content = self.read_file_content(file_path)
 
                 if not content:
-                    logger.info(f"Skipping empty file: {original_name}")
-                    self.move_to_processed(file_path)
-                    self.tracker.remove(file_path)
-                    results.append({
-                        "file": original_name,
-                        "result": {"action": "skipped", "reason": "empty content"}
-                    })
+                    # Empty file - skip processing but DON'T move
+                    # File stays in inbox until STALE (1hr idle), then archives
+                    # This prevents premature removal while user is still typing
+                    logger.debug(f"Empty content, skipping: {original_name}")
+                    self.tracker.mark_processed(file_path, "empty")
                     continue
 
                 # Process the file - brain handler does deduplication via database
+                # This is a slow LLM call, but we're safe because we marked PROCESSING
                 result = processor(content, str(file_path))
                 action = result.get("result", {}).get("action", "unknown")
 
@@ -195,6 +199,10 @@ class InboxWatcher:
             except Exception as e:
                 error_tb = traceback.format_exc()
                 logger.error(f"Failed to process {original_name}: {e}\n{error_tb}")
+                # Revert to READY so it can be retried on next poll
+                # (mark_processing set it to PROCESSING, but processing failed)
+                if file_path in self.tracker.files:
+                    self.tracker.files[file_path].state = FileState.READY
                 results.append({
                     "file": original_name,
                     "error": str(e),

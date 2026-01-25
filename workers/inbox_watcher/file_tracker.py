@@ -19,6 +19,7 @@ class FileState(Enum):
     """Lifecycle states for tracked files."""
     SETTLING = "settling"    # Modified recently, waiting for quiet
     READY = "ready"          # Quiet for 10s, ready to process
+    PROCESSING = "processing"  # Currently being processed (prevents race condition)
     PROCESSED = "processed"  # Brain entry created/updated
     STALE = "stale"          # Idle 1hr, ready to archive
 
@@ -94,11 +95,23 @@ class FileTracker:
             if quiet_time >= self.SETTLE_SECONDS:
                 tracked.state = FileState.READY
 
+        # PROCESSING stays as PROCESSING until explicitly marked PROCESSED
+        # This prevents race conditions during slow LLM calls
+
         elif tracked.state == FileState.PROCESSED:
             if quiet_time >= self.STALE_SECONDS:
                 tracked.state = FileState.STALE
 
         return tracked.state
+
+    def mark_processing(self, path: Path):
+        """Mark file as currently being processed (prevents race condition).
+
+        Call this BEFORE starting the slow LLM call to prevent
+        other poll cycles from re-processing the same file.
+        """
+        if path in self.files:
+            self.files[path].state = FileState.PROCESSING
 
     def mark_processed(self, path: Path, content_hash: str):
         """Mark file as processed with its content hash."""

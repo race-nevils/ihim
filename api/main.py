@@ -55,6 +55,20 @@ except ImportError as e:
     print(f"Warning: System health module not available: {e}")
     SYSTEM_HEALTH_AVAILABLE = False
 
+# Import cleanup module
+try:
+    from data.cleanup import (
+        run_integrity_report,
+        run_cleanup,
+        cleanup_orphaned_entries,
+        cleanup_stale_processed,
+        cleanup_test_artifacts
+    )
+    CLEANUP_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Cleanup module not available: {e}")
+    CLEANUP_AVAILABLE = False
+
 # Import commands module
 try:
     from api.commands.routes import router as slash_commands_router
@@ -360,6 +374,70 @@ async def system_node_details(node_id: str):
             "metrics": health.metrics if health else {},
         }
     }
+
+
+# =============================================================================
+# CLEANUP ENDPOINTS (Database Maintenance)
+# =============================================================================
+
+@app.get("/api/cleanup/report")
+async def cleanup_report():
+    """
+    Get integrity report for the brain database.
+
+    Returns counts of entries, issues found (orphans, duplicates, stale files).
+    """
+    if not CLEANUP_AVAILABLE:
+        return {"error": "Cleanup module not available"}
+
+    report = run_integrity_report()
+    return {"success": True, **report}
+
+
+@app.post("/api/cleanup/run")
+async def cleanup_run(dry_run: bool = True):
+    """
+    Run cleanup cycle on the brain database.
+
+    Args:
+        dry_run: If true (default), only report what would be done.
+                 Set to false to actually delete.
+    """
+    if not CLEANUP_AVAILABLE:
+        return {"error": "Cleanup module not available"}
+
+    result = run_cleanup(dry_run=dry_run)
+    return {"success": True, **result}
+
+
+@app.post("/api/cleanup/orphans")
+async def cleanup_orphans(dry_run: bool = True):
+    """Clean orphaned database entries (no matching file)."""
+    if not CLEANUP_AVAILABLE:
+        return {"error": "Cleanup module not available"}
+
+    result = cleanup_orphaned_entries(dry_run=dry_run)
+    return {"success": True, **result}
+
+
+@app.post("/api/cleanup/stale")
+async def cleanup_stale(max_age_days: int = 7, dry_run: bool = True):
+    """Clean stale files from processed folder."""
+    if not CLEANUP_AVAILABLE:
+        return {"error": "Cleanup module not available"}
+
+    result = cleanup_stale_processed(max_age_days=max_age_days, dry_run=dry_run)
+    return {"success": True, **result}
+
+
+@app.post("/api/cleanup/artifacts")
+async def cleanup_artifacts(dry_run: bool = True):
+    """Clean test artifacts from brain folders."""
+    if not CLEANUP_AVAILABLE:
+        return {"error": "Cleanup module not available"}
+
+    result = cleanup_test_artifacts(dry_run=dry_run)
+    return {"success": True, **result}
 
 
 # =============================================================================

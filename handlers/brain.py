@@ -48,22 +48,29 @@ OBSIDIAN_MEMORY = WORKSPACE_ROOT / "Obsidian Vault" / "iHIM" / "iHIM Memory"
 NEEDS_REVIEW_DIR = OBSIDIAN_MEMORY / "needs_review"
 
 # Valid categories
-CATEGORIES = ["People", "Projects", "Ideas", "Admin"]
+CATEGORIES = ["People", "Projects", "Ideas", "Admin", "Tasks"]
 
 # Confidence threshold
 CONFIDENCE_THRESHOLD = 0.7
 
 
-CLASSIFY_PROMPT = """Classify this note into ONE category: People, Projects, Ideas, or Admin.
+CLASSIFY_PROMPT = """Classify this note into ONE category: People, Projects, Ideas, Admin, or Tasks.
 
-Categories:
-- People: notes about individuals, conversations, relationships
-- Projects: work items, technical projects, goals with deliverables
-- Ideas: thoughts, concepts, theories, brainstorming, creative content
-- Admin: logistics, scheduling, finances, household, routine tasks
+Categories (choose the BEST fit):
+- People: individuals, relationships, conversations, contact info, "talked to...", "meeting with..."
+- Projects: active initiatives with deliverables, technical work, goals, milestones, "working on..."
+- Ideas: concepts, theories, brainstorming, explorations, creative thoughts, "what if...", "maybe we could..."
+- Admin: reference info, logistics, finances, household management, documentation, static records
+- Tasks: action items, todos, things to complete, "need to...", "should...", "don't forget...", reminders
+
+Key distinctions:
+- Tasks are ACTIONS to complete (has a done/not-done state)
+- Admin is REFERENCE info or ongoing maintenance (no completion state)
+- Projects are INITIATIVES with multiple steps over time
+- Ideas are EXPLORATIONS without commitment
 
 Return ONLY valid JSON with no extra text:
-{{"category": "<People|Projects|Ideas|Admin>", "confidence": <0.0-1.0>, "summary": "<1 sentence summary>", "title": "<short title, 3-5 words>"}}
+{{"category": "<People|Projects|Ideas|Admin|Tasks>", "confidence": <0.0-1.0>, "summary": "<1 sentence summary>", "title": "<short title, 3-5 words>"}}
 
 Note: {content}
 
@@ -71,13 +78,28 @@ JSON response:"""
 
 
 def slugify(text: str) -> str:
-    """Convert text to a filename-safe slug."""
+    """Convert text to a filename-safe slug (for JSON-LD layer)."""
     # Lowercase, replace spaces with hyphens, remove special chars
     text = text.lower().strip()
     text = re.sub(r'[^\w\s-]', '', text)
     text = re.sub(r'[\s_]+', '-', text)
     text = re.sub(r'-+', '-', text)
     return text[:50]  # Limit length
+
+
+def sanitize_title(text: str) -> str:
+    """Sanitize title for use as Obsidian filename (human-readable, title case).
+
+    Removes characters not allowed in Windows filenames while preserving
+    readability: \\ / : * ? \" < > |
+    """
+    text = text.strip()
+    # Remove Windows-forbidden characters
+    text = re.sub(r'[\\/:*?"<>|]', '', text)
+    # Collapse multiple spaces
+    text = re.sub(r'\s+', ' ', text)
+    # Limit length (Obsidian handles long names poorly)
+    return text[:60]
 
 
 def compute_content_hash(content: str) -> str:
@@ -180,16 +202,18 @@ def write_to_brain(content: str, classification: dict, source_file: Optional[str
         # Continue to Obsidian write even if SQLite fails
 
     # === WRITE 3: Obsidian Memory (Human View) ===
+    # Obsidian uses Title-only naming (human-readable, GUI layer)
     target_dir = OBSIDIAN_MEMORY / category
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    filename = f"{slug}-{date_str}.md"
+    display_title = sanitize_title(title)
+    filename = f"{display_title}.md"
     file_path = target_dir / filename
 
-    # Handle collisions
+    # Handle collisions (Obsidian-style numbering)
     counter = 1
     while file_path.exists():
-        filename = f"{slug}-{date_str}-{counter}.md"
+        filename = f"{display_title} {counter}.md"
         file_path = target_dir / filename
         counter += 1
 
@@ -279,10 +303,19 @@ def write_to_needs_review(content: str, classification: dict, source_file: Optio
         logger.error(f"Failed to write needs_review to SQLite: {e}")
 
     # === WRITE 3: Obsidian Memory needs_review folder (Human View) ===
+    # Title-only naming for consistency with main categories
     NEEDS_REVIEW_DIR.mkdir(parents=True, exist_ok=True)
 
-    filename = f"review-{timestamp.strftime('%Y%m%d-%H%M%S')}.md"
+    display_title = sanitize_title(title)
+    filename = f"{display_title}.md"
     file_path = NEEDS_REVIEW_DIR / filename
+
+    # Handle collisions
+    counter = 1
+    while file_path.exists():
+        filename = f"{display_title} {counter}.md"
+        file_path = NEEDS_REVIEW_DIR / filename
+        counter += 1
 
     # Create note with classification metadata for manual review (escape values)
     jsonld_ref = str(jsonld_path) if jsonld_path else "none"
@@ -348,15 +381,15 @@ def update_brain_entry(
         old_category = old_path.parent.name
         if old_category != new_category and old_category in CATEGORIES:
             category_changed = True
-            # Move to new category folder
+            # Move to new category folder (preserve title-only naming)
             new_dir = OBSIDIAN_MEMORY / new_category
             new_dir.mkdir(parents=True, exist_ok=True)
             new_path = new_dir / old_path.name
-            # Handle collision in new location
+            # Handle collision in new location (Obsidian-style numbering)
             counter = 1
             while new_path.exists():
                 stem = old_path.stem
-                new_path = new_dir / f"{stem}-{counter}.md"
+                new_path = new_dir / f"{stem} {counter}.md"
                 counter += 1
             old_path.rename(new_path)
             old_path = new_path

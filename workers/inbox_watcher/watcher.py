@@ -251,8 +251,8 @@ class InboxWatcher:
                             print(f"[NEW] {result['file']} -> {category}")
                         elif action in ("updated", "updated_reclassified"):
                             print(f"[UPDATE] {result['file']} -> {category}")
-                        elif action == "needs_review":
-                            print(f"[REVIEW] {result['file']} -> needs_review")
+                        elif action == "misc":
+                            print(f"[MISC] {result['file']} -> Misc")
                         elif action == "skipped":
                             pass  # Silent skip for unchanged files
                         else:

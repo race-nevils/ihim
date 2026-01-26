@@ -9,12 +9,14 @@ ollama:
 
 # Brain handler settings
 brain:
-  confidence_threshold: 0.7  # Below this -> needs_review
+  confidence_threshold: 0.7  # Below this -> Misc
   categories:
     - People
     - Projects
     - Ideas
     - Admin
+    - Tasks
+    - Misc
 
 # Inbox watcher settings
 watcher:
@@ -26,7 +28,7 @@ paths:
   data_root: "data/local/brain"
   inbox: "data/local/brain/inbox"
   processed: "data/local/brain/processed"
-  needs_review: "data/local/brain/needs_review"
+  misc: "data/local/brain/Misc"
   logs: "data/local/brain/logs"
 
 # Intent routing

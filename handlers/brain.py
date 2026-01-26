@@ -47,10 +47,10 @@ LOGS_DIR = DATA_DIR / "logs"
 
 # Paths - human layer (Obsidian)
 OBSIDIAN_MEMORY = WORKSPACE_ROOT / "Obsidian Vault" / "iHIM" / "iHIM Memory"
-NEEDS_REVIEW_DIR = OBSIDIAN_MEMORY / "needs_review"
+MISC_DIR = OBSIDIAN_MEMORY / "Misc"
 
-# Valid categories
-CATEGORIES = ["People", "Projects", "Ideas", "Admin", "Tasks"]
+# Valid categories (Misc is catch-all for low-confidence items)
+CATEGORIES = ["People", "Projects", "Ideas", "Admin", "Tasks", "Misc"]
 
 # Confidence threshold
 CONFIDENCE_THRESHOLD = 0.7
@@ -322,9 +322,12 @@ def write_to_brain(content: str, classification: dict, source_file: Optional[str
     return file_path, note_id
 
 
-def write_to_needs_review(content: str, classification: dict, source_file: Optional[str] = None,
-                          source_filename: Optional[str] = None) -> Path:
-    """Write a low-confidence note to needs_review (JSON-LD, SQLite, and Obsidian).
+def write_to_misc(content: str, classification: dict, source_file: Optional[str] = None,
+                  source_filename: Optional[str] = None) -> tuple[Path, str]:
+    """Write a low-confidence note to Misc (JSON-LD, SQLite, and Obsidian).
+
+    Misc is the catch-all category for items that don't clearly fit elsewhere.
+    No human review needed - they just live in Misc.
 
     Args:
         content: The note content
@@ -333,13 +336,13 @@ def write_to_needs_review(content: str, classification: dict, source_file: Optio
         source_filename: Optional original inbox filename (for deduplication)
 
     Returns:
-        Path to the created Obsidian file
+        Tuple of (Path to Obsidian file, note_id)
     """
     timestamp = datetime.now(timezone.utc)
     date_str = timestamp.strftime("%Y%m%d")
-    title = classification.get('title', 'needs review')
+    title = classification.get('title', 'untitled')
     slug = slugify(title)
-    note_id = f"review-{timestamp.strftime('%Y%m%d%H%M%S')}-{slug[:8]}"
+    note_id = f"misc-{timestamp.strftime('%Y%m%d%H%M%S')}-{slug[:8]}"
 
     # Compute content hash for file tracking
     content_hash = compute_content_hash(content)
@@ -350,7 +353,7 @@ def write_to_needs_review(content: str, classification: dict, source_file: Optio
         jsonld_doc = create_brain_entry_jsonld(
             entry_id=note_id,
             title=title,
-            category="needs_review",
+            category="Misc",
             content=content,
             summary=classification.get('summary', ''),
             confidence=classification.get('confidence', 0.0),
@@ -359,20 +362,19 @@ def write_to_needs_review(content: str, classification: dict, source_file: Optio
             slug=slug,
             date_str=date_str
         )
-        # Add review-specific metadata
+        # Store original suggested category for reference
         jsonld_doc["ihim:suggestedCategory"] = classification.get('category', 'unknown')
-        jsonld_doc["ihim:needsReview"] = True
-        jsonld_path = write_jsonld(jsonld_doc, "needs_review", slug, date_str)
-        logger.info(f"Written to JSON-LD (needs_review): {jsonld_path}")
+        jsonld_path = write_jsonld(jsonld_doc, "Misc", slug, date_str)
+        logger.info(f"Written to JSON-LD (Misc): {jsonld_path}")
     except Exception as e:
-        logger.error(f"Failed to write needs_review JSON-LD: {e}")
+        logger.error(f"Failed to write Misc JSON-LD: {e}")
 
-    # === WRITE 2: SQLite Database (with needs_review category) ===
+    # === WRITE 2: SQLite Database ===
     try:
         insert_entry({
             "id": note_id,
             "title": title,
-            "category": "needs_review",  # Special category for low confidence
+            "category": "Misc",
             "content": content,
             "summary": classification.get('summary', ''),
             "confidence": classification.get('confidence', 0.0),
@@ -381,31 +383,30 @@ def write_to_needs_review(content: str, classification: dict, source_file: Optio
             "source_filename": source_filename,
             "content_hash": content_hash,
             "jsonld_path": str(jsonld_path) if jsonld_path else None,
-            "first_seen_at": timestamp.isoformat()  # Stable identity for dedup
+            "first_seen_at": timestamp.isoformat()
         })
-        logger.info(f"Written to SQLite (needs_review): {note_id}")
+        logger.info(f"Written to SQLite (Misc): {note_id}")
     except Exception as e:
-        logger.error(f"Failed to write needs_review to SQLite: {e}")
+        logger.error(f"Failed to write Misc to SQLite: {e}")
 
-    # === WRITE 3: Obsidian Memory needs_review folder (Human View) ===
-    # Title-only naming for consistency with main categories
-    NEEDS_REVIEW_DIR.mkdir(parents=True, exist_ok=True)
+    # === WRITE 3: Obsidian Memory Misc folder (Human View) ===
+    MISC_DIR.mkdir(parents=True, exist_ok=True)
 
     display_title = sanitize_title(title)
     filename = f"{display_title}.md"
-    file_path = NEEDS_REVIEW_DIR / filename
+    file_path = MISC_DIR / filename
 
     # Handle collisions
     counter = 1
     while file_path.exists():
         filename = f"{display_title} {counter}.md"
-        file_path = NEEDS_REVIEW_DIR / filename
+        file_path = MISC_DIR / filename
         counter += 1
 
     # Content only - no frontmatter (metadata lives in JSON-LD, the source of truth)
     file_path.write_text(content, encoding="utf-8")
-    logger.info(f"Written to Obsidian (needs_review): {file_path}")
-    return file_path
+    logger.info(f"Written to Obsidian (Misc): {file_path}")
+    return file_path, note_id
 
 
 def update_brain_entry(
@@ -491,7 +492,7 @@ def log_receipt(state: OrchestratorState, classification: dict, action: str, des
     Args:
         state: The orchestrator state
         classification: The classification result
-        action: What was done (e.g., "classified", "needs_review")
+        action: What was done (e.g., "classified", "misc", "updated")
         destination: Where the file was written
     """
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -626,11 +627,11 @@ def handle(state: OrchestratorState) -> OrchestratorState:
             )
             action = "classified"
         else:
-            # Low confidence: needs review
-            dest_path = write_to_needs_review(
+            # Low confidence: store in Misc (catch-all)
+            dest_path, processed_id = write_to_misc(
                 content, classification, source_file, source_filename
             )
-            action = "needs_review"
+            action = "misc"
 
         # Log receipt
         log_receipt(state, classification, action, dest_path)

@@ -72,7 +72,7 @@ Key distinctions:
 - Ideas are EXPLORATIONS without commitment
 
 Return ONLY valid JSON with no extra text:
-{{"category": "<People|Projects|Ideas|Admin|Tasks>", "confidence": <0.0-1.0>, "summary": "<1 sentence summary>", "title": "<short title, 3-5 words>"}}
+{{"category": "<People|Projects|Ideas|Admin|Tasks>", "confidence": <0.0-1.0>, "summary": "<1 sentence summary>"}}
 
 Note: {content}
 
@@ -110,6 +110,26 @@ def compute_content_hash(content: str) -> str:
     Returns first 16 chars of hex digest (enough for uniqueness).
     """
     return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+
+
+def extract_title(content: str, source_filename: Optional[str] = None) -> str:
+    """Extract title from source filename - DO NOT generate or infer.
+
+    Title = what the user typed as the filename. Period.
+    No inference, no first-line detection, no smartness.
+
+    Args:
+        content: The note content (unused, kept for signature compatibility)
+        source_filename: Original filename (e.g., "My Note.md")
+
+    Returns:
+        Filename stem as title, or "Untitled" if no filename
+    """
+    if source_filename:
+        # Remove extension: "My Note.md" → "My Note"
+        return Path(source_filename).stem
+
+    return "Untitled"
 
 
 def find_matching_entry(source_filename: Optional[str], content: str) -> Optional[dict]:
@@ -582,11 +602,18 @@ def handle(state: OrchestratorState) -> OrchestratorState:
             }
             return state
 
-        # === NEW FILE: LLM classify and create ===
+        # === NEW FILE: Extract title FIRST, then LLM classify ===
+        # Title comes from user input, not LLM generation (prevents hallucination)
+        extracted_title = extract_title(content, source_filename)
+        logger.info(f"Extracted title: {extracted_title}")
+
         classification = adapter.generate_json(
             CLASSIFY_PROMPT.format(content=content),
             model=OllamaAdapter.FAST_MODEL
         )
+
+        # Inject extracted title into classification (LLM no longer generates titles)
+        classification["title"] = extracted_title
 
         confidence = float(classification.get("confidence", 0.0))
         processed_id = None

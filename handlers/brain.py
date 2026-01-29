@@ -59,22 +59,51 @@ def handle(state: OrchestratorState) -> OrchestratorState:
                 state["result"] = {"action": "skipped", "reason": "unchanged"}
                 return state
 
-            # Step 3: Update existing entry
-            obsidian_path, note_id = update_existing(existing, content, content_hash)
+            # Step 3: Content changed - check if file is still live (in inbox)
+            # Live files get reclassified, archived files just update content
+            source_path = Path(source_file) if source_file else None
+            is_live = source_path and source_path.exists() and "processed" not in str(source_path)
 
-            log_receipt(source_file, {
-                "category": existing.get("category"),
-                "title": existing.get("title"),
-                "confidence": existing.get("confidence", 0.0)
-            }, "updated", obsidian_path)
+            if is_live:
+                # Reclassify live files when content changes
+                classification = classify_content(content, source_filename)
+                new_category = classification.get("category")
+                old_category = existing.get("category")
 
-            state["result"] = {
-                "action": "updated",
-                "category": existing.get("category"),
-                "title": existing.get("title"),
-                "destination": str(obsidian_path),
-                "processed_id": note_id
-            }
+                from handlers.storage import update_with_reclassify
+                obsidian_path, note_id = update_with_reclassify(
+                    existing, content, content_hash, classification
+                )
+
+                action = "updated_reclassified" if new_category != old_category else "updated"
+                log_receipt(source_file, classification, action, obsidian_path)
+
+                state["result"] = {
+                    "action": action,
+                    "category": new_category,
+                    "old_category": old_category if new_category != old_category else None,
+                    "confidence": classification.get("confidence"),
+                    "title": classification.get("title"),
+                    "destination": str(obsidian_path),
+                    "processed_id": note_id
+                }
+            else:
+                # Archived/stale files just update content, keep category
+                obsidian_path, note_id = update_existing(existing, content, content_hash)
+
+                log_receipt(source_file, {
+                    "category": existing.get("category"),
+                    "title": existing.get("title"),
+                    "confidence": existing.get("confidence", 0.0)
+                }, "updated", obsidian_path)
+
+                state["result"] = {
+                    "action": "updated",
+                    "category": existing.get("category"),
+                    "title": existing.get("title"),
+                    "destination": str(obsidian_path),
+                    "processed_id": note_id
+                }
             return state
 
         # Step 4: Classify and store new entry

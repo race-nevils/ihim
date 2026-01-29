@@ -20,22 +20,26 @@ from typing import Any, Callable
 logger = logging.getLogger(__name__)
 
 # Try to import Langfuse (v3.x API changed)
+# Note: Python 3.14 has pydantic v1 compatibility issues with some langfuse versions
 _LANGFUSE_AVAILABLE = False
+_LANGFUSE_VERSION = None
 try:
-    # v3.x: observe is on main module
+    # v3.x: observe is on main module, context via get_current_* functions
     from langfuse import observe as _observe
     from langfuse import get_client
-    _langfuse_context = None  # v3.x uses different context pattern
     _LANGFUSE_AVAILABLE = True
+    _LANGFUSE_VERSION = 3
     logger.info("Langfuse tracing enabled (v3.x)")
-except ImportError:
+except Exception as e:
+    # Catch ALL exceptions (not just ImportError) for Python 3.14 pydantic compat issues
     try:
         # v2.x: observe in decorators submodule
         from langfuse.decorators import observe as _observe, langfuse_context as _langfuse_context
         _LANGFUSE_AVAILABLE = True
+        _LANGFUSE_VERSION = 2
         logger.info("Langfuse tracing enabled (v2.x)")
-    except Exception as e:
-        logger.warning(f"Langfuse not available: {e}")
+    except Exception as e2:
+        logger.warning(f"Langfuse not available: {e} / {e2}")
         _observe = None
         _langfuse_context = None
 
@@ -53,6 +57,37 @@ class _NoOpContext:
     def span(name: str):
         """No-op: would create a tracing span."""
         yield
+
+
+class _V3Context:
+    """Wrapper for Langfuse v3.x context API."""
+
+    @staticmethod
+    def update_current_observation(**kwargs):
+        """Update current observation metadata using v3 API."""
+        try:
+            from langfuse import get_current_span
+            span = get_current_span()
+            if span:
+                # v3.x uses update() method on span
+                span.update(**kwargs)
+        except Exception:
+            pass  # Graceful degradation
+
+    @staticmethod
+    @contextmanager
+    def span(name: str):
+        """Create a tracing span using v3 API."""
+        try:
+            from langfuse import get_current_span
+            parent = get_current_span()
+            if parent:
+                with parent.span(name=name) as child:
+                    yield child
+            else:
+                yield None
+        except Exception:
+            yield None
 
 
 def observe(name: str = None, **kwargs) -> Callable:
@@ -77,8 +112,13 @@ def observe(name: str = None, **kwargs) -> Callable:
     return decorator
 
 
-# Export the context (real or no-op)
-langfuse_context = _langfuse_context if _LANGFUSE_AVAILABLE else _NoOpContext()
+# Export the context (version-appropriate or no-op)
+if _LANGFUSE_VERSION == 3:
+    langfuse_context = _V3Context()
+elif _LANGFUSE_VERSION == 2:
+    langfuse_context = _langfuse_context
+else:
+    langfuse_context = _NoOpContext()
 
 
 @contextmanager
@@ -93,7 +133,7 @@ def TracingSpan(name: str):
     Args:
         name: Name for the span
     """
-    if _LANGFUSE_AVAILABLE:
+    if _LANGFUSE_AVAILABLE and langfuse_context:
         with langfuse_context.span(name=name):
             yield
     else:

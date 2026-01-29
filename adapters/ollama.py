@@ -57,7 +57,8 @@ class OllamaAdapter:
         payload = {
             "model": model,
             "prompt": prompt,
-            "stream": False
+            "stream": False,
+            "options": {"temperature": 0}  # Deterministic output
         }
         if system:
             payload["system"] = system
@@ -90,7 +91,8 @@ class OllamaAdapter:
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "format": "json"
+            "format": "json",
+            "options": {"temperature": 0}  # Deterministic output
         }
         if system:
             payload["system"] = system

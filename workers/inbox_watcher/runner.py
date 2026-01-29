@@ -9,8 +9,12 @@ import os
 import atexit
 from pathlib import Path
 
-# Add IHIM to path for imports
+# Load environment variables before other imports
+from dotenv import load_dotenv
 IHIM_ROOT = Path(__file__).parent.parent.parent
+load_dotenv(IHIM_ROOT.parent / ".env")
+
+# Add IHIM to path for imports (IHIM_ROOT already defined above)
 sys.path.insert(0, str(IHIM_ROOT))
 
 # Lock file to prevent multiple instances

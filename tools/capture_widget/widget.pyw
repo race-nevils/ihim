@@ -196,11 +196,11 @@ class CaptureWidget:
         # Background
         self.input_window.configure(bg=appearance["bg_color"])
 
-        # Calculate position
+        # Calculate position - taller window for two fields
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         win_width = cfg["width"]
-        win_height = cfg["height"]
+        win_height = cfg["height"] + 40  # Extra height for title field
 
         # X is always centered
         x = (screen_width - win_width) // 2
@@ -221,12 +221,29 @@ class CaptureWidget:
         )
         frame.pack(fill=tk.BOTH, expand=True)
 
-        # Create entry widget
+        # Font for entries
         entry_font = tkfont.Font(
             family=appearance.get("font_family", "Segoe UI"),
             size=appearance.get("font_size", 14)
         )
+        title_font = tkfont.Font(
+            family=appearance.get("font_family", "Segoe UI"),
+            size=appearance.get("font_size", 14) - 2
+        )
 
+        # Title entry (smaller, top)
+        self.title_entry = tk.Entry(
+            frame,
+            font=title_font,
+            bg=appearance["bg_color"],
+            fg=appearance["fg_color"],
+            insertbackground=appearance["fg_color"],
+            relief=tk.FLAT,
+            highlightthickness=0
+        )
+        self.title_entry.pack(fill=tk.X, pady=(0, 5))
+
+        # Content entry (main input)
         self.entry = tk.Entry(
             frame,
             font=entry_font,
@@ -239,20 +256,54 @@ class CaptureWidget:
         self.entry.pack(fill=tk.BOTH, expand=True)
 
         # Placeholder text
+        self.title_placeholder = "Title (optional)..."
         self.placeholder = appearance.get("placeholder", "Capture thought...")
         self._set_placeholder()
 
-        # Bindings
+        # Bindings for title entry
+        self.title_entry.bind("<Return>", self._on_title_enter)
+        self.title_entry.bind("<Escape>", self._on_cancel)
+        self.title_entry.bind("<FocusIn>", self._on_title_focus_in)
+        self.title_entry.bind("<FocusOut>", self._on_title_focus_out)
+
+        # Bindings for content entry
         self.entry.bind("<Return>", self._on_submit)
         self.entry.bind("<Escape>", self._on_cancel)
         self.entry.bind("<FocusIn>", self._on_focus_in)
         self.entry.bind("<FocusOut>", self._on_focus_out)
 
     def _set_placeholder(self):
-        """Set placeholder text in entry."""
+        """Set placeholder text in both entries."""
+        # Title placeholder
+        self.title_entry.delete(0, tk.END)
+        self.title_entry.insert(0, self.title_placeholder)
+        self.title_entry.config(fg="#6c7086")  # Dimmed color for placeholder
+        # Content placeholder
         self.entry.delete(0, tk.END)
         self.entry.insert(0, self.placeholder)
         self.entry.config(fg="#6c7086")  # Dimmed color for placeholder
+
+    def _on_title_focus_in(self, event):
+        """Clear title placeholder on focus."""
+        if self.title_entry.get() == self.title_placeholder:
+            self.title_entry.delete(0, tk.END)
+            self.title_entry.config(fg=self.config["appearance"]["fg_color"])
+
+    def _on_title_focus_out(self, event):
+        """Restore title placeholder if empty."""
+        if not self.title_entry.get():
+            self.title_entry.delete(0, tk.END)
+            self.title_entry.insert(0, self.title_placeholder)
+            self.title_entry.config(fg="#6c7086")
+
+    def _on_title_enter(self, event):
+        """Handle Enter in title field - move to content."""
+        self.entry.focus_set()
+        # Clear content placeholder if present
+        if self.entry.get() == self.placeholder:
+            self.entry.delete(0, tk.END)
+            self.entry.config(fg=self.config["appearance"]["fg_color"])
+        return "break"
 
     def _on_focus_in(self, event):
         """Clear placeholder on focus."""
@@ -263,7 +314,9 @@ class CaptureWidget:
     def _on_focus_out(self, event):
         """Restore placeholder if empty."""
         if not self.entry.get():
-            self._set_placeholder()
+            self.entry.delete(0, tk.END)
+            self.entry.insert(0, self.placeholder)
+            self.entry.config(fg="#6c7086")
 
     def _create_tray_icon(self):
         """Create system tray icon."""
@@ -361,12 +414,12 @@ class CaptureWidget:
         self._start_mouse_listener()
 
     def _focus_entry(self):
-        """Set focus to entry widget after window is visible."""
-        self.entry.focus_force()  # focus_force implies focus_set
+        """Set focus to title entry widget after window is visible."""
+        self.title_entry.focus_force()  # Start with title field
         # Clear placeholder (entry already has focus, so simulate focus-in)
-        if self.entry.get() == self.placeholder:
-            self.entry.delete(0, tk.END)
-            self.entry.config(fg=self.config["appearance"]["fg_color"])
+        if self.title_entry.get() == self.title_placeholder:
+            self.title_entry.delete(0, tk.END)
+            self.title_entry.config(fg=self.config["appearance"]["fg_color"])
 
     def hide(self):
         """Hide the capture input window."""
@@ -375,6 +428,9 @@ class CaptureWidget:
         self._is_visible = False
         self._stop_mouse_listener()
         self.input_window.withdraw()
+        # Clear both fields
+        self.title_entry.delete(0, tk.END)
+        self.entry.delete(0, tk.END)
         self._set_placeholder()
 
     def _start_mouse_listener(self):
@@ -419,9 +475,12 @@ class CaptureWidget:
 
     def _on_submit(self, event):
         """Handle Enter key - save to inbox."""
+        title = self.title_entry.get().strip()
+        if title == self.title_placeholder:
+            title = ""
         text = self.entry.get().strip()
         if text and text != self.placeholder:
-            self._save_to_inbox(text)
+            self._save_to_inbox(text, title)
         self.hide()
         return "break"
 
@@ -430,20 +489,29 @@ class CaptureWidget:
         self.hide()
         return "break"
 
-    def _save_to_inbox(self, text: str):
+    def _save_to_inbox(self, text: str, title: str = ""):
         """Save captured text to inbox as markdown file."""
         timestamp = datetime.now(timezone.utc)
         date_str = timestamp.strftime("%Y%m%d_%H%M%S")
         short_id = uuid.uuid4().hex[:8]
-        filename = f"{date_str}_{short_id}.md"
+
+        # Use title for filename if provided, otherwise timestamp
+        if title:
+            # Sanitize title for filename (remove invalid chars)
+            safe_title = "".join(c for c in title if c not in r'\/:*?"<>|')
+            safe_title = safe_title.strip()[:50]  # Limit length
+            filename = f"{safe_title}.md"
+        else:
+            filename = f"{date_str}_{short_id}.md"
 
         filepath = self.inbox_path / filename
 
-        # Create markdown with frontmatter
+        # Create markdown with frontmatter (title in frontmatter for extract_title)
+        title_line = f'title: "{title}"\n' if title else ""
         content = f"""---
 captured_at: "{timestamp.isoformat()}"
 source: "capture_widget"
----
+{title_line}---
 
 {text}
 """

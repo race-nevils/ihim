@@ -236,6 +236,112 @@ def update_existing(
     return obsidian_path, entry_id
 
 
+@observe(name="update_with_reclassify")
+def update_with_reclassify(
+    existing: dict,
+    content: str,
+    content_hash: str,
+    classification: dict
+) -> tuple[Path, str]:
+    """Update an existing brain entry WITH reclassification.
+
+    Used for live files (still in inbox) when content changes.
+    May move file to different category folder if classification changes.
+
+    Args:
+        existing: Existing entry dict from database
+        content: New content
+        content_hash: Hash of new content
+        classification: New classification result
+
+    Returns:
+        Tuple of (Obsidian path, note_id)
+    """
+    entry_id = existing["id"]
+    old_category = existing.get("category", "Ideas")
+    old_title = existing.get("title", "untitled")
+    jsonld_path = existing.get("jsonld_path")
+
+    # New classification
+    new_category = classification.get("category", "Ideas")
+    new_title = classification.get("title", old_title)
+    new_summary = classification.get("summary", "")
+    new_confidence = float(classification.get("confidence", 0.0))
+
+    # Apply confidence threshold
+    if new_confidence < CONFIDENCE_THRESHOLD:
+        new_category = "Misc"
+
+    category_changed = new_category != old_category
+
+    # === UPDATE 1: JSON-LD ===
+    with TracingSpan("update_jsonld_reclassify"):
+        if jsonld_path and Path(jsonld_path).exists():
+            try:
+                old_jsonld = Path(jsonld_path)
+                if category_changed:
+                    # Move JSON-LD to new category folder
+                    from data.jsonld import JSONLD_ROOT
+                    new_jsonld_dir = JSONLD_ROOT / new_category
+                    new_jsonld_dir.mkdir(parents=True, exist_ok=True)
+                    new_jsonld_path = new_jsonld_dir / old_jsonld.name
+                    old_jsonld.rename(new_jsonld_path)
+                    jsonld_path = str(new_jsonld_path)
+                    update_jsonld_content(new_jsonld_path, content)
+                else:
+                    update_jsonld_content(old_jsonld, content)
+                logger.info(f"Updated JSON-LD: {jsonld_path}")
+            except Exception as e:
+                logger.error(f"Failed to update JSON-LD: {e}")
+
+    # === UPDATE 2: SQLite Database ===
+    with TracingSpan("update_sqlite_reclassify"):
+        try:
+            update_entry(entry_id, {
+                "content": content,
+                "content_hash": content_hash,
+                "category": new_category,
+                "summary": new_summary,
+                "confidence": new_confidence,
+                "jsonld_path": jsonld_path
+            })
+            logger.info(f"Updated database entry with reclassification: {entry_id}")
+        except Exception as e:
+            logger.error(f"Failed to update SQLite: {e}")
+
+    # === UPDATE 3: Obsidian Memory ===
+    obsidian_path = None
+    with TracingSpan("update_obsidian_reclassify"):
+        try:
+            # Remove old file if category changed
+            if category_changed:
+                old_obsidian = OBSIDIAN_MEMORY / old_category / f"{sanitize_title(old_title)}.md"
+                if old_obsidian.exists():
+                    old_obsidian.unlink()
+                    logger.info(f"Removed old Obsidian file: {old_obsidian}")
+
+            # Write to new location
+            target_dir = OBSIDIAN_MEMORY / new_category
+            target_dir.mkdir(parents=True, exist_ok=True)
+            obsidian_path = target_dir / f"{sanitize_title(new_title)}.md"
+            obsidian_path.write_text(content, encoding="utf-8")
+            logger.info(f"Written to Obsidian: {obsidian_path}")
+        except Exception as e:
+            logger.error(f"Failed to update Obsidian: {e}")
+
+    langfuse_context.update_current_observation(
+        metadata={
+            "note_id": entry_id,
+            "old_category": old_category,
+            "new_category": new_category,
+            "category_changed": category_changed,
+            "action": "reclassify"
+        }
+    )
+
+    return obsidian_path, entry_id
+
+
 def log_receipt(
     source_file: Optional[str],
     classification: dict,

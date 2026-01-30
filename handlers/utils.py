@@ -38,20 +38,29 @@ STEP 5: Is this STATIC INFORMATION to remember? (facts, addresses, how-to, refer
   → YES: Category = "Reference"
   → NO: Category = "Ideas" (default for unclear content)
 
+CALENDAR DETECTION (check independently of category):
+Does this note mention a SPECIFIC DATE or TIME for an event, appointment, meeting, or deadline?
+  → YES: Set "calendar" with extracted date info
+  → NO: Set "calendar" to null
+
+Calendar rules:
+- Date + time mentioned → all_day = false, include time
+- Date only, no time → all_day = true, time = null
+- No specific date → calendar = null
+- Use ISO format for date: YYYY-MM-DD
+- Use 24h format for time: HH:MM
+- Default duration: 1 hour (if not specified)
+
 EXAMPLES:
-- "Need to clean oil from prop" → Tasks (has action verb "clean")
-- "Remind Sarah about the pipes" → Tasks (has action verb "remind")
-- "Sarah's new phone number is 555-1234" → People (about a person)
-- "Talked to Mike about the deal" → People (conversation with person)
-- "Launch iHIM v2 by March" → Projects (multi-step goal with deadline)
-- "Working on the rental renovation" → Projects (ongoing initiative)
-- "What if we used Redis for caching?" → Ideas (exploration, "what if")
-- "Maybe try a different approach" → Ideas (no commitment)
-- "API key for Stripe: sk_live_xxx" → Reference (static fact)
-- "How to reset the router" → Reference (how-to info)
+- "Need to clean oil from prop" → Tasks, calendar: null (no date)
+- "Dentist appointment February 2nd" → Tasks, calendar: {{"is_event": true, "title": "Dentist Appointment", "date": "2026-02-02", "time": null, "all_day": true}}
+- "Meeting with Sarah at 3pm on Feb 4th" → People, calendar: {{"is_event": true, "title": "Meeting with Sarah", "date": "2026-02-04", "time": "15:00", "all_day": false}}
+- "Tax documents due by Feb 16th" → Tasks, calendar: {{"is_event": true, "title": "Tax Documents Due", "date": "2026-02-16", "time": null, "all_day": true}}
+- "What if we used Redis?" → Ideas, calendar: null (no date)
+- "Sarah's phone number is 555-1234" → People, calendar: null (no date)
 
 Return ONLY valid JSON:
-{{"category": "<Tasks|People|Projects|Ideas|Reference>", "confidence": <0.0-1.0>, "summary": "<1 sentence describing the note>"}}
+{{"category": "<Tasks|People|Projects|Ideas|Reference>", "confidence": <0.0-1.0>, "summary": "<1 sentence describing the note>", "calendar": null | {{"is_event": true, "title": "<short event title>", "date": "<YYYY-MM-DD>", "time": "<HH:MM>" | null, "all_day": <true|false>}}}}
 
 Note: {content}
 

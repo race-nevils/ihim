@@ -662,6 +662,40 @@
         </div>
     </div>
 
+    <!-- Google Calendar Window (Draggable) -->
+    <div id="calendar-window" class="calendar-window" style="display: none;">
+        <div class="calendar-header calendar-drag-handle">
+            <span class="calendar-label"><i data-lucide="calendar-days" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Google Calendar</span>
+            <div class="calendar-header-actions">
+                <button class="calendar-refresh-btn" onclick="syncCalendar()" title="Refresh from Google">
+                    <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
+                </button>
+                <button class="calendar-close" onclick="closeCalendarWindow()">&times;</button>
+            </div>
+        </div>
+        <div class="calendar-status" id="calendar-status"></div>
+        <div class="calendar-body" id="calendar-body">
+            <div class="calendar-empty">Loading...</div>
+        </div>
+        <div class="calendar-footer">
+            <button class="calendar-add-btn" onclick="toggleCalendarAddForm()">+ New Event</button>
+            <span id="calendar-sync-time" class="calendar-sync-info"></span>
+        </div>
+        <div id="calendar-add-form" class="calendar-add-form" style="display: none;">
+            <input type="text" id="cal-new-summary" placeholder="Event title..." class="cal-input">
+            <div class="cal-datetime-row">
+                <input type="datetime-local" id="cal-new-start" class="cal-input">
+                <span class="cal-arrow">→</span>
+                <input type="datetime-local" id="cal-new-end" class="cal-input">
+            </div>
+            <input type="text" id="cal-new-description" placeholder="Description (optional)" class="cal-input">
+            <div class="calendar-form-actions">
+                <button class="cal-create-btn" onclick="pushNewCalendarEvent()">Create on GCal</button>
+                <button class="cal-cancel-btn" onclick="toggleCalendarAddForm()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Edit Task Modal -->
     <div id="edit-task-modal" class="modal">
         <div class="modal-content edit-task-modal-content">
@@ -875,6 +909,7 @@
             'verified': 'badge-check',
             'shield': 'shield-check',
             'lightbulb': 'lightbulb',
+            'calendar': 'calendar-days',
             'default': 'zap'
         };
 
@@ -1000,6 +1035,10 @@
             }
             if (actionId === 'c2pa_verify') {
                 openC2PAWindow();
+                return;
+            }
+            if (actionId === 'google_calendar') {
+                openCalendarWindow();
                 return;
             }
 
@@ -5036,7 +5075,7 @@
 
             let activeResize = null;
 
-            const widgetIds = ['notes-window', 'heuristics-window', 'flightpath-window', 'task-window', 'mc-window', 'c2pa-window', 'standards-library-window'];
+            const widgetIds = ['notes-window', 'heuristics-window', 'flightpath-window', 'task-window', 'mc-window', 'c2pa-window', 'standards-library-window', 'calendar-window'];
 
             // Restore saved sizes from localStorage
             widgetIds.forEach(widgetId => {
@@ -5615,6 +5654,297 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Sign Image';
+            }
+        }
+    </script>
+
+    <!-- GOOGLE CALENDAR MODULE SCRIPT -->
+    <script>
+        // ==========================================
+        // GOOGLE CALENDAR MODULE LOGIC
+        // ==========================================
+
+        let calendarCache = null;
+
+        async function openCalendarWindow() {
+            const win = document.getElementById('calendar-window');
+            if (!win) return;
+
+            // Restore or center position
+            const saved = localStorage.getItem('calendarWindowPosition');
+            if (saved) {
+                const { x, y } = JSON.parse(saved);
+                win.style.left = x + 'px';
+                win.style.top = y + 'px';
+            } else {
+                win.style.left = Math.max(0, (window.innerWidth - 420) / 2) + 'px';
+                win.style.top = Math.max(0, (window.innerHeight - 520) / 2) + 'px';
+            }
+
+            win.style.display = 'flex';
+
+            if (!win.dataset.dragInitialized) {
+                initializeCalendarDrag();
+                win.dataset.dragInitialized = 'true';
+            }
+
+            // Re-render Lucide icons for the window
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            await loadCalendarEvents();
+        }
+
+        function closeCalendarWindow() {
+            const win = document.getElementById('calendar-window');
+            if (win) win.style.display = 'none';
+        }
+
+        function initializeCalendarDrag() {
+            const win = document.getElementById('calendar-window');
+            const handle = win.querySelector('.calendar-drag-handle');
+            let isDragging = false, startX, startY, startLeft, startTop;
+
+            handle.addEventListener('mousedown', (e) => {
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startLeft = win.offsetLeft;
+                startTop = win.offsetTop;
+                win.style.opacity = '0.85';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                win.style.left = (startLeft + e.clientX - startX) + 'px';
+                win.style.top = (startTop + e.clientY - startY) + 'px';
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!isDragging) return;
+                isDragging = false;
+                win.style.opacity = '1';
+                localStorage.setItem('calendarWindowPosition', JSON.stringify({
+                    x: win.offsetLeft, y: win.offsetTop
+                }));
+            });
+        }
+
+        async function loadCalendarEvents() {
+            const statusEl = document.getElementById('calendar-status');
+            const bodyEl = document.getElementById('calendar-body');
+            const syncTimeEl = document.getElementById('calendar-sync-time');
+
+            try {
+                const statusRes = await fetch(`${API}/api/calendar/status`);
+                const status = await statusRes.json();
+
+                if (!status.credentials_file_exists) {
+                    statusEl.innerHTML = '<span class="cal-status-warn">credentials.json not found in IHIM/data/</span>';
+                    bodyEl.innerHTML = '<div class="calendar-empty">Place your Google OAuth2 credentials.json in IHIM/data/ to get started.</div>';
+                    return;
+                }
+
+                if (!status.authenticated) {
+                    statusEl.innerHTML = '<span class="cal-status-warn">Not connected</span>';
+                    bodyEl.innerHTML = `
+                        <div class="calendar-auth-prompt">
+                            <p>Connect your Google Calendar to see events here.</p>
+                            <button class="cal-auth-btn" onclick="startCalendarAuth()">Connect Google Calendar</button>
+                        </div>`;
+                    return;
+                }
+
+                statusEl.innerHTML = '<span class="cal-status-ok">Connected</span>';
+
+                // Load events from cache
+                const res = await fetch(`${API}/api/calendar/events?days_ahead=14`);
+                const data = await res.json();
+                calendarCache = data;
+
+                // Show sync time
+                if (data.cached_at) {
+                    const age = Date.now() - new Date(data.cached_at).getTime();
+                    const mins = Math.round(age / 60000);
+                    syncTimeEl.textContent = mins < 1 ? 'Just synced' : `${mins}m ago`;
+
+                    // Auto-sync if stale (>5 min)
+                    if (age > 5 * 60 * 1000) {
+                        syncCalendar();
+                        return;
+                    }
+                } else {
+                    syncTimeEl.textContent = 'Never synced';
+                    syncCalendar();
+                    return;
+                }
+
+                renderCalendarEvents(data.events || []);
+            } catch (e) {
+                statusEl.innerHTML = `<span class="cal-status-err">Error: ${e.message}</span>`;
+                bodyEl.innerHTML = '<div class="calendar-empty">Failed to load calendar data.</div>';
+            }
+        }
+
+        function renderCalendarEvents(events) {
+            const bodyEl = document.getElementById('calendar-body');
+
+            if (!events || events.length === 0) {
+                bodyEl.innerHTML = '<div class="calendar-empty">No upcoming events</div>';
+                return;
+            }
+
+            // Group events by date
+            const grouped = {};
+            events.forEach(ev => {
+                const start = ev.start?.dateTime || ev.start?.date || '';
+                const dateKey = start.slice(0, 10); // YYYY-MM-DD
+                if (!grouped[dateKey]) grouped[dateKey] = [];
+                grouped[dateKey].push(ev);
+            });
+
+            const today = new Date().toISOString().slice(0, 10);
+            const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+            let html = '';
+            Object.keys(grouped).sort().forEach(dateKey => {
+                let label = dateKey;
+                if (dateKey === today) label = 'Today';
+                else if (dateKey === tomorrow) label = 'Tomorrow';
+                else {
+                    const d = new Date(dateKey + 'T00:00:00');
+                    label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                }
+
+                html += `<div class="cal-day-group">
+                    <div class="cal-day-label">${label}</div>`;
+
+                grouped[dateKey].forEach(ev => {
+                    const startTime = ev.start?.dateTime
+                        ? new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        : 'All day';
+                    const endTime = ev.end?.dateTime
+                        ? new Date(ev.end.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        : '';
+                    const timeStr = endTime ? `${startTime} – ${endTime}` : startTime;
+                    const link = ev.htmlLink || '#';
+                    const loc = ev.location ? `<span class="cal-event-loc">${ev.location}</span>` : '';
+
+                    html += `<div class="cal-event-card" onclick="window.open('${link}', '_blank')" title="Open in Google Calendar">
+                        <div class="cal-event-time">${timeStr}</div>
+                        <div class="cal-event-info">
+                            <div class="cal-event-title">${ev.summary || 'Untitled'}</div>
+                            ${loc}
+                        </div>
+                    </div>`;
+                });
+
+                html += '</div>';
+            });
+
+            bodyEl.innerHTML = html;
+        }
+
+        async function syncCalendar() {
+            const syncTimeEl = document.getElementById('calendar-sync-time');
+            const refreshBtn = document.querySelector('.calendar-refresh-btn');
+            if (refreshBtn) refreshBtn.classList.add('spinning');
+            syncTimeEl.textContent = 'Syncing...';
+
+            try {
+                const res = await fetch(`${API}/api/calendar/sync`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days_ahead: 14, days_behind: 1 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    calendarCache = data;
+                    renderCalendarEvents(data.events || []);
+                    syncTimeEl.textContent = 'Just synced';
+                } else {
+                    syncTimeEl.textContent = 'Sync failed';
+                }
+            } catch (e) {
+                syncTimeEl.textContent = 'Sync error';
+            } finally {
+                if (refreshBtn) refreshBtn.classList.remove('spinning');
+            }
+        }
+
+        async function startCalendarAuth() {
+            const statusEl = document.getElementById('calendar-status');
+            statusEl.innerHTML = '<span class="cal-status-pending">Opening Google sign-in...</span>';
+
+            try {
+                const res = await fetch(`${API}/api/calendar/auth/start`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.innerHTML = '<span class="cal-status-ok">Connected!</span>';
+                    await loadCalendarEvents();
+                } else {
+                    statusEl.innerHTML = `<span class="cal-status-err">${data.message || 'Auth failed'}</span>`;
+                }
+            } catch (e) {
+                statusEl.innerHTML = `<span class="cal-status-err">Auth error: ${e.message}</span>`;
+            }
+        }
+
+        function toggleCalendarAddForm() {
+            const form = document.getElementById('calendar-add-form');
+            const isVisible = form.style.display !== 'none';
+            form.style.display = isVisible ? 'none' : 'block';
+            if (!isVisible) {
+                document.getElementById('cal-new-summary').focus();
+                // Default start to next hour
+                const now = new Date();
+                now.setMinutes(0, 0, 0);
+                now.setHours(now.getHours() + 1);
+                const end = new Date(now.getTime() + 3600000);
+                document.getElementById('cal-new-start').value = toLocalISO(now);
+                document.getElementById('cal-new-end').value = toLocalISO(end);
+            }
+        }
+
+        function toLocalISO(date) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        async function pushNewCalendarEvent() {
+            const summary = document.getElementById('cal-new-summary').value.trim();
+            const start = document.getElementById('cal-new-start').value;
+            const end = document.getElementById('cal-new-end').value;
+            const description = document.getElementById('cal-new-description').value.trim();
+
+            if (!summary) { alert('Event title is required'); return; }
+            if (!start || !end) { alert('Start and end times are required'); return; }
+
+            const btn = document.querySelector('.cal-create-btn');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                const res = await fetch(`${API}/api/calendar/events`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ summary, start, end, description })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    toggleCalendarAddForm();
+                    document.getElementById('cal-new-summary').value = '';
+                    document.getElementById('cal-new-description').value = '';
+                    await loadCalendarEvents();
+                } else {
+                    alert('Failed to create event: ' + (data.detail || data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error creating event: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create on GCal';
             }
         }
     </script>

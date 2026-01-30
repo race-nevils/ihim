@@ -89,6 +89,13 @@ ACTIONS = {
         "category": "tools",
         "has_modal": True,
     },
+    "google_calendar": {
+        "name": "Google Calendar",
+        "description": "View upcoming events and sync with Google Calendar",
+        "icon": "calendar",
+        "category": "tools",
+        "has_modal": True,
+    },
     # Team actions (consolidated into Mission Control)
     "software_dev_team": {
         "name": "Feature Builder",
@@ -164,6 +171,10 @@ def run_action(action_id: str) -> dict:
     elif action_id == "c2pa_verify":
         # Handled by UI (modal for C2PA verification and signing)
         return {"success": True, "message": "Opening C2PA Verify..."}
+
+    elif action_id == "google_calendar":
+        # Handled by UI (modal for Google Calendar)
+        return {"success": True, "message": "Opening Google Calendar..."}
 
     elif action_id == "software_dev_team":
         # This action is handled by the UI (shows input modal)

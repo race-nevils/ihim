@@ -114,6 +114,14 @@ except ImportError as e:
     print(f"Warning: C2PA module not available: {e}")
     C2PA_AVAILABLE = False
 
+# Import calendar module (Google Calendar)
+try:
+    from api.calendar.routes import router as calendar_router
+    CALENDAR_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Calendar module not available: {e}")
+    CALENDAR_AVAILABLE = False
+
 app = FastAPI(title="iHIM", description="Your Command Center")
 
 # CORS middleware for Chrome extension access
@@ -216,6 +224,10 @@ if AGENTS_AVAILABLE:
 # Include the C2PA router (Content Provenance)
 if C2PA_AVAILABLE:
     app.include_router(c2pa_router)
+
+# Include the calendar router (Google Calendar)
+if CALENDAR_AVAILABLE:
+    app.include_router(calendar_router)
 
 
 # Request models

@@ -40,6 +40,7 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
     classification["title"] = extract_title(content, source_filename)
 
     # Log to Langfuse
+    calendar_data = classification.get("calendar")
     langfuse_context.update_current_observation(
         model=OllamaAdapter.FAST_MODEL,
         input=content[:500],  # Truncate for readability
@@ -47,13 +48,18 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
         metadata={
             "source_filename": source_filename,
             "category": classification.get("category"),
-            "confidence": classification.get("confidence")
+            "confidence": classification.get("confidence"),
+            "has_calendar_event": bool(calendar_data and calendar_data.get("is_event"))
         }
     )
 
+    cal_info = ""
+    if calendar_data and calendar_data.get("is_event"):
+        cal_info = f" | Calendar: {calendar_data.get('date')} {'all-day' if calendar_data.get('all_day') else calendar_data.get('time', '')}"
+
     logger.info(
         f"Classified as {classification.get('category')} "
-        f"(confidence={classification.get('confidence', 0):.2f})"
+        f"(confidence={classification.get('confidence', 0):.2f}){cal_info}"
     )
 
     return classification

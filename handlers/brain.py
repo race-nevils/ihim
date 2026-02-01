@@ -23,7 +23,7 @@ from handlers.storage import store_new, update_existing, log_receipt
 logger = logging.getLogger(__name__)
 
 
-def _push_to_calendar(classification: dict) -> None:
+def _push_to_calendar(classification: dict, content: str = "") -> None:
     """Auto-push to Google Calendar if classification contains a calendar event.
 
     Fails silently - calendar push is best-effort, never blocks the pipeline.
@@ -41,7 +41,9 @@ def _push_to_calendar(classification: dict) -> None:
             logger.info("Calendar event detected but Google Calendar not authenticated, skipping")
             return
 
-        title = calendar_data.get("title", classification.get("title", "Untitled Event"))
+        cls_title = classification.get("title", "")
+        cal_title = calendar_data.get("title", "")
+        title = cls_title if cls_title and cls_title != "Untitled" else (cal_title or "Untitled Event")
         date_str = calendar_data.get("date", "")
         time_str = calendar_data.get("time")
         all_day = calendar_data.get("all_day", True)
@@ -56,7 +58,7 @@ def _push_to_calendar(classification: dict) -> None:
             service = build("calendar", "v3", credentials=creds, cache_discovery=False)
             event_body = {
                 "summary": title,
-                "description": classification.get("summary", ""),
+                "description": content or classification.get("summary", ""),
                 "start": {"date": date_str},
                 "end": {"date": date_str},
             }
@@ -70,7 +72,7 @@ def _push_to_calendar(classification: dict) -> None:
             end_dt = end_obj.strftime("%Y-%m-%dT%H:%M:%S")
 
             created = push_event(creds, summary=title, start=start_dt, end=end_dt,
-                                 description=classification.get("summary", ""))
+                                 description=content or classification.get("summary", ""))
 
         save_event_jsonld(created)
         # Refresh cache
@@ -175,7 +177,7 @@ def handle(state: OrchestratorState) -> OrchestratorState:
         )
 
         # Auto-push to Google Calendar if event detected
-        _push_to_calendar(classification)
+        _push_to_calendar(classification, content)
 
         action = "misc" if classification.get("confidence", 0) < 0.7 else "classified"
         log_receipt(source_file, classification, action, obsidian_path)

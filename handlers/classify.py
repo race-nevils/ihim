@@ -11,7 +11,7 @@ from handlers.tracing import observe, langfuse_context
 
 from adapters.ollama import OllamaAdapter
 from handlers.utils import CLASSIFY_PROMPT, extract_title
-from handlers.fallback import extract_date, validate_summary
+from handlers.fallback import extract_date, validate_summary, detect_calendar_by_keywords
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +43,24 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
 
     # --- Deterministic fallbacks ---
     calendar_fallback_used = False
+    keyword_fallback_used = False
     summary_fallback_used = False
 
-    # Date extraction fallback: if LLM missed calendar data, try regex
+    # Date extraction fallback: if LLM missed calendar data, try regex then keywords
     calendar_data = classification.get("calendar")
     if not calendar_data or not calendar_data.get("is_event"):
         regex_calendar = extract_date(content)
         if regex_calendar:
             classification["calendar"] = regex_calendar
             calendar_fallback_used = True
-            logger.info(f"[fallback] Regex extracted calendar: {regex_calendar.get('date')}")
+            logger.info(f"[regex-fallback] Extracted calendar: {regex_calendar.get('date')}")
+        else:
+            keyword_calendar = detect_calendar_by_keywords(content)
+            if keyword_calendar:
+                classification["calendar"] = keyword_calendar
+                calendar_fallback_used = True
+                keyword_fallback_used = True
+                logger.info(f"[keyword-fallback] Extracted calendar: {keyword_calendar.get('date')}")
 
     # Summary validation: catch contaminated summaries
     raw_summary = classification.get("summary", "")
@@ -74,13 +82,14 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             "confidence": classification.get("confidence"),
             "has_calendar_event": bool(calendar_data and calendar_data.get("is_event")),
             "calendar_fallback_used": calendar_fallback_used,
+            "keyword_fallback_used": keyword_fallback_used,
             "summary_fallback_used": summary_fallback_used,
         }
     )
 
     cal_info = ""
     if calendar_data and calendar_data.get("is_event"):
-        fallback_tag = " [fallback]" if calendar_fallback_used else ""
+        fallback_tag = " [keyword-fallback]" if keyword_fallback_used else (" [regex-fallback]" if calendar_fallback_used else "")
         cal_info = f" | Calendar{fallback_tag}: {calendar_data.get('date')} {'all-day' if calendar_data.get('all_day') else calendar_data.get('time', '')}"
 
     logger.info(

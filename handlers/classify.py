@@ -44,23 +44,42 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
     # --- Deterministic fallbacks ---
     calendar_fallback_used = False
     keyword_fallback_used = False
+    calendar_date_overridden = False
     summary_fallback_used = False
 
-    # Date extraction fallback: if LLM missed calendar data, try regex then keywords
+    # Always run deterministic date parsing as validation layer.
+    # Small LLMs can't do calendar math for relative dates ("next week", "tomorrow").
+    # Deterministic parsing is authoritative for date/time when it matches.
+    regex_calendar = extract_date(content)
+    keyword_calendar = detect_calendar_by_keywords(content) if not regex_calendar else None
+    deterministic_calendar = regex_calendar or keyword_calendar
+
     calendar_data = classification.get("calendar")
     if not calendar_data or not calendar_data.get("is_event"):
-        regex_calendar = extract_date(content)
-        if regex_calendar:
-            classification["calendar"] = regex_calendar
+        # LLM missed calendar entirely — use deterministic if available
+        if deterministic_calendar:
+            classification["calendar"] = deterministic_calendar
             calendar_fallback_used = True
-            logger.info(f"[regex-fallback] Extracted calendar: {regex_calendar.get('date')}")
-        else:
-            keyword_calendar = detect_calendar_by_keywords(content)
-            if keyword_calendar:
-                classification["calendar"] = keyword_calendar
-                calendar_fallback_used = True
-                keyword_fallback_used = True
-                logger.info(f"[keyword-fallback] Extracted calendar: {keyword_calendar.get('date')}")
+            keyword_fallback_used = bool(keyword_calendar)
+            logger.info(f"[{'keyword' if keyword_calendar else 'regex'}-fallback] "
+                        f"Extracted calendar: {deterministic_calendar.get('date')}")
+    else:
+        # LLM returned calendar data — validate date/time with deterministic
+        if deterministic_calendar:
+            llm_date = calendar_data.get("date", "")
+            det_date = deterministic_calendar["date"]
+            if llm_date != det_date:
+                logger.warning(
+                    f"[date-validation] LLM date={llm_date} overridden by "
+                    f"deterministic={det_date} (source: {'keyword' if keyword_calendar else 'regex'})"
+                )
+                calendar_date_overridden = True
+            calendar_data["date"] = det_date
+            if deterministic_calendar.get("time"):
+                calendar_data["time"] = deterministic_calendar["time"]
+                calendar_data["all_day"] = False
+            calendar_fallback_used = True
+            keyword_fallback_used = bool(keyword_calendar)
 
     # Summary validation: catch contaminated summaries
     raw_summary = classification.get("summary", "")
@@ -83,13 +102,16 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             "has_calendar_event": bool(calendar_data and calendar_data.get("is_event")),
             "calendar_fallback_used": calendar_fallback_used,
             "keyword_fallback_used": keyword_fallback_used,
+            "calendar_date_overridden": calendar_date_overridden,
             "summary_fallback_used": summary_fallback_used,
         }
     )
 
     cal_info = ""
     if calendar_data and calendar_data.get("is_event"):
-        fallback_tag = " [keyword-fallback]" if keyword_fallback_used else (" [regex-fallback]" if calendar_fallback_used else "")
+        fallback_tag = " [date-override]" if calendar_date_overridden else (
+            " [keyword-fallback]" if keyword_fallback_used else (
+                " [regex-fallback]" if calendar_fallback_used else ""))
         cal_info = f" | Calendar{fallback_tag}: {calendar_data.get('date')} {'all-day' if calendar_data.get('all_day') else calendar_data.get('time', '')}"
 
     logger.info(

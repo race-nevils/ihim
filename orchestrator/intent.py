@@ -56,6 +56,14 @@ def detect_intent(state: PipelineState) -> PipelineState:
             INTENT_PROMPT.format(input_text=input_text),
             model=OllamaAdapter.FAST_MODEL
         )
+
+        # generate_json now guarantees dict, but check for error responses
+        if result.get("error"):
+            state["intent"] = "brain"
+            state["intent_confidence"] = 0.5
+            state["error"] = f"Intent detection: LLM returned {result.get('error')}"
+            return state
+
         state["intent"] = result.get("intent", "unknown")
         state["intent_confidence"] = float(result.get("confidence", 0.0))
 

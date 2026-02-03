@@ -14,7 +14,8 @@ from typing import Optional
 from handlers.tracing import observe, langfuse_context, TracingSpan
 
 from adapters.ollama import OllamaAdapter
-from data.database import insert_entry, update_entry
+from adapters.embeddings import EmbeddingAdapter
+from data.database import insert_entry, update_entry, store_embedding
 from data.jsonld import (
     create_brain_entry_jsonld,
     write_jsonld,
@@ -153,6 +154,20 @@ def store_new(
         except Exception as e:
             logger.error(f"Failed to write to Obsidian: {e}")
 
+    # === WRITE 4: Embedding (Derived Vector Index) ===
+    with TracingSpan("generate_embedding"):
+        try:
+            embed_text = f"{title}\n{content}"
+            with EmbeddingAdapter() as adapter:
+                embedding = adapter.generate_embedding(embed_text)
+            if embedding:
+                store_embedding(note_id, embedding)
+                logger.info(f"Stored embedding for: {note_id}")
+            else:
+                logger.warning(f"Embedding generation returned None for: {note_id}")
+        except Exception as e:
+            logger.warning(f"Embedding step failed (non-blocking): {e}")
+
     # Log metadata to Langfuse
     langfuse_context.update_current_observation(
         metadata={
@@ -224,6 +239,20 @@ def update_existing(
             logger.info(f"Updated Obsidian: {obsidian_path}")
         except Exception as e:
             logger.error(f"Failed to update Obsidian: {e}")
+
+    # === UPDATE 4: Re-embed with new content ===
+    with TracingSpan("update_embedding"):
+        try:
+            embed_text = f"{title}\n{content}"
+            with EmbeddingAdapter() as adapter:
+                embedding = adapter.generate_embedding(embed_text)
+            if embedding:
+                store_embedding(entry_id, embedding)
+                logger.info(f"Updated embedding for: {entry_id}")
+            else:
+                logger.warning(f"Embedding update returned None for: {entry_id}")
+        except Exception as e:
+            logger.warning(f"Embedding update failed (non-blocking): {e}")
 
     langfuse_context.update_current_observation(
         metadata={
@@ -328,6 +357,20 @@ def update_with_reclassify(
             logger.info(f"Written to Obsidian: {obsidian_path}")
         except Exception as e:
             logger.error(f"Failed to update Obsidian: {e}")
+
+    # === UPDATE 4: Re-embed with reclassified content ===
+    with TracingSpan("reclassify_embedding"):
+        try:
+            embed_text = f"{new_title}\n{content}"
+            with EmbeddingAdapter() as adapter:
+                embedding = adapter.generate_embedding(embed_text)
+            if embedding:
+                store_embedding(entry_id, embedding)
+                logger.info(f"Re-embedded after reclassify: {entry_id}")
+            else:
+                logger.warning(f"Reclassify embedding returned None for: {entry_id}")
+        except Exception as e:
+            logger.warning(f"Reclassify embedding failed (non-blocking): {e}")
 
     langfuse_context.update_current_observation(
         metadata={

@@ -23,63 +23,92 @@ from handlers.storage import store_new, update_existing, log_receipt
 logger = logging.getLogger(__name__)
 
 
-def _push_to_calendar(classification: dict, content: str = "") -> None:
-    """Auto-push to Google Calendar if classification contains a calendar event.
+def _push_single_event(event_data: dict, classification: dict, content: str, creds) -> bool:
+    """Push a single calendar event. Returns True on success."""
+    cls_title = classification.get("title", "")
+    cal_title = event_data.get("title", "")
+    title = cls_title if cls_title and cls_title != "Untitled" else (cal_title or "Untitled Event")
+    date_str = event_data.get("date", "")
+    time_str = event_data.get("time")
+    all_day = event_data.get("all_day", True)
 
+    if not date_str:
+        logger.warning(f"Calendar event '{title}' has no date, skipping")
+        return False
+
+    from api.calendar.sync import push_event, save_event_jsonld
+
+    if all_day or not time_str:
+        from googleapiclient.discovery import build
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        event_body = {
+            "summary": title,
+            "description": content or classification.get("summary", ""),
+            "start": {"date": date_str},
+            "end": {"date": date_str},
+        }
+        created = service.events().insert(calendarId="primary", body=event_body).execute()
+    else:
+        start_dt = f"{date_str}T{time_str}:00"
+        start_obj = datetime.fromisoformat(start_dt)
+        end_obj = start_obj + timedelta(hours=1)
+        end_dt = end_obj.strftime("%Y-%m-%dT%H:%M:%S")
+        created = push_event(creds, summary=title, start=start_dt, end=end_dt,
+                             description=content or classification.get("summary", ""))
+
+    save_event_jsonld(created)
+    logger.info(f"Auto-pushed calendar event: {title} on {date_str}")
+    return True
+
+
+def _push_to_calendar(classification: dict, content: str = "") -> None:
+    """Auto-push to Google Calendar if classification contains calendar event(s).
+
+    Handles both single events (dict) and multi-event notes (list).
     Fails silently - calendar push is best-effort, never blocks the pipeline.
     """
     calendar_data = classification.get("calendar")
-    if not calendar_data or not calendar_data.get("is_event"):
+    if not calendar_data:
+        return
+
+    # Normalize to list of events
+    if isinstance(calendar_data, list):
+        events = [e for e in calendar_data if isinstance(e, dict) and e.get("is_event")]
+    elif isinstance(calendar_data, dict) and calendar_data.get("is_event"):
+        events = [calendar_data]
+    else:
+        return
+
+    if not events:
         return
 
     try:
         from api.calendar.google_auth import get_credentials
-        from api.calendar.sync import push_event, save_event_jsonld, save_to_cache, pull_events
+        from api.calendar.sync import pull_events, save_to_cache
 
         creds = get_credentials()
         if not creds:
-            logger.info("Calendar event detected but Google Calendar not authenticated, skipping")
+            logger.info("Calendar event(s) detected but Google Calendar not authenticated, skipping")
             return
 
-        cls_title = classification.get("title", "")
-        cal_title = calendar_data.get("title", "")
-        title = cls_title if cls_title and cls_title != "Untitled" else (cal_title or "Untitled Event")
-        date_str = calendar_data.get("date", "")
-        time_str = calendar_data.get("time")
-        all_day = calendar_data.get("all_day", True)
+        # For multi-event notes, use each event's own title instead of classification title
+        pushed = 0
+        for event_data in events:
+            try:
+                # For multi-event, prefer the event's own title
+                event_cls = dict(classification)
+                if len(events) > 1 and event_data.get("title"):
+                    event_cls["title"] = event_data["title"]
+                if _push_single_event(event_data, event_cls, content, creds):
+                    pushed += 1
+            except Exception as e:
+                logger.error(f"Calendar push failed for event '{event_data.get('title', '?')}': {e}")
 
-        if not date_str:
-            logger.warning("Calendar event detected but no date extracted, skipping")
-            return
-
-        if all_day or not time_str:
-            # All-day event: use date format (not dateTime)
-            from googleapiclient.discovery import build
-            service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-            event_body = {
-                "summary": title,
-                "description": content or classification.get("summary", ""),
-                "start": {"date": date_str},
-                "end": {"date": date_str},
-            }
-            created = service.events().insert(calendarId="primary", body=event_body).execute()
-        else:
-            # Timed event
-            start_dt = f"{date_str}T{time_str}:00"
-            # Default 1 hour duration
-            start_obj = datetime.fromisoformat(start_dt)
-            end_obj = start_obj + timedelta(hours=1)
-            end_dt = end_obj.strftime("%Y-%m-%dT%H:%M:%S")
-
-            created = push_event(creds, summary=title, start=start_dt, end=end_dt,
-                                 description=content or classification.get("summary", ""))
-
-        save_event_jsonld(created)
-        # Refresh cache
-        events = pull_events(creds)
-        save_to_cache(events)
-
-        logger.info(f"Auto-pushed calendar event: {title} on {date_str}")
+        if pushed:
+            # Refresh cache once after all events pushed
+            events_list = pull_events(creds)
+            save_to_cache(events_list)
+            logger.info(f"Pushed {pushed}/{len(events)} calendar event(s)")
 
     except Exception as e:
         logger.error(f"Calendar auto-push failed (non-blocking): {e}")

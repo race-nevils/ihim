@@ -122,6 +122,14 @@ except ImportError as e:
     print(f"Warning: Calendar module not available: {e}")
     CALENDAR_AVAILABLE = False
 
+# Import brain module (Second Brain Search & Stats)
+try:
+    from api.brain.routes import router as brain_router
+    BRAIN_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Brain module not available: {e}")
+    BRAIN_AVAILABLE = False
+
 app = FastAPI(title="iHIM", description="Your Command Center")
 
 # CORS middleware for Chrome extension access
@@ -228,6 +236,10 @@ if C2PA_AVAILABLE:
 # Include the calendar router (Google Calendar)
 if CALENDAR_AVAILABLE:
     app.include_router(calendar_router)
+
+# Include the brain router (Second Brain Search)
+if BRAIN_AVAILABLE:
+    app.include_router(brain_router)
 
 
 # Request models

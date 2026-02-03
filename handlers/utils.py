@@ -4,6 +4,7 @@ Extracted from the original brain.py for modularity.
 """
 import hashlib
 import re
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -62,9 +63,17 @@ EXAMPLES:
 Return ONLY valid JSON:
 {{"category": "<Tasks|People|Projects|Ideas|Reference>", "confidence": <0.0-1.0>, "summary": "<1 sentence describing the note>", "calendar": null | {{"is_event": true, "title": "<short event title>", "date": "<YYYY-MM-DD>", "time": "<HH:MM>" | null, "all_day": <true|false>}}}}
 
+Today's date: {{today}}
+
 Note: {content}
 
 JSON response:"""
+
+
+def get_classify_prompt(content: str) -> str:
+    """Format the classification prompt with today's date injected."""
+    today = date.today().isoformat()
+    return CLASSIFY_PROMPT.replace("{{today}}", today).format(content=content)
 
 
 def slugify(text: str) -> str:

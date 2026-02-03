@@ -105,11 +105,27 @@ class OllamaAdapter:
         raw = response.json().get("response", "")
 
         try:
-            return json.loads(raw)
+            parsed = json.loads(raw)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from Ollama: {e}. Raw response: {raw[:500]}")
-            # Return a fallback dict with the raw response
             return {"error": "json_parse_failed", "raw": raw}
+
+        # Validate: callers expect a dict. LLMs sometimes return lists or scalars.
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list) and len(parsed) == 1 and isinstance(parsed[0], dict):
+            # Single-item list wrapping a dict — unwrap it
+            logger.warning(f"LLM returned single-item list, unwrapping to dict")
+            return parsed[0]
+        if isinstance(parsed, list) and len(parsed) > 1:
+            # Multi-item list — merge into first dict, preserve list in "_items" key
+            logger.warning(f"LLM returned list of {len(parsed)} items, normalizing to dict")
+            first = next((item for item in parsed if isinstance(item, dict)), {})
+            first["_items"] = parsed
+            return first
+
+        logger.error(f"LLM returned unexpected JSON type {type(parsed).__name__}: {str(parsed)[:200]}")
+        return {"error": "unexpected_json_type", "raw_type": type(parsed).__name__}
 
     def health_check(self) -> bool:
         """Check if Ollama is running and accessible."""

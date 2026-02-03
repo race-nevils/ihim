@@ -18,11 +18,12 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q"])
     import uvicorn
 
-# Run server silently (no browser open)
-uvicorn.run(
-    "api.main:app",
-    host="127.0.0.1",
-    port=7777,
-    reload=True,
-    log_level="error"
-)
+# Guard required for Windows multiprocessing (uvicorn reload uses spawn)
+if __name__ == "__main__":
+    uvicorn.run(
+        "api.main:app",
+        host="127.0.0.1",
+        port=7777,
+        reload=True,
+        log_level="error"
+    )

@@ -1032,6 +1032,10 @@ main {
     display: flex;
     flex-direction: column;
     z-index: 1000;
+    min-width: 300px;
+    min-height: 250px;
+    overflow: hidden;
+    resize: both;
 }
 
 .standards-library-header {
@@ -1509,12 +1513,13 @@ main {
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-lg), 0 2px 6px rgba(0, 150, 180, 0.2);
-    /* Hard metallic edge */
     z-index: 100;
     width: 900px;
     height: 600px;
     min-width: 400px;
     min-height: 300px;
+    overflow: hidden;
+    resize: both;
 }
 
 .flightpath-header {
@@ -3148,6 +3153,9 @@ main {
     box-shadow: var(--shadow-lg), 0 0 80px rgba(0, 212, 255, 0.1);
     z-index: 100;
     overflow: hidden;
+    min-width: 400px;
+    min-height: 300px;
+    resize: both;
 }
 
 .mc-window::before {
@@ -5010,6 +5018,10 @@ main {
     flex-direction: column;
     box-shadow: var(--shadow-lg), 0 2px 6px rgba(66, 133, 244, 0.2);
     z-index: 100;
+    min-width: 280px;
+    min-height: 200px;
+    overflow: hidden;
+    resize: both;
 }
 
 .calendar-header {
@@ -5334,6 +5346,9 @@ main {
     box-shadow: var(--shadow-lg), 0 2px 6px rgba(139, 92, 246, 0.2);
     z-index: 100;
     overflow: hidden;
+    min-width: 280px;
+    min-height: 200px;
+    resize: both;
 }
 
 .chat-window.minimized {

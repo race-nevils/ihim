@@ -19,35 +19,55 @@ from handlers.utils import compute_content_hash
 from handlers.dedup import find_existing, is_unchanged
 from handlers.classify import classify_content
 from handlers.storage import store_new, update_existing, log_receipt
+from data.database import update_entry
 
 logger = logging.getLogger(__name__)
 
 
-def _push_single_event(event_data: dict, classification: dict, content: str, creds) -> bool:
-    """Push a single calendar event. Returns True on success."""
+def _push_single_event(event_data: dict, classification: dict, content: str, creds,
+                       existing_gcal_id: str | None = None) -> str | None:
+    """Push or update a single calendar event. Returns GCal event ID on success."""
     cls_title = classification.get("title", "")
     cal_title = event_data.get("title", "")
     title = cls_title if cls_title and cls_title != "Untitled" else (cal_title or "Untitled Event")
     date_str = event_data.get("date", "")
     time_str = event_data.get("time")
     all_day = event_data.get("all_day", True)
+    rrule = event_data.get("rrule")
 
     if not date_str:
         logger.warning(f"Calendar event '{title}' has no date, skipping")
-        return False
+        return None
 
-    from api.calendar.sync import push_event, save_event_jsonld
+    from api.calendar.sync import push_event, update_event, save_event_jsonld
+
+    description = content or classification.get("summary", "")
+    recurrence = [rrule] if rrule else None
 
     if all_day or not time_str:
+        if existing_gcal_id:
+            try:
+                result = update_event(creds, existing_gcal_id, summary=title,
+                                      start=date_str, end=date_str, description=description,
+                                      all_day=True, recurrence=recurrence)
+                save_event_jsonld(result)
+                logger.info(f"Updated calendar event: {title} on {date_str}")
+                return result.get("id")
+            except Exception as e:
+                logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
+                # Fall through to insert
+
         from googleapiclient.discovery import build
         service = build("calendar", "v3", credentials=creds, cache_discovery=False)
         event_body = {
             "summary": title,
-            "description": content or classification.get("summary", ""),
+            "description": description,
             "start": {"date": date_str},
             "end": {"date": date_str},
         }
-        created = service.events().insert(calendarId="primary", body=event_body).execute()
+        if recurrence:
+            event_body["recurrence"] = recurrence
+        result = service.events().insert(calendarId="primary", body=event_body).execute()
     else:
         start_dt = f"{date_str}T{time_str}:00"
         end_time = event_data.get("end_time")
@@ -57,23 +77,38 @@ def _push_single_event(event_data: dict, classification: dict, content: str, cre
             start_obj = datetime.fromisoformat(start_dt)
             end_obj = start_obj + timedelta(hours=1)
             end_dt = end_obj.strftime("%Y-%m-%dT%H:%M:%S")
-        created = push_event(creds, summary=title, start=start_dt, end=end_dt,
-                             description=content or classification.get("summary", ""))
 
-    save_event_jsonld(created)
+        if existing_gcal_id:
+            try:
+                result = update_event(creds, existing_gcal_id, summary=title,
+                                      start=start_dt, end=end_dt, description=description,
+                                      recurrence=recurrence)
+                save_event_jsonld(result)
+                logger.info(f"Updated calendar event: {title} on {date_str}")
+                return result.get("id")
+            except Exception as e:
+                logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
+
+        result = push_event(creds, summary=title, start=start_dt, end=end_dt,
+                            description=description)
+
+    save_event_jsonld(result)
     logger.info(f"Auto-pushed calendar event: {title} on {date_str}")
-    return True
+    return result.get("id")
 
 
-def _push_to_calendar(classification: dict, content: str = "") -> None:
+def _push_to_calendar(classification: dict, content: str = "",
+                      existing_gcal_id: str | None = None) -> str | None:
     """Auto-push to Google Calendar if classification contains calendar event(s).
 
     Handles both single events (dict) and multi-event notes (list).
     Fails silently - calendar push is best-effort, never blocks the pipeline.
+
+    Returns the GCal event ID of the first successfully pushed event, or None.
     """
     calendar_data = classification.get("calendar")
     if not calendar_data:
-        return
+        return None
 
     # Normalize to list of events
     if isinstance(calendar_data, list):
@@ -81,10 +116,10 @@ def _push_to_calendar(classification: dict, content: str = "") -> None:
     elif isinstance(calendar_data, dict) and calendar_data.get("is_event"):
         events = [calendar_data]
     else:
-        return
+        return None
 
     if not events:
-        return
+        return None
 
     try:
         from api.calendar.google_auth import get_credentials
@@ -93,29 +128,37 @@ def _push_to_calendar(classification: dict, content: str = "") -> None:
         creds = get_credentials()
         if not creds:
             logger.info("Calendar event(s) detected but Google Calendar not authenticated, skipping")
-            return
+            return None
 
-        # For multi-event notes, use each event's own title instead of classification title
         pushed = 0
+        first_gcal_id = None
         for event_data in events:
             try:
-                # For multi-event, prefer the event's own title
                 event_cls = dict(classification)
                 if len(events) > 1 and event_data.get("title"):
                     event_cls["title"] = event_data["title"]
-                if _push_single_event(event_data, event_cls, content, creds):
+                # Only pass existing_gcal_id for the first event (dedup applies to single-event notes)
+                gcal_id = _push_single_event(
+                    event_data, event_cls, content, creds,
+                    existing_gcal_id=existing_gcal_id if pushed == 0 else None
+                )
+                if gcal_id:
                     pushed += 1
+                    if first_gcal_id is None:
+                        first_gcal_id = gcal_id
             except Exception as e:
                 logger.error(f"Calendar push failed for event '{event_data.get('title', '?')}': {e}")
 
         if pushed:
-            # Refresh cache once after all events pushed
             events_list = pull_events(creds)
             save_to_cache(events_list)
             logger.info(f"Pushed {pushed}/{len(events)} calendar event(s)")
 
+        return first_gcal_id
+
     except Exception as e:
         logger.error(f"Calendar auto-push failed (non-blocking): {e}")
+        return None
 
 
 @observe(name="brain_handler")
@@ -172,6 +215,13 @@ def handle(state: OrchestratorState) -> OrchestratorState:
                     existing, content, content_hash, classification
                 )
 
+                # Calendar push on update (THE FIX: was missing before)
+                existing_gcal_id = existing.get("gcal_event_id")
+                gcal_event_id = _push_to_calendar(classification, content,
+                                                  existing_gcal_id=existing_gcal_id)
+                if gcal_event_id:
+                    update_entry(note_id, {"gcal_event_id": gcal_event_id})
+
                 action = "updated_reclassified" if new_category != old_category else "updated"
                 log_receipt(source_file, classification, action, obsidian_path)
 
@@ -210,7 +260,9 @@ def handle(state: OrchestratorState) -> OrchestratorState:
         )
 
         # Auto-push to Google Calendar if event detected
-        _push_to_calendar(classification, content)
+        gcal_event_id = _push_to_calendar(classification, content)
+        if gcal_event_id:
+            update_entry(note_id, {"gcal_event_id": gcal_event_id})
 
         action = "misc" if classification.get("confidence", 0) < 0.7 else "classified"
         log_receipt(source_file, classification, action, obsidian_path)

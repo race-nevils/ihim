@@ -1,6 +1,7 @@
 """Pull/push logic and local cache for Google Calendar sync."""
 import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -23,7 +24,7 @@ IHIM_CONTEXT = {
     "ihim": "https://ihim.local/schema#",
 }
 
-DEFAULT_TIMEZONE = "America/Chicago"
+DEFAULT_TIMEZONE = os.environ.get("IHIM_TIMEZONE", "America/Chicago")
 
 
 def _build_service(creds: Credentials):
@@ -85,6 +86,44 @@ def push_event(
     )
     logger.info(f"Created GCal event: {created.get('id')} - {summary}")
     return created
+
+
+def update_event(
+    creds: Credentials,
+    event_id: str,
+    summary: str,
+    start: str,
+    end: str,
+    description: str = "",
+    all_day: bool = False,
+    recurrence: list[str] | None = None,
+    calendar_id: str = "primary",
+) -> dict:
+    """Update an existing event on Google Calendar. Returns the updated event."""
+    service = _build_service(creds)
+    if all_day:
+        event_body = {
+            "summary": summary,
+            "description": description,
+            "start": {"date": start},
+            "end": {"date": end},
+        }
+    else:
+        event_body = {
+            "summary": summary,
+            "description": description,
+            "start": {"dateTime": start, "timeZone": DEFAULT_TIMEZONE},
+            "end": {"dateTime": end, "timeZone": DEFAULT_TIMEZONE},
+        }
+    if recurrence:
+        event_body["recurrence"] = recurrence
+    updated = (
+        service.events()
+        .patch(calendarId=calendar_id, eventId=event_id, body=event_body)
+        .execute()
+    )
+    logger.info(f"Updated GCal event: {updated.get('id')} - {summary}")
+    return updated
 
 
 def delete_event(

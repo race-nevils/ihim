@@ -27,6 +27,9 @@ google-api-python-client>=2.0.0
 google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.0.0
 
+# Date parsing
+dateparser>=1.2.0
+
 # C2PA (optional)
 cryptography>=42.0.0
 # c2pa-python>=0.27.0  # Uncomment if C2PA signing needed

@@ -168,6 +168,25 @@ def store_new(
         except Exception as e:
             logger.warning(f"Embedding step failed (non-blocking): {e}")
 
+    # === WRITE 5: Calendar event fields in SQLite ===
+    calendar = classification.get("calendar")
+    if isinstance(calendar, list):
+        calendar = next((c for c in calendar if isinstance(c, dict) and c.get("is_event")), None)
+    if isinstance(calendar, dict) and calendar.get("is_event"):
+        try:
+            cal_fields = {
+                "event_date": calendar.get("date"),
+                "event_start_time": calendar.get("time"),
+                "event_end_time": calendar.get("end_time"),
+                "event_all_day": 1 if calendar.get("all_day") else 0,
+            }
+            if calendar.get("rrule"):
+                cal_fields["event_rrule"] = calendar["rrule"]
+            update_entry(note_id, cal_fields)
+            logger.info(f"Stored calendar fields for: {note_id}")
+        except Exception as e:
+            logger.warning(f"Failed to store calendar fields (non-blocking): {e}")
+
     # Log metadata to Langfuse
     langfuse_context.update_current_observation(
         metadata={
@@ -337,6 +356,25 @@ def update_with_reclassify(
             logger.info(f"Updated database entry with reclassification: {entry_id}")
         except Exception as e:
             logger.error(f"Failed to update SQLite: {e}")
+
+    # === UPDATE 2b: Calendar event fields in SQLite ===
+    calendar = classification.get("calendar")
+    if isinstance(calendar, list):
+        calendar = next((c for c in calendar if isinstance(c, dict) and c.get("is_event")), None)
+    if isinstance(calendar, dict) and calendar.get("is_event"):
+        try:
+            cal_fields = {
+                "event_date": calendar.get("date"),
+                "event_start_time": calendar.get("time"),
+                "event_end_time": calendar.get("end_time"),
+                "event_all_day": 1 if calendar.get("all_day") else 0,
+            }
+            if calendar.get("rrule"):
+                cal_fields["event_rrule"] = calendar["rrule"]
+            update_entry(entry_id, cal_fields)
+            logger.info(f"Updated calendar fields for: {entry_id}")
+        except Exception as e:
+            logger.warning(f"Failed to update calendar fields (non-blocking): {e}")
 
     # === UPDATE 3: Obsidian Memory ===
     obsidian_path = None

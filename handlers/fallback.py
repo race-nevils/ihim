@@ -113,7 +113,20 @@ _SCHEDULING_NOUNS = {
 _DEADLINE_PHRASE_RE = re.compile(
     r"\b(by|due|before)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday"
     r"|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun"
-    r"|eod|end\s+of\s+day|the\s+\d{1,2}(?:st|nd|rd|th)?)\b",
+    r"|eod|eow|eom|eoy|cob|end\s+of\s+day|close\s+of\s+business"
+    r"|the\s+\d{1,2}(?:st|nd|rd|th)?)\b",
+    re.IGNORECASE,
+)
+
+# Shorthand triggers: EOD, COB, EOW, EOM, EOY (fire as strong triggers)
+_SHORTHAND_RE = re.compile(
+    r"\b(EOD|COB|EOW|EOM|EOY)\b",
+    re.IGNORECASE,
+)
+
+# Duration: "for 30 minutes", "for 1 hour", "for 90 minutes", "for 2 hours"
+_DURATION_RE = re.compile(
+    r"\bfor\s+(\d+)\s+(minutes?|hours?|hrs?|mins?)\b",
     re.IGNORECASE,
 )
 
@@ -182,14 +195,18 @@ _PAST_TENSE_DOMINANT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Time-of-day resolution map
+# Time-of-day resolution map (aligned with Time Lexicon defaults)
 _TIME_OF_DAY_MAP = {
     "morning": "09:00", "dawn": "06:00", "sunrise": "06:00",
     "noon": "12:00", "midday": "12:00", "lunchtime": "12:00",
-    "afternoon": "14:00",
-    "evening": "18:00", "sunset": "18:00", "dusk": "19:00",
+    "afternoon": "15:00",      # Lexicon: 15:00, range [12:00, 17:00]
+    "evening": "19:00",        # Lexicon: 19:00, range [17:00, 21:00]
+    "sunset": "18:00", "dusk": "19:30",  # Lexicon: 19:30
+    "night": "21:00",          # Lexicon: 21:00, range [20:00, 23:59]
     "tonight": "20:00",
     "midnight": "00:00",
+    "end of day": "17:00",     # Lexicon: EOD -> 17:00
+    "close of business": "17:00",  # Lexicon: COB -> 17:00
     "before lunch": "11:00", "after lunch": "13:00",
     "before dinner": "17:00", "after dinner": "20:00",
     "breakfast time": "07:00", "supper": "18:00",
@@ -306,8 +323,22 @@ def extract_date(content: str) -> Optional[dict]:
                         tm = _BARE_TIME_OF_DAY_RE.search(content)
                     if tm:
                         period = tm.group(1).lower()
-                        time_str = {"morning": "09:00", "afternoon": "14:00", "evening": "18:00"}[period]
+                        time_str = {"morning": "09:00", "afternoon": "15:00", "evening": "19:00"}[period]
                         all_day = False
+
+    # Duration: compute end_time from "for N minutes/hours"
+    if time_str and not end_time_str:
+        dm = _DURATION_RE.search(content)
+        if dm:
+            dur_val = int(dm.group(1))
+            dur_unit = dm.group(2).lower()
+            if dur_unit.startswith("hour") or dur_unit.startswith("hr"):
+                dur_minutes = dur_val * 60
+            else:
+                dur_minutes = dur_val
+            parts = time_str.split(":")
+            total = int(parts[0]) * 60 + int(parts[1]) + dur_minutes
+            end_time_str = f"{(total // 60) % 24:02d}:{total % 60:02d}"
 
     # Build title from content (first ~8 words, title-cased)
     # Strip frontmatter first
@@ -468,6 +499,25 @@ def _resolve_date_from_keyword(keyword: str, today: date) -> str:
         return today.isoformat()
     if kw == "day after tomorrow":
         return (today + timedelta(days=2)).isoformat()
+    if kw in ("eod", "end of day", "cob", "close of business"):
+        return today.isoformat()
+    if kw == "eow":
+        # End of week = Friday
+        days_until_fri = (4 - today.weekday()) % 7
+        if days_until_fri == 0 and today.weekday() != 4:
+            days_until_fri = 7
+        return (today + timedelta(days=days_until_fri)).isoformat()
+    if kw == "eom":
+        # End of month
+        month = today.month
+        year = today.year
+        if month == 12:
+            last_day = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last_day = date(year, month + 1, 1) - timedelta(days=1)
+        return last_day.isoformat()
+    if kw == "eoy":
+        return date(today.year, 12, 31).isoformat()
     if kw == "this weekend":
         # Next Saturday
         days_until_sat = (5 - today.weekday()) % 7
@@ -557,13 +607,23 @@ def _resolve_time_from_text(text: str) -> tuple:
         if word in text_lower:
             return _TIME_OF_DAY_MAP[word], None, False
 
+    # Check "end of day" / "close of business" multi-word phrases
+    for phrase in ("end of day", "close of business"):
+        if phrase in text_lower:
+            return _TIME_OF_DAY_MAP[phrase], None, False
+
     # Single-word time-of-day
     words = set(re.findall(r"[a-z]+", text_lower))
     for kw in ("midnight", "noon", "midday", "dawn", "sunrise",
                "morning", "afternoon", "evening", "sunset", "dusk",
-               "tonight"):
+               "night", "tonight"):
         if kw in words:
             return _TIME_OF_DAY_MAP[kw], None, False
+
+    # Shorthand resolution
+    for kw in ("eod", "cob"):
+        if kw in words:
+            return _TIME_OF_DAY_MAP.get("end of day", "17:00"), None, False
 
     return None, None, True
 
@@ -690,6 +750,13 @@ def detect_calendar_by_keywords(content: str) -> Optional[dict]:
                 else:
                     resolved_date = (today + timedelta(days=1)).isoformat()
 
+    # Check standalone shorthand: EOD, COB, EOW, EOM, EOY
+    if not matched_keyword:
+        m = _SHORTHAND_RE.search(text)
+        if m:
+            matched_keyword = m.group(1).lower()
+            resolved_date = _resolve_date_from_keyword(matched_keyword, today)
+
     # Step 3: MEDIUM triggers (need action verb in 15-word window)
     if not matched_keyword:
         words_list = text_lower.split()
@@ -755,6 +822,29 @@ def detect_calendar_by_keywords(content: str) -> Optional[dict]:
     if matched_keyword == "tonight" and time_str is None:
         time_str = "20:00"
         all_day = False
+
+    # Special case: shorthand keywords set time
+    if matched_keyword in ("eod", "cob") and time_str is None:
+        time_str = "17:00"
+        all_day = False
+
+    # Duration: "for 30 minutes", "for 1 hour" -> compute end_time
+    if time_str and not end_time_str:
+        dm = _DURATION_RE.search(text)
+        if dm:
+            duration_val = int(dm.group(1))
+            duration_unit = dm.group(2).lower()
+            if duration_unit.startswith("hour") or duration_unit.startswith("hr"):
+                duration_minutes = duration_val * 60
+            else:
+                duration_minutes = duration_val
+            # Parse start time and add duration
+            parts = time_str.split(":")
+            start_h, start_m = int(parts[0]), int(parts[1])
+            total_minutes = start_h * 60 + start_m + duration_minutes
+            end_h = (total_minutes // 60) % 24
+            end_m = total_minutes % 60
+            end_time_str = f"{end_h:02d}:{end_m:02d}"
 
     # Step 6: Build title
     title = _build_title(content)

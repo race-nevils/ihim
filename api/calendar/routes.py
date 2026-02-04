@@ -169,6 +169,17 @@ async def remove_event(event_id: str, calendar_id: str = "primary"):
         raise HTTPException(status_code=500, detail=f"Delete event failed: {e}")
 
 
+@router.get("/entries")
+async def get_brain_calendar_entries(days_ahead: int = 14):
+    """Get brain entries that have calendar event data."""
+    from data.database import get_upcoming_events
+    entries = get_upcoming_events(days_ahead=days_ahead)
+    return {
+        "entries": entries,
+        "count": len(entries),
+    }
+
+
 @router.post("/push-entry")
 async def push_brain_entry(request: PushBrainEntryRequest):
     """Push an existing brain entry as a Google Calendar event."""

@@ -56,13 +56,36 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
     keyword_fallback_used = False
     calendar_date_overridden = False
     summary_fallback_used = False
+    holiday_fallback_used = False
+    recurrence_detected = False
 
     # Always run deterministic date parsing as validation layer.
     # Small LLMs can't do calendar math for relative dates ("next week", "tomorrow").
     # Deterministic parsing is authoritative for date/time when it matches.
     regex_calendar = extract_date(content)
-    keyword_calendar = detect_calendar_by_keywords(content) if not regex_calendar else None
-    deterministic_calendar = regex_calendar or keyword_calendar
+
+    # Tier 2.5: dateparser (only if regex missed)
+    dateparser_calendar = None
+    if not regex_calendar:
+        from handlers.dateparse import extract_date_dateparser
+        dateparser_calendar = extract_date_dateparser(content)
+
+    keyword_calendar = detect_calendar_by_keywords(content) if not (regex_calendar or dateparser_calendar) else None
+    deterministic_calendar = regex_calendar or dateparser_calendar or keyword_calendar
+
+    # Tier 4: Holiday resolution (if no explicit date found, check for holiday names)
+    if not deterministic_calendar:
+        from handlers.lexicon import detect_holiday
+        holiday_calendar = detect_holiday(content)
+        if holiday_calendar:
+            deterministic_calendar = holiday_calendar
+            holiday_fallback_used = True
+
+    # Tier 5: Recurrence detection (independent of date - adds rrule to calendar data)
+    from handlers.lexicon import detect_recurrence
+    recurrence = detect_recurrence(content)
+    if recurrence:
+        recurrence_detected = True
 
     # Normalize: LLM may return a list of calendar events for multi-task notes.
     # Keep the list in classification for multi-event push, use first item for validation.
@@ -82,7 +105,8 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             classification["calendar"] = deterministic_calendar
             calendar_fallback_used = True
             keyword_fallback_used = bool(keyword_calendar)
-            logger.info(f"[{'keyword' if keyword_calendar else 'regex'}-fallback] "
+            fallback_source = "keyword" if keyword_calendar else ("dateparser" if dateparser_calendar else "regex")
+            logger.info(f"[{fallback_source}-fallback] "
                         f"Extracted calendar: {deterministic_calendar.get('date')}")
     else:
         # LLM returned calendar data — validate date/time with deterministic
@@ -90,9 +114,10 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             llm_date = calendar_data.get("date", "")
             det_date = deterministic_calendar["date"]
             if llm_date != det_date:
+                override_source = "keyword" if keyword_calendar else ("dateparser" if dateparser_calendar else "regex")
                 logger.warning(
                     f"[date-validation] LLM date={llm_date} overridden by "
-                    f"deterministic={det_date} (source: {'keyword' if keyword_calendar else 'regex'})"
+                    f"deterministic={det_date} (source: {override_source})"
                 )
                 calendar_date_overridden = True
             calendar_data["date"] = det_date
@@ -118,6 +143,20 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             classification["calendar"] = normalized
         else:
             classification["calendar"] = calendar_data
+
+    # Attach recurrence RRULE to calendar data if detected
+    if recurrence_detected and recurrence:
+        final_cal = classification.get("calendar")
+        if isinstance(final_cal, dict) and final_cal.get("is_event"):
+            final_cal["rrule"] = recurrence["rrule"]
+            if recurrence.get("ambiguity"):
+                final_cal["recurrence_ambiguity"] = recurrence["ambiguity"]
+            logger.info(f"[recurrence] Attached RRULE to calendar: {recurrence['rrule']}")
+        elif isinstance(final_cal, list):
+            for item in final_cal:
+                if isinstance(item, dict) and item.get("is_event"):
+                    item["rrule"] = recurrence["rrule"]
+                    break
 
     # Summary validation: catch contaminated summaries
     raw_summary = classification.get("summary", "")
@@ -146,6 +185,8 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             "calendar_event_count": len(final_calendar) if isinstance(final_calendar, list) else (1 if log_cal else 0),
             "calendar_fallback_used": calendar_fallback_used,
             "keyword_fallback_used": keyword_fallback_used,
+            "holiday_fallback_used": holiday_fallback_used,
+            "recurrence_detected": recurrence_detected,
             "calendar_date_overridden": calendar_date_overridden,
             "summary_fallback_used": summary_fallback_used,
         }

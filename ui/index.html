@@ -775,88 +775,6 @@
             }
         });
 
-        function initializeFlightPathDrag() {
-            const fpWindow = document.getElementById('flightpath-window');
-            const header = fpWindow.querySelector('.flightpath-drag-handle');
-
-            let isDragging = false;
-            let currentHandlers = null;
-
-            header.style.cursor = 'move';
-
-            header.addEventListener('mousedown', (e) => {
-                if (e.target.classList.contains('flightpath-close') ||
-                    e.target.classList.contains('fp-control-btn')) return;
-
-                e.preventDefault();
-
-                if (currentHandlers) {
-                    document.removeEventListener('mousemove', currentHandlers.move);
-                    document.removeEventListener('mouseup', currentHandlers.up);
-                    currentHandlers = null;
-                }
-
-                const mouseDownTime = Date.now();
-                isDragging = false;
-
-                const rect = fpWindow.getBoundingClientRect();
-                const offsetX = e.clientX - rect.left;
-                const offsetY = e.clientY - rect.top;
-                const startX = e.clientX;
-                const startY = e.clientY;
-
-                const onMouseMove = (e) => {
-                    e.preventDefault();
-
-                    const dx = Math.abs(e.clientX - startX);
-                    const dy = Math.abs(e.clientY - startY);
-                    const elapsed = Date.now() - mouseDownTime;
-
-                    if ((dx > 5 || dy > 5 || elapsed > 150) && !isDragging) {
-                        isDragging = true;
-                        fpWindow.style.opacity = '0.8';
-                        fpWindow.style.zIndex = '1000';
-                    }
-
-                    if (isDragging) {
-                        const x = e.clientX - offsetX;
-                        const y = e.clientY - offsetY;
-                        fpWindow.style.left = x + 'px';
-                        fpWindow.style.top = y + 'px';
-                    }
-                };
-
-                const cleanup = () => {
-                    if (isDragging) {
-                        const x = parseInt(fpWindow.style.left);
-                        const y = parseInt(fpWindow.style.top);
-                        localStorage.setItem('flightpathWindowPosition', JSON.stringify({ x, y }));
-                        fpWindow.style.opacity = '1';
-                        fpWindow.style.zIndex = '';
-                    }
-
-                    isDragging = false;
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    document.removeEventListener('mouseleave', onMouseLeave);
-                    currentHandlers = null;
-                };
-
-                const onMouseUp = (e) => cleanup();
-
-                const onMouseLeave = (e) => {
-                    if (isDragging && e.target === document.documentElement) {
-                        cleanup();
-                    }
-                };
-
-                currentHandlers = { move: onMouseMove, up: onMouseUp };
-
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-                document.addEventListener('mouseleave', onMouseLeave);
-            });
-        }
 
         function formatTimestamp(timestamp) {
             const date = new Date(timestamp);
@@ -888,13 +806,19 @@
             const win = document.getElementById('standards-library-window');
 
             // Load position from localStorage or center it
-            const saved = localStorage.getItem('standardsLibraryWindowPosition');
-            if (saved) {
-                const { x, y } = JSON.parse(saved);
-                win.style.left = x + 'px';
-                win.style.top = y + 'px';
-            } else {
-                // Center on screen
+            let posRestored = false;
+            try {
+                const saved = localStorage.getItem('standardsLibraryWindowPosition');
+                if (saved) {
+                    const { x, y } = JSON.parse(saved);
+                    if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
+                        win.style.left = x + 'px';
+                        win.style.top = y + 'px';
+                        posRestored = true;
+                    }
+                }
+            } catch (e) { console.warn('Failed to restore standards library position:', e); }
+            if (!posRestored) {
                 const rect = win.getBoundingClientRect();
                 win.style.left = (window.innerWidth - rect.width) / 2 + 'px';
                 win.style.top = (window.innerHeight - rect.height) / 2 + 'px';
@@ -905,7 +829,7 @@
 
             // Initialize drag if not already done
             if (!win.dataset.dragInitialized) {
-                initializeStandardsLibraryDrag();
+                makeDraggable('standards-library-window', '.standards-library-drag-handle', 'standardsLibraryWindowPosition');
                 win.dataset.dragInitialized = 'true';
             }
         }
@@ -914,42 +838,6 @@
             document.getElementById('standards-library-window').style.display = 'none';
         }
 
-        function initializeStandardsLibraryDrag() {
-            const win = document.getElementById('standards-library-window');
-            const handle = win.querySelector('.standards-library-drag-handle');
-
-            let isDragging = false;
-            let startX, startY, startLeft, startTop;
-
-            handle.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                const rect = win.getBoundingClientRect();
-                startLeft = rect.left;
-                startTop = rect.top;
-                e.preventDefault();
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                win.style.left = (startLeft + dx) + 'px';
-                win.style.top = (startTop + dy) + 'px';
-            });
-
-            document.addEventListener('mouseup', () => {
-                if (isDragging) {
-                    const rect = win.getBoundingClientRect();
-                    localStorage.setItem('standardsLibraryWindowPosition', JSON.stringify({
-                        x: rect.left,
-                        y: rect.top
-                    }));
-                }
-                isDragging = false;
-            });
-        }
 
         async function loadStandardsLibraryModules() {
             try {
@@ -1241,7 +1129,7 @@
 
             // Initialize drag if not already done
             if (!win.dataset.dragInitialized) {
-                initializeC2PAVerifyDrag();
+                makeDraggable('c2pa-verify-window', '.c2pa-verify-drag-handle', 'c2paVerifyWindowPosition');
                 initializeC2PAEventHandlers();
                 win.dataset.dragInitialized = 'true';
             }
@@ -1254,55 +1142,6 @@
             }
         }
 
-        function initializeC2PAVerifyDrag() {
-            const win = document.getElementById('c2pa-verify-window');
-            if (!win) {
-                console.error('C2PA verify window element not found');
-                return;
-            }
-
-            const handle = win.querySelector('.c2pa-verify-drag-handle');
-            if (!handle) {
-                console.error('C2PA verify drag handle not found');
-                return;
-            }
-
-            let isDragging = false;
-            let startX, startY, startLeft, startTop;
-
-            handle.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                const rect = win.getBoundingClientRect();
-                startLeft = rect.left;
-                startTop = rect.top;
-                e.preventDefault();
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                win.style.left = (startLeft + dx) + 'px';
-                win.style.top = (startTop + dy) + 'px';
-            });
-
-            document.addEventListener('mouseup', () => {
-                if (isDragging) {
-                    const rect = win.getBoundingClientRect();
-                    try {
-                        localStorage.setItem('c2paVerifyWindowPosition', JSON.stringify({
-                            x: rect.left,
-                            y: rect.top
-                        }));
-                    } catch (e) {
-                        console.warn('Failed to save C2PA window position:', e);
-                    }
-                }
-                isDragging = false;
-            });
-        }
 
         // Initialize event handlers for dropzone and file input
         function initializeC2PAEventHandlers() {
@@ -1819,12 +1658,19 @@
             const fpWindow = document.getElementById('flightpath-window');
 
             // Restore saved position
-            const savedPosition = localStorage.getItem('flightpathWindowPosition');
-            if (savedPosition) {
-                const { x, y } = JSON.parse(savedPosition);
-                fpWindow.style.left = x + 'px';
-                fpWindow.style.top = y + 'px';
-            } else {
+            let posRestored = false;
+            try {
+                const savedPosition = localStorage.getItem('flightpathWindowPosition');
+                if (savedPosition) {
+                    const { x, y } = JSON.parse(savedPosition);
+                    if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
+                        fpWindow.style.left = x + 'px';
+                        fpWindow.style.top = y + 'px';
+                        posRestored = true;
+                    }
+                }
+            } catch (e) { console.warn('Failed to restore flightpath position:', e); }
+            if (!posRestored) {
                 // Center window initially
                 const windowWidth = window.innerWidth;
                 const windowHeight = window.innerHeight;
@@ -1838,7 +1684,7 @@
 
             // Initialize drag if not already done
             if (!fpWindow.dataset.dragInitialized) {
-                initializeFlightPathDrag();
+                makeDraggable('flightpath-window', '.flightpath-drag-handle', 'flightpathWindowPosition');
                 fpWindow.dataset.dragInitialized = 'true';
             }
 
@@ -2621,13 +2467,19 @@
             mcWindow.style.display = 'flex';
 
             // Restore position or center on screen
-            const savedPos = localStorage.getItem('mcWindowPosition');
-            if (savedPos) {
-                const { x, y } = JSON.parse(savedPos);
-                mcWindow.style.left = x + 'px';
-                mcWindow.style.top = y + 'px';
-            } else {
-                // Center on screen
+            let posRestored = false;
+            try {
+                const savedPos = localStorage.getItem('mcWindowPosition');
+                if (savedPos) {
+                    const { x, y } = JSON.parse(savedPos);
+                    if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
+                        mcWindow.style.left = x + 'px';
+                        mcWindow.style.top = y + 'px';
+                        posRestored = true;
+                    }
+                }
+            } catch (e) { console.warn('Failed to restore MC position:', e); }
+            if (!posRestored) {
                 const rect = mcWindow.getBoundingClientRect();
                 mcWindow.style.left = Math.max(20, (window.innerWidth - rect.width) / 2) + 'px';
                 mcWindow.style.top = Math.max(20, (window.innerHeight - rect.height) / 2) + 'px';
@@ -2635,7 +2487,7 @@
 
             // Initialize drag if not already done
             if (!mcWindow.dataset.dragInitialized) {
-                initializeMCDrag();
+                makeDraggable('mc-window', '.mc-drag-handle', 'mcWindowPosition');
                 mcWindow.dataset.dragInitialized = 'true';
             }
 
@@ -2883,89 +2735,6 @@
             }, 5000);
         }
 
-        function initializeMCDrag() {
-            const mcWindow = document.getElementById('mc-window');
-            const header = mcWindow.querySelector('.mc-drag-handle');
-
-            let isDragging = false;
-            let currentHandlers = null;
-
-            header.style.cursor = 'move';
-
-            header.addEventListener('mousedown', (e) => {
-                // Don't drag if clicking close button
-                if (e.target.classList.contains('mc-close')) return;
-
-                e.preventDefault();
-
-                // Clean up stale handlers
-                if (currentHandlers) {
-                    document.removeEventListener('mousemove', currentHandlers.move);
-                    document.removeEventListener('mouseup', currentHandlers.up);
-                    currentHandlers = null;
-                }
-
-                const mouseDownTime = Date.now();
-                isDragging = false;
-
-                const rect = mcWindow.getBoundingClientRect();
-                const offsetX = e.clientX - rect.left;
-                const offsetY = e.clientY - rect.top;
-                const startX = e.clientX;
-                const startY = e.clientY;
-
-                const onMouseMove = (e) => {
-                    e.preventDefault();
-
-                    const dx = Math.abs(e.clientX - startX);
-                    const dy = Math.abs(e.clientY - startY);
-                    const elapsed = Date.now() - mouseDownTime;
-
-                    if ((dx > 5 || dy > 5 || elapsed > 150) && !isDragging) {
-                        isDragging = true;
-                        mcWindow.style.opacity = '0.9';
-                        mcWindow.style.zIndex = '1000';
-                    }
-
-                    if (isDragging) {
-                        const x = e.clientX - offsetX;
-                        const y = e.clientY - offsetY;
-                        mcWindow.style.left = x + 'px';
-                        mcWindow.style.top = y + 'px';
-                    }
-                };
-
-                const cleanup = () => {
-                    if (isDragging) {
-                        const x = parseInt(mcWindow.style.left);
-                        const y = parseInt(mcWindow.style.top);
-                        localStorage.setItem('mcWindowPosition', JSON.stringify({ x, y }));
-                        mcWindow.style.opacity = '1';
-                        mcWindow.style.zIndex = '100';
-                    }
-
-                    isDragging = false;
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    document.removeEventListener('mouseleave', onMouseLeave);
-                    currentHandlers = null;
-                };
-
-                const onMouseUp = () => cleanup();
-
-                const onMouseLeave = (e) => {
-                    if (isDragging && e.target === document.documentElement) {
-                        cleanup();
-                    }
-                };
-
-                currentHandlers = { move: onMouseMove, up: onMouseUp };
-
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-                document.addEventListener('mouseleave', onMouseLeave);
-            });
-        }
 
         // =============================================================================
         // WORKSPACE STATE PERSISTENCE
@@ -3700,12 +3469,6 @@
         // =============================================================================
 
         function initializeWidgetResize() {
-            const MIN_WIDTH = 200;
-            const MIN_HEIGHT = 150;
-            const EDGE_THRESHOLD = 8;
-
-            let activeResize = null;
-
             const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'chat-window'];
 
             // Restore saved sizes from localStorage
@@ -3713,13 +3476,11 @@
                 const savedSize = localStorage.getItem(`${widgetId}-size`);
                 if (savedSize) {
                     try {
-                        const { width, height, top, left } = JSON.parse(savedSize);
+                        const { width, height } = JSON.parse(savedSize);
                         const widget = document.getElementById(widgetId);
                         if (widget) {
-                            widget.style.width = `${width}px`;
-                            widget.style.height = `${height}px`;
-                            if (top !== undefined) widget.style.top = `${top}px`;
-                            if (left !== undefined) widget.style.left = `${left}px`;
+                            if (width) widget.style.width = `${width}px`;
+                            if (height) widget.style.height = `${height}px`;
                         }
                     } catch (e) {
                         console.warn(`Failed to restore size for ${widgetId}:`, e);
@@ -3727,135 +3488,24 @@
                 }
             });
 
-            // Detect which edge/corner mouse is near
-            function getResizeEdge(widget, e) {
-                const rect = widget.getBoundingClientRect();
-                const x = e.clientX;
-                const y = e.clientY;
-
-                const nearLeft = x - rect.left < EDGE_THRESHOLD;
-                const nearRight = rect.right - x < EDGE_THRESHOLD;
-                const nearTop = y - rect.top < EDGE_THRESHOLD;
-                const nearBottom = rect.bottom - y < EDGE_THRESHOLD;
-
-                if (nearTop && nearLeft) return 'nw';
-                if (nearTop && nearRight) return 'ne';
-                if (nearBottom && nearLeft) return 'sw';
-                if (nearBottom && nearRight) return 'se';
-                if (nearTop) return 'n';
-                if (nearBottom) return 's';
-                if (nearLeft) return 'w';
-                if (nearRight) return 'e';
-                return null;
-            }
-
-            function getCursorForEdge(edge) {
-                const cursors = {
-                    'n': 'ns-resize', 's': 'ns-resize',
-                    'e': 'ew-resize', 'w': 'ew-resize',
-                    'nw': 'nwse-resize', 'se': 'nwse-resize',
-                    'ne': 'nesw-resize', 'sw': 'nesw-resize'
-                };
-                return cursors[edge] || '';
-            }
-
-            // Add edge detection to each widget
-            widgetIds.forEach(widgetId => {
-                const widget = document.getElementById(widgetId);
-                if (!widget) return;
-
-                widget.addEventListener('mousemove', (e) => {
-                    if (activeResize) return;
-                    const edge = getResizeEdge(widget, e);
-                    widget.style.cursor = edge ? getCursorForEdge(edge) : '';
-                });
-
-                widget.addEventListener('mouseleave', () => {
-                    if (!activeResize) widget.style.cursor = '';
-                });
-
-                widget.addEventListener('mousedown', (e) => {
-                    const edge = getResizeEdge(widget, e);
-                    if (!edge) return;
-
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const rect = widget.getBoundingClientRect();
-                    activeResize = {
-                        widget, widgetId, edge,
-                        startX: e.clientX, startY: e.clientY,
-                        startWidth: rect.width, startHeight: rect.height,
-                        startTop: widget.offsetTop, startLeft: widget.offsetLeft
-                    };
-
-                    document.body.style.cursor = getCursorForEdge(edge);
-                    widget.style.userSelect = 'none';
-
-                    document.addEventListener('mousemove', onMouseMove);
-                    document.addEventListener('mouseup', onMouseUp);
-                });
+            // Persist sizes on native CSS resize via ResizeObserver
+            const observer = new ResizeObserver(entries => {
+                for (const entry of entries) {
+                    const widget = entry.target;
+                    if (widget.style.display === 'none') continue;
+                    const widgetId = widget.id;
+                    if (!widgetIds.includes(widgetId)) continue;
+                    localStorage.setItem(`${widgetId}-size`, JSON.stringify({
+                        width: Math.round(entry.contentRect.width),
+                        height: Math.round(entry.contentRect.height)
+                    }));
+                }
             });
 
-            function onMouseMove(e) {
-                if (!activeResize) return;
-
-                const { widget, edge, startX, startY, startWidth, startHeight, startTop, startLeft } = activeResize;
-                const deltaX = e.clientX - startX;
-                const deltaY = e.clientY - startY;
-
-                let newWidth = startWidth;
-                let newHeight = startHeight;
-                let newTop = startTop;
-                let newLeft = startLeft;
-
-                if (edge.includes('e')) newWidth = startWidth + deltaX;
-                if (edge.includes('w')) { newWidth = startWidth - deltaX; newLeft = startLeft + deltaX; }
-                if (edge.includes('s')) newHeight = startHeight + deltaY;
-                if (edge.includes('n')) { newHeight = startHeight - deltaY; newTop = startTop + deltaY; }
-
-                // Apply min constraints
-                if (newWidth < MIN_WIDTH) {
-                    if (edge.includes('w')) newLeft -= (MIN_WIDTH - newWidth);
-                    newWidth = MIN_WIDTH;
-                }
-                if (newHeight < MIN_HEIGHT) {
-                    if (edge.includes('n')) newTop -= (MIN_HEIGHT - newHeight);
-                    newHeight = MIN_HEIGHT;
-                }
-
-                // Boundary clamping
-                newLeft = Math.max(0, newLeft);
-                newTop = Math.max(0, newTop);
-
-                widget.style.width = `${newWidth}px`;
-                widget.style.height = `${newHeight}px`;
-                widget.style.top = `${newTop}px`;
-                widget.style.left = `${newLeft}px`;
-
-                e.preventDefault();
-            }
-
-            function onMouseUp() {
-                if (!activeResize) return;
-
-                const { widget, widgetId } = activeResize;
-
-                localStorage.setItem(`${widgetId}-size`, JSON.stringify({
-                    width: widget.offsetWidth,
-                    height: widget.offsetHeight,
-                    top: widget.offsetTop,
-                    left: widget.offsetLeft
-                }));
-
-                widget.style.userSelect = '';
-                document.body.style.cursor = '';
-
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
-
-                activeResize = null;
-            }
+            widgetIds.forEach(widgetId => {
+                const widget = document.getElementById(widgetId);
+                if (widget) observer.observe(widget);
+            });
         }
 
         // =====================
@@ -3866,40 +3516,38 @@
         // UTILITIES
         // =====================
 
-        // Initialize reusable drag functionality for any window
-        function initDraggable(el, handle) {
-            if (!el || !handle) return;
-            handle.style.cursor = 'move';
+        // Unified drag handler for all windows
+        function makeDraggable(windowId, handleSelector, storageKey) {
+            const el = document.getElementById(windowId);
+            if (!el) return;
+            const handle = el.querySelector(handleSelector);
+            if (!handle) return;
 
+            handle.style.cursor = 'move';
             let isDragging = false;
             let currentHandlers = null;
 
             handle.addEventListener('mousedown', (e) => {
-                // Ignore clicks on buttons inside the handle
                 if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-
                 e.preventDefault();
 
-                // Clean up stale handlers if any
                 if (currentHandlers) {
                     document.removeEventListener('mousemove', currentHandlers.move);
                     document.removeEventListener('mouseup', currentHandlers.up);
+                    document.removeEventListener('mouseleave', currentHandlers.leave);
                     currentHandlers = null;
                 }
 
-                // Fix: Freeze current visual position to absolute pixels (removes transform conflict)
+                // Convert right/bottom positioning to left/top
                 const rect = el.getBoundingClientRect();
-
                 el.style.transform = 'none';
                 el.style.right = 'auto';
                 el.style.bottom = 'auto';
-
                 el.style.left = rect.left + 'px';
                 el.style.top = rect.top + 'px';
 
                 const mouseDownTime = Date.now();
                 isDragging = false;
-
                 const offsetX = e.clientX - rect.left;
                 const offsetY = e.clientY - rect.top;
                 const startX = e.clientX;
@@ -3909,14 +3557,12 @@
                     e.preventDefault();
                     const dx = Math.abs(e.clientX - startX);
                     const dy = Math.abs(e.clientY - startY);
-                    const elapsed = Date.now() - mouseDownTime;
-
-                    if ((dx > 5 || dy > 5 || elapsed > 150) && !isDragging) {
+                    if ((dx > 5 || dy > 5 || Date.now() - mouseDownTime > 150) && !isDragging) {
                         isDragging = true;
                         el.style.opacity = '0.9';
                         el.style.zIndex = '1000';
+                        document.body.style.userSelect = 'none';
                     }
-
                     if (isDragging) {
                         el.style.left = (e.clientX - offsetX) + 'px';
                         el.style.top = (e.clientY - offsetY) + 'px';
@@ -3924,19 +3570,30 @@
                 };
 
                 const cleanup = () => {
+                    if (isDragging && storageKey) {
+                        localStorage.setItem(storageKey, JSON.stringify({
+                            x: parseInt(el.style.left), y: parseInt(el.style.top)
+                        }));
+                    }
                     isDragging = false;
                     el.style.opacity = '1';
                     el.style.zIndex = '';
+                    document.body.style.userSelect = '';
                     document.removeEventListener('mousemove', onMouseMove);
                     document.removeEventListener('mouseup', onMouseUp);
+                    document.removeEventListener('mouseleave', onMouseLeave);
                     currentHandlers = null;
                 };
 
                 const onMouseUp = () => cleanup();
+                const onMouseLeave = (e) => {
+                    if (isDragging && e.target === document.documentElement) cleanup();
+                };
 
-                currentHandlers = { move: onMouseMove, up: onMouseUp };
+                currentHandlers = { move: onMouseMove, up: onMouseUp, leave: onMouseLeave };
                 document.addEventListener('mousemove', onMouseMove);
                 document.addEventListener('mouseup', onMouseUp);
+                document.addEventListener('mouseleave', onMouseLeave);
             });
         }
 
@@ -3962,13 +3619,6 @@
         }
     </script>
 
-    <!-- C2PA MODULE REMOVED -->
-    <script>
-        // C2PA module removed (dashboard cleanup)
-        function openC2PAWindow() { /* removed */ }
-        function closeC2PAWindow() { /* removed */ }
-    </script>
-
     <!-- GOOGLE CALENDAR MODULE SCRIPT -->
     <script>
         // ==========================================
@@ -3982,12 +3632,19 @@
             if (!win) return;
 
             // Restore or center position
-            const saved = localStorage.getItem('calendarWindowPosition');
-            if (saved) {
-                const { x, y } = JSON.parse(saved);
-                win.style.left = x + 'px';
-                win.style.top = y + 'px';
-            } else {
+            let posRestored = false;
+            try {
+                const saved = localStorage.getItem('calendarWindowPosition');
+                if (saved) {
+                    const { x, y } = JSON.parse(saved);
+                    if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
+                        win.style.left = x + 'px';
+                        win.style.top = y + 'px';
+                        posRestored = true;
+                    }
+                }
+            } catch (e) { console.warn('Failed to restore calendar position:', e); }
+            if (!posRestored) {
                 win.style.left = Math.max(0, (window.innerWidth - 420) / 2) + 'px';
                 win.style.top = Math.max(0, (window.innerHeight - 520) / 2) + 'px';
             }
@@ -3995,7 +3652,7 @@
             win.style.display = 'flex';
 
             if (!win.dataset.dragInitialized) {
-                initializeCalendarDrag();
+                makeDraggable('calendar-window', '.calendar-drag-handle', 'calendarWindowPosition');
                 win.dataset.dragInitialized = 'true';
             }
 
@@ -4010,37 +3667,6 @@
             if (win) win.style.display = 'none';
         }
 
-        function initializeCalendarDrag() {
-            const win = document.getElementById('calendar-window');
-            const handle = win.querySelector('.calendar-drag-handle');
-            let isDragging = false, startX, startY, startLeft, startTop;
-
-            handle.addEventListener('mousedown', (e) => {
-                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-                isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                startLeft = win.offsetLeft;
-                startTop = win.offsetTop;
-                win.style.opacity = '0.85';
-                e.preventDefault();
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                win.style.left = (startLeft + e.clientX - startX) + 'px';
-                win.style.top = (startTop + e.clientY - startY) + 'px';
-            });
-
-            document.addEventListener('mouseup', () => {
-                if (!isDragging) return;
-                isDragging = false;
-                win.style.opacity = '1';
-                localStorage.setItem('calendarWindowPosition', JSON.stringify({
-                    x: win.offsetLeft, y: win.offsetTop
-                }));
-            });
-        }
 
         async function loadCalendarEvents() {
             const statusEl = document.getElementById('calendar-status');
@@ -4505,21 +4131,35 @@
             const win = document.getElementById('chat-window');
             if (!win) return;
 
-            // Restore position
-            const saved = localStorage.getItem('chatWindowPosition');
-            if (saved) {
-                const { x, y } = JSON.parse(saved);
-                win.style.left = x + 'px';
-                win.style.top = y + 'px';
-                win.style.right = 'auto';
-                win.style.bottom = 'auto';
+            // Restore position with safety checks
+            let positionRestored = false;
+            try {
+                const saved = localStorage.getItem('chatWindowPosition');
+                if (saved) {
+                    const { x, y } = JSON.parse(saved);
+                    if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
+                        win.style.left = x + 'px';
+                        win.style.top = y + 'px';
+                        win.style.right = 'auto';
+                        win.style.bottom = 'auto';
+                        positionRestored = true;
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to restore chat position:', e);
+            }
+            if (!positionRestored) {
+                win.style.right = '20px';
+                win.style.bottom = '44px';
+                win.style.left = '';
+                win.style.top = '';
             }
 
             win.style.display = 'flex';
             win.classList.remove('minimized');
 
             if (!win.dataset.dragInitialized) {
-                initializeChatDrag();
+                makeDraggable('chat-window', '.chat-drag-handle', 'chatWindowPosition');
                 win.dataset.dragInitialized = 'true';
             }
 
@@ -4551,45 +4191,6 @@
             if (win) win.classList.toggle('minimized');
         }
 
-        function initializeChatDrag() {
-            const win = document.getElementById('chat-window');
-            const handle = win.querySelector('.chat-drag-handle');
-            let isDragging = false, startX, startY, startLeft, startTop;
-
-            handle.addEventListener('mousedown', (e) => {
-                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-                isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                // Switch from right/bottom positioning to left/top for dragging
-                const rect = win.getBoundingClientRect();
-                win.style.left = rect.left + 'px';
-                win.style.top = rect.top + 'px';
-                win.style.right = 'auto';
-                win.style.bottom = 'auto';
-                startLeft = rect.left;
-                startTop = rect.top;
-                document.body.style.userSelect = 'none';
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                win.style.left = (startLeft + dx) + 'px';
-                win.style.top = (startTop + dy) + 'px';
-            });
-
-            document.addEventListener('mouseup', () => {
-                if (!isDragging) return;
-                isDragging = false;
-                document.body.style.userSelect = '';
-                localStorage.setItem('chatWindowPosition', JSON.stringify({
-                    x: parseInt(win.style.left),
-                    y: parseInt(win.style.top)
-                }));
-            });
-        }
     </script>
 
 </body>

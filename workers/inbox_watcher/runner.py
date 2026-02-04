@@ -6,6 +6,7 @@ while ihim-master.ahk already started one at login).
 """
 import sys
 import os
+import logging
 import atexit
 from pathlib import Path
 
@@ -16,6 +17,18 @@ load_dotenv(IHIM_ROOT.parent / ".env")
 
 # Add IHIM to path for imports (IHIM_ROOT already defined above)
 sys.path.insert(0, str(IHIM_ROOT))
+
+# File logging - essential for pythonw.exe (no console)
+LOG_PATH = IHIM_ROOT / "data" / "watcher.log"
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_PATH, encoding="utf-8"),
+    ]
+)
+logger = logging.getLogger("watcher.runner")
 
 # Lock file to prevent multiple instances
 LOCK_FILE = IHIM_ROOT / "data" / "watcher.lock"
@@ -80,19 +93,12 @@ def release_lock():
 
 if __name__ == "__main__":
     if not acquire_lock():
-        print("=" * 60)
-        print("ERROR: Another inbox watcher is already running!")
-        print("=" * 60)
-        print(f"\nLock file: {LOCK_FILE}")
-        print("\nTo force restart:")
-        print("  1. Kill all python processes running runner.py")
-        print("  2. Delete the lock file")
-        print("  3. Start again")
+        logger.error("Another inbox watcher is already running! Lock file: %s", LOCK_FILE)
         sys.exit(1)
 
     # Register cleanup BEFORE slow imports
     atexit.register(release_lock)
-    print("Lock acquired, loading orchestrator...")
+    logger.info("Lock acquired, loading orchestrator...")
 
 # Now do the slow imports (only if we have the lock or if imported as module)
 from orchestrator.graph import create_orchestrator
@@ -130,15 +136,12 @@ def create_processor(orchestrator):
 
 def main():
     """Main entry point for the inbox watcher."""
-    print("=" * 60)
-    print("Second Brain Orchestrator - Inbox Watcher")
-    print("=" * 60)
-    print()
+    logger.info("Second Brain Orchestrator - Inbox Watcher starting")
 
     # Create orchestrator
-    print("Initializing orchestrator...")
+    logger.info("Initializing orchestrator...")
     orchestrator = create_orchestrator()
-    print("Orchestrator ready.\n")
+    logger.info("Orchestrator ready.")
 
     # Create watcher with both sources
     watcher = InboxWatcher(

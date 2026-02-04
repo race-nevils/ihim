@@ -11,12 +11,15 @@ Deduplication (new vs update) is handled by database via content_hash.
 """
 import logging
 import time
+import json
+import os
 import re
 import hashlib
 import traceback
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Callable
+from collections import deque
 from dataclasses import dataclass, field
 
 from .file_tracker import FileTracker, FileState
@@ -50,6 +53,10 @@ class InboxWatcher:
         self.cleanup_days = cleanup_days
         self._running = False
         self.tracker = FileTracker()
+        self._start_time = time.time()
+        self._poll_count = 0
+        self._recent_activity = deque(maxlen=10)
+        self._heartbeat_path = Path(__file__).parent.parent.parent / "data" / "watcher_heartbeat.json"
 
         # Ensure directories exist
         for source in self.sources:
@@ -186,6 +193,21 @@ class InboxWatcher:
                 result = processor(content, str(file_path))
                 action = result.get("result", {}).get("action", "unknown")
 
+                # Check if the HANDLER returned an error action
+                # (brain handler catches exceptions internally, returns {"action": "error"})
+                # Note: state-level "error" field may contain non-fatal warnings (e.g., intent fallback)
+                if action == "error":
+                    error_msg = result.get("error", result.get("result", {}).get("error", "unknown"))
+                    logger.warning(f"Processor returned error for {original_name}: {error_msg}")
+                    # Revert to READY so file gets retried on next poll
+                    if file_path in self.tracker.files:
+                        self.tracker.files[file_path].state = FileState.READY
+                    results.append({
+                        "file": original_name,
+                        "error": f"processor_error: {error_msg}",
+                    })
+                    continue
+
                 # Mark as processed (stays in inbox for potential re-editing)
                 content_hash = self._get_content_hash(file_path)
                 self.tracker.mark_processed(file_path, content_hash)
@@ -261,6 +283,9 @@ class InboxWatcher:
                     if on_process:
                         on_process(result)
 
+                self._poll_count += 1
+                self._write_heartbeat(results)
+
                 time.sleep(self.poll_interval)
 
         except KeyboardInterrupt:
@@ -270,3 +295,44 @@ class InboxWatcher:
     def stop(self):
         """Stop the watcher."""
         self._running = False
+
+    def _write_heartbeat(self, last_results: list[dict]):
+        """Write heartbeat JSON for the dashboard API to read."""
+        try:
+            # Record activity from this cycle
+            for r in last_results:
+                action = r.get("action_type", "error" if "error" in r else "unknown")
+                self._recent_activity.append({
+                    "file": r.get("file", "?"),
+                    "action": action,
+                    "time": datetime.now(timezone.utc).isoformat()
+                })
+
+            # Build tracked files snapshot
+            tracked = []
+            for fpath, info in self.tracker.files.items():
+                tracked.append({
+                    "name": fpath.name,
+                    "state": info.state.name,
+                })
+
+            settling = sum(1 for t in tracked if t["state"] == "SETTLING")
+
+            heartbeat = {
+                "status": "running",
+                "pid": os.getpid(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "uptime_seconds": round(time.time() - self._start_time),
+                "poll_count": self._poll_count,
+                "tracked_files": tracked,
+                "tracked_count": len(tracked),
+                "settling_count": settling,
+                "recent_activity": list(self._recent_activity),
+            }
+
+            # Atomic write: write to .tmp then replace
+            tmp_path = self._heartbeat_path.with_suffix(".tmp")
+            tmp_path.write_text(json.dumps(heartbeat, indent=2), encoding="utf-8")
+            tmp_path.replace(self._heartbeat_path)
+        except Exception as e:
+            logger.debug(f"Heartbeat write failed: {e}")

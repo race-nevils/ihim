@@ -43,7 +43,4 @@ intents:
     description: "Schedule meeting, appointment, reminder"
     handler: "handlers.calendar"
     status: "stub"
-  task:
-    description: "Create todo, action item"
-    handler: "handlers.task"
-    status: "stub"
+

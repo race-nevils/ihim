@@ -31,6 +31,7 @@ class TrackedFile:
     state: FileState
     last_mtime: float
     content_hash: str | None = None
+    processing_since: float | None = None  # Timestamp when PROCESSING started
 
 
 class FileTracker:
@@ -59,6 +60,7 @@ class FileTracker:
 
     SETTLE_SECONDS = 10      # Wait 10s after last edit before processing
     STALE_SECONDS = 3600     # Archive after 1 hour of no edits
+    PROCESSING_TIMEOUT = 300  # 5 min max in PROCESSING before auto-revert
 
     def __init__(self):
         self.files: dict[Path, TrackedFile] = {}
@@ -95,8 +97,11 @@ class FileTracker:
             if quiet_time >= self.SETTLE_SECONDS:
                 tracked.state = FileState.READY
 
-        # PROCESSING stays as PROCESSING until explicitly marked PROCESSED
-        # This prevents race conditions during slow LLM calls
+        elif tracked.state == FileState.PROCESSING:
+            # Auto-revert if stuck too long (e.g., watcher restarted mid-processing)
+            if tracked.processing_since and (now - tracked.processing_since) >= self.PROCESSING_TIMEOUT:
+                tracked.state = FileState.READY
+                tracked.processing_since = None
 
         elif tracked.state == FileState.PROCESSED:
             if quiet_time >= self.STALE_SECONDS:
@@ -112,12 +117,14 @@ class FileTracker:
         """
         if path in self.files:
             self.files[path].state = FileState.PROCESSING
+            self.files[path].processing_since = time.time()
 
     def mark_processed(self, path: Path, content_hash: str):
         """Mark file as processed with its content hash."""
         if path in self.files:
             self.files[path].state = FileState.PROCESSED
             self.files[path].content_hash = content_hash
+            self.files[path].processing_since = None
 
     def remove(self, path: Path):
         """Remove file from tracking (after archive/delete)."""

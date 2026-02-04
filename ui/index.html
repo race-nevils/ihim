@@ -41,6 +41,13 @@
             <span id="ram-value" class="bar-value">--</span>
         </div>
 
+        <!-- Inbox Watcher -->
+        <div class="bar-widget" id="watcher-widget" title="Inbox Watcher">
+            <span class="status-dot inactive" id="watcher-dot"></span>
+            <span class="bar-label">Watcher</span>
+            <span id="watcher-value" class="bar-value">OFF</span>
+        </div>
+
         <div class="bar-spacer"></div>
 
         <!-- Agent Scores -->
@@ -182,80 +189,8 @@
         </div>
     </div>
 
-    <!-- Quick Notes Window (Draggable) -->
-    <div id="notes-window" class="notes-window" style="display: none;">
-        <div class="notes-header notes-drag-handle">
-            <span class="notes-label">Quick Notes</span>
-            <button class="notes-close" onclick="closeNotesWindow()">&times;</button>
-        </div>
-        <div class="notes-body">
-            <div class="notes-input-row">
-                <textarea id="new-note-input" placeholder="Jot down a quick note..."></textarea>
-                <button class="add-note-btn" onclick="addNote()">Save</button>
-            </div>
-            <div id="notes-list" class="notes-list">
-                <!-- Notes loaded dynamically -->
-            </div>
-        </div>
-        <div class="notes-footer">
-            <span id="notes-count">0 notes</span>
-        </div>
-    </div>
 
-    <!-- Heuristics Window (Draggable) -->
-    <div id="heuristics-window" class="heuristics-window" style="display: none;">
-        <div class="heuristics-header heuristics-drag-handle">
-            <span class="heuristics-label">💡 Tricks & Heuristics</span>
-            <button class="heuristics-close" onclick="closeHeuristicsWindow()">&times;</button>
-        </div>
-        <div class="heuristics-body">
-            <div class="heuristics-input-section">
-                <div class="heuristics-form" id="heuristics-form">
-                    <input type="text" id="heuristic-trigger" placeholder="When... (e.g., 'agents can't find bug')">
-                    <input type="text" id="heuristic-action"
-                        placeholder="Do this... (e.g., 'Press F12 → Console → copy errors')">
-                    <input type="text" id="heuristic-antiaction"
-                        placeholder="Don't... (e.g., 'keep asking agents blindly')">
-                    <div class="heuristic-form-footer">
-                        <select id="heuristic-pattern">
-                            <option value="general">General</option>
-                            <option value="console_debugging">Console Debug</option>
-                            <option value="zombie_process">Zombie Process</option>
-                            <option value="shell_escaping">Shell Escaping</option>
-                            <option value="missed_signal">Missed Signal</option>
-                            <option value="ui_fix">UI Fix</option>
-                        </select>
-                        <button class="add-heuristic-btn" onclick="addHeuristic()">+ Add Trick</button>
-                    </div>
-                </div>
-            </div>
-            <div id="heuristics-list" class="heuristics-list">
-                <!-- Heuristics loaded dynamically -->
-            </div>
-        </div>
-        <div class="heuristics-footer">
-            <span id="heuristics-count">0 tricks</span>
-            <span id="heuristics-savings">Est. 0 tokens saved</span>
-        </div>
-    </div>
-
-    <!-- Edit Note Modal -->
-    <div id="edit-note-modal" class="modal">
-        <div class="modal-content edit-note-modal-content">
-            <div class="modal-header">
-                <h2>Edit Note</h2>
-                <button class="close-btn" onclick="closeEditNoteModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <textarea id="edit-note-input" placeholder="Edit your note..."></textarea>
-            </div>
-            <div class="modal-footer">
-                <button class="save-note-btn" onclick="saveEditedNote()">Save Changes</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Standards Library Window (Draggable) -->
+<!-- Standards Library Window (Draggable) -->
     <div id="standards-library-window" class="standards-library-window" style="display: none;">
         <div class="standards-library-header standards-library-drag-handle">
             <span class="standards-library-label">🛡️ Standards Library</span>
@@ -494,175 +429,8 @@
         </div>
     </div>
 
-    <!-- C2PA Verification System Window (Draggable) -->
-    <div id="c2pa-window" class="c2pa-window" style="display: none;">
-        <div class="c2pa-header c2pa-drag-handle">
-            <span class="c2pa-badge">C2PA</span>
-            <span class="c2pa-label">Content Authenticity</span>
-            <button class="c2pa-close" onclick="closeC2PAWindow()">&times;</button>
-        </div>
 
-        <!-- Tab Navigation -->
-        <div class="c2pa-tabs">
-            <button class="c2pa-tab active" data-tab="verify" onclick="switchC2PATab('verify')">
-                🔍 Verify
-            </button>
-            <button class="c2pa-tab" data-tab="sign" onclick="switchC2PATab('sign')">
-                ✍️ Sign
-            </button>
-        </div>
-
-        <div class="c2pa-body">
-            <!-- VERIFY TAB -->
-            <div class="c2pa-panel active" id="c2pa-verify-panel">
-                <p class="c2pa-desc">Upload an image to verify C2PA metadata</p>
-
-                <!-- Drop Zone -->
-                <div class="c2pa-dropzone" id="c2pa-verify-dropzone">
-                    <div class="dropzone-icon">📁</div>
-                    <div class="dropzone-text">Drop image or click to upload</div>
-                    <div class="dropzone-hint">JPEG, PNG, WebP supported</div>
-                </div>
-                <input type="file" id="c2pa-verify-file" accept="image/*" style="display:none">
-
-                <!-- URL Input -->
-                <div class="c2pa-url-row">
-                    <input type="url" id="c2pa-verify-url" placeholder="Or enter image URL...">
-                    <button class="c2pa-btn-gold" onclick="verifyC2PAFromURL()">Load</button>
-                </div>
-
-                <!-- Results Section -->
-                <div id="c2pa-verify-results" class="c2pa-results" style="display:none;">
-                    <div id="c2pa-verify-status" class="c2pa-status"></div>
-
-                    <!-- Image Preview -->
-                    <div id="c2pa-verify-preview" class="c2pa-preview"></div>
-
-                    <!-- Metadata Fields -->
-                    <div id="c2pa-verify-fields" class="c2pa-fields">
-                        <div class="c2pa-field"><span class="field-label">Validation State</span><span
-                                class="field-value" id="v-validation">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">Active Manifest</span><span
-                                class="field-value" id="v-manifest">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">Date Created</span><span class="field-value"
-                                id="v-date">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">Author/Creator</span><span class="field-value"
-                                id="v-author">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">Claim Generator</span><span
-                                class="field-value" id="v-generator">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">Title</span><span class="field-value"
-                                id="v-title">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">Certificate Issuer</span><span
-                                class="field-value" id="v-issuer">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">File Name</span><span class="field-value"
-                                id="v-filename">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">File Size</span><span class="field-value"
-                                id="v-filesize">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">File Type</span><span class="field-value"
-                                id="v-filetype">-</span></div>
-                        <div class="c2pa-field"><span class="field-label">C2PA Segments</span><span class="field-value"
-                                id="v-segments">-</span></div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="c2pa-actions">
-                        <button class="c2pa-btn" onclick="viewManifestJSON()">View Manifest JSON</button>
-                        <button class="c2pa-btn" onclick="viewImageBlob()">View Image Blob</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SIGN TAB -->
-            <div class="c2pa-panel" id="c2pa-sign-panel">
-                <p class="c2pa-desc">Add C2PA metadata to an image</p>
-
-                <!-- Drop Zone -->
-                <div class="c2pa-dropzone" id="c2pa-sign-dropzone">
-                    <div class="dropzone-icon">📁</div>
-                    <div class="dropzone-text">Drop image to sign</div>
-                    <div class="dropzone-hint">JPEG, PNG, WebP supported</div>
-                </div>
-                <input type="file" id="c2pa-sign-file" accept="image/*" style="display:none">
-
-                <!-- Sign Form Fields (same as verify display) -->
-                <div class="c2pa-form" id="c2pa-sign-form">
-                    <div class="c2pa-form-row">
-                        <label>Author/Creator</label>
-                        <input type="text" id="s-author" placeholder="Your name">
-                    </div>
-                    <div class="c2pa-form-row">
-                        <label>Claim Generator</label>
-                        <input type="text" id="s-generator" value="iHIM/1.0" placeholder="e.g. Lightroom">
-                    </div>
-                    <div class="c2pa-form-row">
-                        <label>Title</label>
-                        <input type="text" id="s-title" placeholder="Content title">
-                    </div>
-                    <div class="c2pa-form-row">
-                        <label>Certificate Issuer</label>
-                        <input type="text" id="s-issuer" value="iHIM Self-Signed" readonly>
-                    </div>
-                    <div class="c2pa-form-row">
-                        <label>Action Type</label>
-                        <select id="s-action">
-                            <option value="c2pa.created">Created</option>
-                            <option value="c2pa.edited">Edited</option>
-                            <option value="c2pa.published">Published</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Sign Button -->
-                <div class="c2pa-sign-actions">
-                    <button class="c2pa-btn-gold" id="c2pa-sign-btn" onclick="signC2PAImage()" disabled>Sign
-                        Image</button>
-                </div>
-
-                <!-- Sign Results -->
-                <div id="c2pa-sign-results" class="c2pa-results" style="display:none;">
-                    <div id="c2pa-sign-status" class="c2pa-status"></div>
-                    <div id="c2pa-sign-output"></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="c2pa-footer">
-            <span class="c2pa-footer-status">Ready</span>
-        </div>
-    </div>
-
-
-    <!-- Task List Window (Draggable) -->
-    <div id="task-window" class="task-window" style="display: none;">
-        <div class="task-header task-drag-handle">
-            <span class="task-label">Task List</span>
-            <button class="task-close" onclick="closeTaskWindow()">&times;</button>
-        </div>
-        <div class="task-body">
-            <div class="task-input-row">
-                <input type="text" id="new-task-input" placeholder="Add a new task..."
-                    onkeypress="if(event.key==='Enter')addTask()">
-                <select id="new-task-priority">
-                    <option value="low">Low</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="high">High</option>
-                </select>
-                <button class="add-task-btn" onclick="addTask()">+</button>
-            </div>
-            <div class="task-desc-row">
-                <input type="text" id="new-task-desc" placeholder="Description (optional)...">
-            </div>
-            <div id="task-list" class="task-list">
-                <!-- Tasks loaded dynamically -->
-            </div>
-        </div>
-        <div class="task-footer">
-            <span id="task-count">0 tasks</span>
-            <button class="clear-btn" onclick="clearCompleted()">Clear Completed</button>
-        </div>
-    </div>
-
-    <!-- Google Calendar Window (Draggable) -->
+<!-- Google Calendar Window (Draggable) -->
     <div id="calendar-window" class="calendar-window" style="display: none;">
         <div class="calendar-header calendar-drag-handle">
             <span class="calendar-label"><i data-lucide="calendar-days" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Google Calendar</span>
@@ -696,24 +464,8 @@
         </div>
     </div>
 
-    <!-- Edit Task Modal -->
-    <div id="edit-task-modal" class="modal">
-        <div class="modal-content edit-task-modal-content">
-            <div class="modal-header">
-                <h2>Edit Task</h2>
-                <button class="close-btn" onclick="closeEditTaskModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <input type="text" id="edit-task-text" placeholder="Task name...">
-                <textarea id="edit-task-desc" placeholder="Description (optional)..."></textarea>
-            </div>
-            <div class="modal-footer">
-                <button class="save-task-btn" onclick="saveEditedTask()">Save Changes</button>
-            </div>
-        </div>
-    </div>
 
-    <!-- Mission Control Window (Draggable) -->
+<!-- Mission Control Window (Draggable) -->
     <div id="mc-window" class="mc-window" style="display: none;">
         <div class="mc-header mc-drag-handle">
             <span class="mc-label">Mission Control</span>
@@ -986,14 +738,6 @@
                 openTeamModal();
                 return;
             }
-            if (actionId === 'task_list') {
-                openTaskWindow();
-                return;
-            }
-            if (actionId === 'quick_notes') {
-                openNotesWindow();
-                return;
-            }
             if (actionId === 'flight_path') {
                 openFlightPathWindow();
                 return;
@@ -1025,16 +769,8 @@
                 openTerminalModal();
                 return;
             }
-            if (actionId === 'heuristics') {
-                openHeuristicsWindow();
-                return;
-            }
             if (actionId === 'standards_library') {
                 openStandardsLibraryWindow();
-                return;
-            }
-            if (actionId === 'c2pa_verify') {
-                openC2PAWindow();
                 return;
             }
             if (actionId === 'google_calendar') {
@@ -1079,509 +815,60 @@
                 // Expected - server dies before responding
             }
 
-            // Poll for reconnection
+            // Wait for old server to fully die before polling
+            await new Promise(r => setTimeout(r, 3000));
+
+            // Poll for reconnection — require TWO consecutive health successes
+            // to avoid hitting a half-started server
             let attempts = 0;
             const maxAttempts = 30;
+            let consecutiveOk = 0;
             const pollInterval = setInterval(async () => {
                 attempts++;
                 try {
-                    const res = await fetch(`${API}/api/health`);
+                    const res = await fetch(`${API}/api/health`, { cache: 'no-store' });
                     if (res.ok) {
-                        clearInterval(pollInterval);
-                        document.body.style.opacity = '1';
-                        showStatus('Server back online!', 'success');
-                        // Reload to get fresh state
-                        setTimeout(() => location.reload(), 500);
+                        consecutiveOk++;
+                        if (consecutiveOk >= 2) {
+                            clearInterval(pollInterval);
+                            // Verify static files are serveable before reloading
+                            try {
+                                const pageRes = await fetch(`${API}/`, { cache: 'no-store' });
+                                if (pageRes.ok) {
+                                    document.body.style.opacity = '1';
+                                    showStatus('Server back online!', 'success');
+                                    setTimeout(() => location.reload(), 500);
+                                    return;
+                                }
+                            } catch (e) { /* fall through */ }
+                            // Static files not ready yet — wait and retry
+                            document.body.style.opacity = '1';
+                            showStatus('Server up but loading... retrying', 'pending');
+                            setTimeout(() => location.reload(), 2000);
+                        }
+                    } else {
+                        consecutiveOk = 0;
                     }
                 } catch (err) {
-                    // Still down, keep polling
+                    consecutiveOk = 0;
                     if (attempts >= maxAttempts) {
                         clearInterval(pollInterval);
                         document.body.style.opacity = '1';
                         showStatus('Server not responding. Refresh manually.', 'error');
                     }
                 }
-            }, 1000);
+            }, 1500);
         }
 
-        // =====================
-        // Task List Functions
-        // =====================
-        let tasks = [];
+        // Task List, Quick Notes, Heuristics, and C2PA removed (dashboard cleanup)
 
-        async function openTaskWindow() {
-            const taskWindow = document.getElementById('task-window');
 
-            // Load position from localStorage or center it
-            const saved = localStorage.getItem('taskWindowPosition');
-            if (saved) {
-                const { x, y } = JSON.parse(saved);
-                taskWindow.style.left = x + 'px';
-                taskWindow.style.top = y + 'px';
-            } else {
-                // Center on screen
-                const x = (window.innerWidth - 400) / 2;
-                const y = (window.innerHeight - 500) / 2;
-                taskWindow.style.left = Math.max(0, x) + 'px';
-                taskWindow.style.top = Math.max(0, y) + 'px';
-            }
-
-            taskWindow.style.display = 'flex';
-            await loadTasks();
-            document.getElementById('new-task-input').focus();
-
-            // Initialize drag if not already done
-            if (!taskWindow.dataset.dragInitialized) {
-                initializeTaskDrag();
-                taskWindow.dataset.dragInitialized = 'true';
-            }
-        }
-
-        function closeTaskWindow() {
-            const taskWindow = document.getElementById('task-window');
-            taskWindow.style.display = 'none';
-        }
-
-        function initializeTaskDrag() {
-            const taskWindow = document.getElementById('task-window');
-            const header = taskWindow.querySelector('.task-drag-handle');
-
-            // State managed outside mousedown to prevent accumulation
-            let isDragging = false;
-            let currentHandlers = null;
-
-            // Set cursor for drag affordance
-            header.style.cursor = 'move';
-
-            header.addEventListener('mousedown', (e) => {
-                // Don't drag if clicking close button
-                if (e.target.classList.contains('task-close')) return;
-
-                // Prevent text selection during drag
-                e.preventDefault();
-
-                // Clean up any stale handlers (safety net)
-                if (currentHandlers) {
-                    document.removeEventListener('mousemove', currentHandlers.move);
-                    document.removeEventListener('mouseup', currentHandlers.up);
-                    currentHandlers = null;
-                }
-
-                const mouseDownTime = Date.now();
-                isDragging = false;
-
-                const rect = taskWindow.getBoundingClientRect();
-                const offsetX = e.clientX - rect.left;
-                const offsetY = e.clientY - rect.top;
-                const startX = e.clientX;
-                const startY = e.clientY;
-
-                const onMouseMove = (e) => {
-                    e.preventDefault();
-
-                    const dx = Math.abs(e.clientX - startX);
-                    const dy = Math.abs(e.clientY - startY);
-                    const elapsed = Date.now() - mouseDownTime;
-
-                    // Start drag after movement threshold or time delay
-                    if ((dx > 5 || dy > 5 || elapsed > 150) && !isDragging) {
-                        isDragging = true;
-                        taskWindow.style.opacity = '0.8';
-                        taskWindow.style.zIndex = '1000';
-                    }
-
-                    if (isDragging) {
-                        const x = e.clientX - offsetX;
-                        const y = e.clientY - offsetY;
-                        taskWindow.style.left = x + 'px';
-                        taskWindow.style.top = y + 'px';
-                    }
-                };
-
-                const cleanup = () => {
-                    if (isDragging) {
-                        const x = parseInt(taskWindow.style.left);
-                        const y = parseInt(taskWindow.style.top);
-                        localStorage.setItem('taskWindowPosition', JSON.stringify({ x, y }));
-                        taskWindow.style.opacity = '1';
-                        taskWindow.style.zIndex = '';
-                    }
-
-                    isDragging = false;
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    document.removeEventListener('mouseleave', onMouseLeave);
-                    currentHandlers = null;
-                };
-
-                const onMouseUp = (e) => cleanup();
-
-                // Handle mouse leaving window during drag (prevents stuck state)
-                const onMouseLeave = (e) => {
-                    if (isDragging && e.target === document.documentElement) {
-                        cleanup();
-                    }
-                };
-
-                // Store references for cleanup safety net
-                currentHandlers = { move: onMouseMove, up: onMouseUp };
-
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-                document.addEventListener('mouseleave', onMouseLeave);
-            });
-        }
-
-        async function loadTasks() {
-            try {
-                const res = await fetch(`${API}/api/tasks`);
-                const data = await res.json();
-                tasks = data.tasks || [];
-                renderTasks();
-            } catch (err) {
-                console.error('Failed to load tasks:', err);
-            }
-        }
-
-        function renderTasks() {
-            const list = document.getElementById('task-list');
-            const countEl = document.getElementById('task-count');
-
-            if (tasks.length === 0) {
-                list.innerHTML = '<div class="no-tasks">No tasks yet. Add one above!</div>';
-                countEl.textContent = '0 tasks';
-                return;
-            }
-
-            // Sort: incomplete first, then by priority (high > medium > low)
-            const priorityOrder = { high: 0, medium: 1, low: 2 };
-            const sorted = [...tasks].sort((a, b) => {
-                if (a.completed !== b.completed) return a.completed ? 1 : -1;
-                return priorityOrder[a.priority] - priorityOrder[b.priority];
-            });
-
-            list.innerHTML = sorted.map(task => `
-                <div class="task-item ${task.completed ? 'completed' : ''}" data-id="${task.id}">
-                    <div class="task-main-row">
-                        <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask('${task.id}')">
-                        <span class="task-text">${escapeHtml(task.text)}</span>
-                        <select class="task-priority priority-${task.priority}" onchange="updatePriority('${task.id}', this.value)">
-                            <option value="low" ${task.priority === 'low' ? 'selected' : ''}>Low</option>
-                            <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>Med</option>
-                            <option value="high" ${task.priority === 'high' ? 'selected' : ''}>High</option>
-                        </select>
-                        <button class="edit-task-btn" onclick="openEditTask('${task.id}')" title="Edit">✎</button>
-                        <button class="delete-task-btn" onclick="deleteTask('${task.id}')">×</button>
-                    </div>
-                    ${task.description ? `<div class="task-desc">${escapeHtml(task.description)}</div>` : ''}
-                </div>
-            `).join('');
-
-            const incomplete = tasks.filter(t => !t.completed).length;
-            countEl.textContent = `${incomplete} of ${tasks.length} remaining`;
-        }
-
-        function escapeHtml(text) {
-            if (text == null) return '';  // Handle null/undefined to prevent "null"/"undefined" string injection
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        async function addTask() {
-            const input = document.getElementById('new-task-input');
-            const descInput = document.getElementById('new-task-desc');
-            const priority = document.getElementById('new-task-priority').value;
-            const text = input.value.trim();
-            const description = descInput ? descInput.value.trim() : '';
-
-            if (!text) return;
-
-            try {
-                const res = await fetch(`${API}/api/tasks`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text, priority, description })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    tasks.push(data.task);
-                    renderTasks();
-                    input.value = '';
-                    if (descInput) descInput.value = '';
-                }
-            } catch (err) {
-                console.error('Failed to add task:', err);
-            }
-        }
-
-        async function toggleTask(taskId) {
-            const task = tasks.find(t => t.id === taskId);
-            if (!task) return;
-
-            try {
-                await fetch(`${API}/api/tasks/${taskId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ completed: !task.completed })
-                });
-                task.completed = !task.completed;
-                renderTasks();
-            } catch (err) {
-                console.error('Failed to toggle task:', err);
-            }
-        }
-
-        async function updatePriority(taskId, priority) {
-            try {
-                await fetch(`${API}/api/tasks/${taskId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ priority })
-                });
-                const task = tasks.find(t => t.id === taskId);
-                if (task) task.priority = priority;
-                renderTasks();
-            } catch (err) {
-                console.error('Failed to update priority:', err);
-            }
-        }
-
-        async function deleteTask(taskId) {
-            try {
-                await fetch(`${API}/api/tasks/${taskId}`, { method: 'DELETE' });
-                tasks = tasks.filter(t => t.id !== taskId);
-                renderTasks();
-            } catch (err) {
-                console.error('Failed to delete task:', err);
-            }
-        }
-
-        async function clearCompleted() {
-            try {
-                await fetch(`${API}/api/tasks/clear-completed`, { method: 'POST' });
-                tasks = tasks.filter(t => !t.completed);
-                renderTasks();
-            } catch (err) {
-                console.error('Failed to clear completed:', err);
-            }
-        }
-
-        // Edit task functionality
-        let editingTaskId = null;
-
-        function openEditTask(taskId) {
-            const task = tasks.find(t => t.id === taskId);
-            if (!task) return;
-
-            editingTaskId = taskId;
-            document.getElementById('edit-task-text').value = task.text;
-            document.getElementById('edit-task-desc').value = task.description || '';
-            document.getElementById('edit-task-modal').classList.add('active');
-        }
-
-        function closeEditTaskModal() {
-            document.getElementById('edit-task-modal').classList.remove('active');
-            editingTaskId = null;
-        }
-
-        async function saveEditedTask() {
-            if (!editingTaskId) return;
-
-            const text = document.getElementById('edit-task-text').value.trim();
-            const description = document.getElementById('edit-task-desc').value.trim();
-
-            if (!text) {
-                showStatus('Task name cannot be empty', 'error');
-                return;
-            }
-
-            try {
-                const res = await fetch(`${API}/api/tasks/${editingTaskId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text, description })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    const task = tasks.find(t => t.id === editingTaskId);
-                    if (task) {
-                        task.text = text;
-                        task.description = description;
-                    }
-                    renderTasks();
-                    closeEditTaskModal();
-                    showStatus('Task updated', 'success');
-                }
-            } catch (err) {
-                console.error('Failed to update task:', err);
-                showStatus('Failed to update task', 'error');
-            }
-        }
-
-        // Close edit task modal on outside click
-        document.getElementById('edit-task-modal').addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal')) {
-                closeEditTaskModal();
-            }
-        });
-
-        // Task window doesn't close on outside click (draggable windows stay open)
-
-        // Close modal on outside click
+// Close modal on outside click
         document.getElementById('team-modal').addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
                 closeTeamModal();
             }
         });
-
-        // =====================
-        // Quick Notes Functions (API-backed)
-        // =====================
-        let notes = [];
-        let editingNoteId = null;
-
-        async function loadNotes() {
-            try {
-                const res = await fetch(`${API}/api/notes`);
-                const data = await res.json();
-                // Transform backend format to frontend format
-                notes = (data.notes || []).map(n => ({
-                    id: n.id,
-                    text: n.content,
-                    timestamp: new Date(n.created_at).getTime(),
-                    updatedAt: n.updated_at ? new Date(n.updated_at).getTime() : null
-                }));
-            } catch (err) {
-                console.error('Failed to load notes:', err);
-                notes = [];
-            }
-        }
-
-        async function openNotesWindow() {
-            const notesWindow = document.getElementById('notes-window');
-
-            // Load position from localStorage or center it
-            const saved = localStorage.getItem('notesWindowPosition');
-            if (saved) {
-                const { x, y } = JSON.parse(saved);
-                notesWindow.style.left = x + 'px';
-                notesWindow.style.top = y + 'px';
-            } else {
-                // Center on screen
-                const x = (window.innerWidth - 450) / 2;
-                const y = (window.innerHeight - 600) / 2;
-                notesWindow.style.left = Math.max(0, x) + 'px';
-                notesWindow.style.top = Math.max(0, y) + 'px';
-            }
-
-            notesWindow.style.display = 'flex';
-            await loadNotes();
-            renderNotes();
-            document.getElementById('new-note-input').focus();
-
-            // Initialize drag if not already done
-            if (!notesWindow.dataset.dragInitialized) {
-                initializeNotesDrag();
-                notesWindow.dataset.dragInitialized = 'true';
-            }
-        }
-
-        function closeNotesWindow() {
-            const notesWindow = document.getElementById('notes-window');
-            notesWindow.style.display = 'none';
-            document.getElementById('new-note-input').value = '';
-        }
-
-        function initializeNotesDrag() {
-            const notesWindow = document.getElementById('notes-window');
-            const header = notesWindow.querySelector('.notes-drag-handle');
-
-            // State managed outside mousedown to prevent accumulation
-            let isDragging = false;
-            let currentHandlers = null;
-
-            // Set cursor for drag affordance
-            header.style.cursor = 'move';
-
-            header.addEventListener('mousedown', (e) => {
-                // Don't drag if clicking close button
-                if (e.target.classList.contains('notes-close')) return;
-
-                // Prevent text selection during drag
-                e.preventDefault();
-
-                // Clean up any stale handlers (safety net)
-                if (currentHandlers) {
-                    document.removeEventListener('mousemove', currentHandlers.move);
-                    document.removeEventListener('mouseup', currentHandlers.up);
-                    currentHandlers = null;
-                }
-
-                const mouseDownTime = Date.now();
-                isDragging = false;
-
-                const rect = notesWindow.getBoundingClientRect();
-                const offsetX = e.clientX - rect.left;
-                const offsetY = e.clientY - rect.top;
-                const startX = e.clientX;
-                const startY = e.clientY;
-
-                const onMouseMove = (e) => {
-                    e.preventDefault();
-
-                    const dx = Math.abs(e.clientX - startX);
-                    const dy = Math.abs(e.clientY - startY);
-                    const elapsed = Date.now() - mouseDownTime;
-
-                    // Start drag after movement threshold or time delay
-                    if ((dx > 5 || dy > 5 || elapsed > 150) && !isDragging) {
-                        isDragging = true;
-                        notesWindow.style.opacity = '0.8';
-                        notesWindow.style.zIndex = '1000';
-                    }
-
-                    if (isDragging) {
-                        const x = e.clientX - offsetX;
-                        const y = e.clientY - offsetY;
-                        notesWindow.style.left = x + 'px';
-                        notesWindow.style.top = y + 'px';
-                    }
-                };
-
-                const cleanup = () => {
-                    if (isDragging) {
-                        const x = parseInt(notesWindow.style.left);
-                        const y = parseInt(notesWindow.style.top);
-                        localStorage.setItem('notesWindowPosition', JSON.stringify({ x, y }));
-                        notesWindow.style.opacity = '1';
-                        notesWindow.style.zIndex = '';
-                    }
-
-                    isDragging = false;
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    document.removeEventListener('mouseleave', onMouseLeave);
-                    currentHandlers = null;
-                };
-
-                const onMouseUp = (e) => cleanup();
-
-                // Handle mouse leaving window during drag (prevents stuck state)
-                const onMouseLeave = (e) => {
-                    if (isDragging && e.target === document.documentElement) {
-                        cleanup();
-                    }
-                };
-
-                // Store references for cleanup safety net
-                currentHandlers = { move: onMouseMove, up: onMouseUp };
-
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-                document.addEventListener('mouseleave', onMouseLeave);
-            });
-        }
 
         function initializeFlightPathDrag() {
             const fpWindow = document.getElementById('flightpath-window');
@@ -1684,395 +971,9 @@
             return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
         }
 
-        function renderNotes() {
-            const list = document.getElementById('notes-list');
-            const countEl = document.getElementById('notes-count');
 
-            if (notes.length === 0) {
-                list.innerHTML = '<div class="no-notes">No notes yet. Write one above!</div>';
-                countEl.textContent = '0 notes';
-                return;
-            }
 
-            // Sort by timestamp, newest first
-            const sorted = [...notes].sort((a, b) => b.timestamp - a.timestamp);
-
-            list.innerHTML = sorted.map(note => `
-                <div class="note-item" data-id="${note.id}">
-                    <div class="note-content">
-                        <div class="note-text">${escapeHtml(note.text)}</div>
-                        <div class="note-timestamp">${formatTimestamp(note.timestamp)}</div>
-                    </div>
-                    <div class="note-actions">
-                        <button class="edit-note-btn" onclick="openEditNote('${note.id}')" title="Edit">✎</button>
-                        <button class="delete-note-btn" onclick="deleteNote('${note.id}')" title="Delete">×</button>
-                    </div>
-                </div>
-            `).join('');
-
-            countEl.textContent = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
-        }
-
-        async function addNote() {
-            const input = document.getElementById('new-note-input');
-            const text = input.value.trim();
-
-            if (!text) {
-                showStatus('Please enter a note', 'error');
-                return;
-            }
-
-            try {
-                const res = await fetch(`${API}/api/notes`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: text })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    // Add to local array
-                    notes.unshift({
-                        id: data.note.id,
-                        text: data.note.content,
-                        timestamp: new Date(data.note.created_at).getTime()
-                    });
-                    renderNotes();
-                    input.value = '';
-                    input.focus();
-                    showStatus('Note saved', 'success');
-                }
-            } catch (err) {
-                console.error('Failed to add note:', err);
-                showStatus('Failed to save note', 'error');
-            }
-        }
-
-        function openEditNote(noteId) {
-            const note = notes.find(n => n.id === noteId);
-            if (!note) return;
-
-            editingNoteId = noteId;
-            document.getElementById('edit-note-input').value = note.text;
-            document.getElementById('edit-note-modal').classList.add('active');
-            document.getElementById('edit-note-input').focus();
-        }
-
-        function closeEditNoteModal() {
-            document.getElementById('edit-note-modal').classList.remove('active');
-            document.getElementById('edit-note-input').value = '';
-            editingNoteId = null;
-        }
-
-        async function saveEditedNote() {
-            if (!editingNoteId) return;
-
-            const input = document.getElementById('edit-note-input');
-            const text = input.value.trim();
-
-            if (!text) {
-                showStatus('Note cannot be empty', 'error');
-                return;
-            }
-
-            try {
-                const res = await fetch(`${API}/api/notes/${editingNoteId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: text })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    const note = notes.find(n => n.id === editingNoteId);
-                    if (note) {
-                        note.text = text;
-                        note.updatedAt = Date.now();
-                    }
-                    renderNotes();
-                    showStatus('Note updated', 'success');
-                }
-            } catch (err) {
-                console.error('Failed to update note:', err);
-                showStatus('Failed to update note', 'error');
-            }
-
-            closeEditNoteModal();
-        }
-
-        async function deleteNote(noteId) {
-            try {
-                await fetch(`${API}/api/notes/${noteId}`, { method: 'DELETE' });
-                notes = notes.filter(n => n.id !== noteId);
-                renderNotes();
-                showStatus('Note deleted', 'success');
-            } catch (err) {
-                console.error('Failed to delete note:', err);
-                showStatus('Failed to delete note', 'error');
-            }
-        }
-
-        async function clearAllNotes() {
-            if (notes.length === 0) return;
-
-            if (confirm('Delete all notes? This cannot be undone.')) {
-                try {
-                    await fetch(`${API}/api/notes`, { method: 'DELETE' });
-                    notes = [];
-                    renderNotes();
-                    showStatus('All notes cleared', 'success');
-                } catch (err) {
-                    console.error('Failed to clear notes:', err);
-                    showStatus('Failed to clear notes', 'error');
-                }
-            }
-        }
-
-        // Notes window drag is initialized when opened (see openNotesWindow)
-
-        // Close edit note modal on outside click
-        document.getElementById('edit-note-modal').addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal')) {
-                closeEditNoteModal();
-            }
-        });
-
-        // Handle Ctrl+Enter to save note
-        document.getElementById('new-note-input').addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                addNote();
-            }
-        });
-
-        document.getElementById('edit-note-input').addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                saveEditedNote();
-            }
-        });
-
-        // =====================
-        // Heuristics (Tricks) Functions
-        // =====================
-        let heuristics = [];
-
-        async function loadHeuristics() {
-            try {
-                const res = await fetch(`${API}/api/heuristics`);
-                const data = await res.json();
-                heuristics = data.heuristics || [];
-                return data.meta || {};
-            } catch (err) {
-                console.error('Failed to load heuristics:', err);
-                heuristics = [];
-                return {};
-            }
-        }
-
-        async function openHeuristicsWindow() {
-            const win = document.getElementById('heuristics-window');
-
-            // Load position from localStorage or center it
-            const saved = localStorage.getItem('heuristicsWindowPosition');
-            if (saved) {
-                const { x, y } = JSON.parse(saved);
-                win.style.left = x + 'px';
-                win.style.top = y + 'px';
-            } else {
-                const x = (window.innerWidth - 500) / 2;
-                const y = (window.innerHeight - 500) / 2;
-                win.style.left = Math.max(0, x) + 'px';
-                win.style.top = Math.max(0, y) + 'px';
-            }
-
-            win.style.display = 'flex';
-            const meta = await loadHeuristics();
-            renderHeuristics(meta);
-
-            // Initialize drag if not already done
-            if (!win.dataset.dragInitialized) {
-                initializeHeuristicsDrag();
-                win.dataset.dragInitialized = 'true';
-            }
-        }
-
-        function closeHeuristicsWindow() {
-            document.getElementById('heuristics-window').style.display = 'none';
-        }
-
-        function initializeHeuristicsDrag() {
-            const win = document.getElementById('heuristics-window');
-            const header = win.querySelector('.heuristics-drag-handle');
-
-            let isDragging = false;
-            let currentHandlers = null;
-            header.style.cursor = 'move';
-
-            header.addEventListener('mousedown', (e) => {
-                if (e.target.classList.contains('heuristics-close')) return;
-                e.preventDefault();
-
-                if (currentHandlers) {
-                    document.removeEventListener('mousemove', currentHandlers.move);
-                    document.removeEventListener('mouseup', currentHandlers.up);
-                    currentHandlers = null;
-                }
-
-                isDragging = false;
-                const rect = win.getBoundingClientRect();
-                const offsetX = e.clientX - rect.left;
-                const offsetY = e.clientY - rect.top;
-                const startX = e.clientX;
-                const startY = e.clientY;
-
-                const onMouseMove = (e) => {
-                    e.preventDefault();
-                    const dx = Math.abs(e.clientX - startX);
-                    const dy = Math.abs(e.clientY - startY);
-
-                    if ((dx > 5 || dy > 5) && !isDragging) {
-                        isDragging = true;
-                        win.style.opacity = '0.8';
-                        win.style.zIndex = '1000';
-                    }
-
-                    if (isDragging) {
-                        win.style.left = (e.clientX - offsetX) + 'px';
-                        win.style.top = (e.clientY - offsetY) + 'px';
-                    }
-                };
-
-                const cleanup = () => {
-                    if (isDragging) {
-                        localStorage.setItem('heuristicsWindowPosition', JSON.stringify({
-                            x: parseInt(win.style.left),
-                            y: parseInt(win.style.top)
-                        }));
-                        win.style.opacity = '1';
-                        win.style.zIndex = '';
-                    }
-                    isDragging = false;
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    currentHandlers = null;
-                };
-
-                const onMouseUp = () => cleanup();
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
-                currentHandlers = { move: onMouseMove, up: onMouseUp };
-            });
-        }
-
-        function renderHeuristics(meta = {}) {
-            const list = document.getElementById('heuristics-list');
-            const countEl = document.getElementById('heuristics-count');
-            const savingsEl = document.getElementById('heuristics-savings');
-
-            if (heuristics.length === 0) {
-                list.innerHTML = '<div class="heuristics-empty">No tricks saved yet. Add your first debugging pattern!</div>';
-                countEl.textContent = '0 tricks';
-                savingsEl.textContent = 'Est. 0 tokens saved';
-                return;
-            }
-
-            // Calculate total savings
-            const totalSavings = heuristics.reduce((sum, h) => sum + (h.times_applied || 0) * (h.tokens_saved_estimate || 200), 0);
-
-            list.innerHTML = heuristics.map(h => `
-                <div class="heuristic-card" data-id="${h.id}">
-                    <div class="heuristic-header">
-                        <span class="heuristic-id">${h.id}</span>
-                        <span class="heuristic-pattern">${h.pattern || 'general'}</span>
-                        <span class="heuristic-confidence">${Math.round((h.confidence || 0.8) * 100)}%</span>
-                    </div>
-                    <div class="heuristic-triggers">
-                        <strong>When:</strong> ${(h.trigger_conditions || []).join(' • ')}
-                    </div>
-                    <div class="heuristic-action">
-                        <strong>Do:</strong> ${h.action || ''}
-                    </div>
-                    ${h.anti_action ? `<div class="heuristic-antiaction"><strong>Don't:</strong> ${h.anti_action}</div>` : ''}
-                    <div class="heuristic-footer">
-                        <span class="heuristic-stats">Used ${h.times_applied || 0}x</span>
-                        <button class="heuristic-apply-btn" onclick="applyHeuristic('${h.id}')">✓ Used this</button>
-                        <button class="heuristic-delete-btn" onclick="deleteHeuristic('${h.id}')">×</button>
-                    </div>
-                </div>
-            `).join('');
-
-            countEl.textContent = `${heuristics.length} trick${heuristics.length !== 1 ? 's' : ''}`;
-            savingsEl.textContent = `Est. ${totalSavings.toLocaleString()} tokens saved`;
-        }
-
-        async function addHeuristic() {
-            const trigger = document.getElementById('heuristic-trigger').value.trim();
-            const action = document.getElementById('heuristic-action').value.trim();
-            const antiAction = document.getElementById('heuristic-antiaction').value.trim();
-            const pattern = document.getElementById('heuristic-pattern').value;
-
-            if (!trigger || !action) {
-                showStatus('Need at least a trigger and action', 'error');
-                return;
-            }
-
-            try {
-                const res = await fetch(`${API}/api/heuristics`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        trigger_conditions: [trigger],
-                        action: action,
-                        anti_action: antiAction || null,
-                        pattern: pattern
-                    })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    heuristics.push(data.heuristic);
-                    renderHeuristics();
-                    // Clear inputs
-                    document.getElementById('heuristic-trigger').value = '';
-                    document.getElementById('heuristic-action').value = '';
-                    document.getElementById('heuristic-antiaction').value = '';
-                    showStatus(`Trick ${data.heuristic.id} saved!`, 'success');
-                }
-            } catch (err) {
-                console.error('Failed to add heuristic:', err);
-                showStatus('Failed to save trick', 'error');
-            }
-        }
-
-        async function applyHeuristic(id) {
-            try {
-                const res = await fetch(`${API}/api/heuristics/${id}/apply`, { method: 'POST' });
-                const data = await res.json();
-                if (data.success) {
-                    const h = heuristics.find(h => h.id === id);
-                    if (h) {
-                        h.times_applied = data.heuristic.times_applied;
-                        h.confidence = data.heuristic.confidence;
-                    }
-                    renderHeuristics();
-                    showStatus(data.message, 'success');
-                }
-            } catch (err) {
-                console.error('Failed to apply heuristic:', err);
-            }
-        }
-
-        async function deleteHeuristic(id) {
-            if (!confirm('Delete this trick?')) return;
-
-            try {
-                await fetch(`${API}/api/heuristics/${id}`, { method: 'DELETE' });
-                heuristics = heuristics.filter(h => h.id !== id);
-                renderHeuristics();
-                showStatus('Trick deleted', 'success');
-            } catch (err) {
-                console.error('Failed to delete heuristic:', err);
-                showStatus('Failed to delete trick', 'error');
-            }
-        }
-
-        // =====================
+// =====================
         // Standards Library
         // =====================
         let standardsLibraryModules = [];
@@ -2582,6 +1483,66 @@
 
         // Start polling
         startSystemMonitor();
+
+        // =====================
+        // Watcher Status
+        // =====================
+        async function updateWatcherStatus() {
+            const dot = document.getElementById('watcher-dot');
+            const val = document.getElementById('watcher-value');
+            const widget = document.getElementById('watcher-widget');
+            if (!dot || !val) return;
+
+            try {
+                const res = await fetch(`${API}/api/system/watcher`);
+                const data = await res.json();
+
+                // Reset dot classes
+                dot.className = 'status-dot';
+
+                if (data.status === 'healthy') {
+                    dot.classList.add('active');
+                    if (data.tracked_count > 0) {
+                        const s = data.settling_count > 0 ? `/${data.settling_count}s` : '';
+                        val.textContent = `${data.tracked_count}f${s}`;
+                    } else {
+                        val.textContent = 'Idle';
+                    }
+                } else if (data.status === 'degraded') {
+                    dot.classList.add('warning');
+                    val.textContent = 'Slow';
+                } else if (data.status === 'error') {
+                    dot.classList.add('error');
+                    val.textContent = 'Down';
+                } else {
+                    dot.classList.add('inactive');
+                    val.textContent = 'OFF';
+                }
+
+                // Build tooltip
+                const parts = [];
+                if (data.uptime_seconds > 0) {
+                    const h = Math.floor(data.uptime_seconds / 3600);
+                    const m = Math.floor((data.uptime_seconds % 3600) / 60);
+                    parts.push(`Uptime: ${h}h ${m}m`);
+                }
+                if (data.tracked_files && data.tracked_files.length > 0) {
+                    const names = data.tracked_files.map(f => `${f.name} (${f.state})`).join(', ');
+                    parts.push(`Files: ${names}`);
+                }
+                if (data.recent_activity && data.recent_activity.length > 0) {
+                    const last = data.recent_activity[data.recent_activity.length - 1];
+                    parts.push(`Last: ${last.file} → ${last.action}`);
+                }
+                widget.title = parts.length > 0 ? parts.join('\n') : 'Inbox Watcher';
+            } catch (err) {
+                dot.className = 'status-dot inactive';
+                val.textContent = 'OFF';
+                widget.title = 'Inbox Watcher (unreachable)';
+            }
+        }
+
+        setInterval(updateWatcherStatus, 5000);
 
         // =====================
         // Agent Metrics
@@ -4261,8 +3222,7 @@
                 'metrics-modal',
                 'team-modal',
                 'agent-team-modal',
-                'terminal-modal',
-                'c2pa-window'
+                'terminal-modal'
             ],
 
             // Get current workspace state
@@ -5075,7 +4035,7 @@
 
             let activeResize = null;
 
-            const widgetIds = ['notes-window', 'heuristics-window', 'flightpath-window', 'task-window', 'mc-window', 'c2pa-window', 'standards-library-window', 'calendar-window'];
+            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window'];
 
             // Restore saved sizes from localStorage
             widgetIds.forEach(widgetId => {
@@ -5318,6 +4278,7 @@
         function initializeApp() {
             loadActions();
             updateSystemMonitor();
+            updateWatcherStatus();
             loadMetrics();
             initializeWidgetResize();
         }
@@ -5361,301 +4322,11 @@
         </div>
     </div>
 
-    <!-- C2PA MODULE SCRIPT -->
+    <!-- C2PA MODULE REMOVED -->
     <script>
-        // ==========================================
-        // C2PA MODULE LOGIC
-        // ==========================================
-
-        // --- Window Management ---
-        function openC2PAWindow() {
-            const win = document.getElementById('c2pa-window');
-            if (win) {
-                win.style.display = 'flex';
-                // Center window explicitly (resetting potential drag offsets)
-                win.style.top = '50%';
-                win.style.left = '50%';
-                win.style.transform = 'translate(-50%, -50%)';
-                win.style.right = '';
-                win.style.bottom = '';
-
-                // Initialize drag functionality if not already
-                if (!win.hasAttribute('data-drag-init')) {
-                    // Try to find the drag init function or implement a simple one
-                    if (typeof initDraggable === 'function') {
-                        initDraggable(win, win.querySelector('.c2pa-header'));
-                    } else {
-                        console.warn('initDraggable not found, drag disabled');
-                    }
-                    win.setAttribute('data-drag-init', 'true');
-                }
-            }
-        }
-
-        function closeC2PAWindow() {
-            const win = document.getElementById('c2pa-window');
-            if (win) win.style.display = 'none';
-        }
-
-        // --- Tab Management ---
-        function switchC2PATab(tabId) {
-            // Update tabs
-            document.querySelectorAll('.c2pa-tab').forEach(t => {
-                t.classList.toggle('active', t.dataset.tab === tabId);
-            });
-
-            // Update panels
-            document.querySelectorAll('.c2pa-panel').forEach(p => {
-                p.classList.remove('active');
-            });
-            document.getElementById('c2pa-' + tabId + '-panel').classList.add('active');
-        }
-
-        // --- Verify Tab Logic ---
-
-        // Drag and Drop
-        const verifyDrop = document.getElementById('c2pa-verify-dropzone');
-        const verifyInput = document.getElementById('c2pa-verify-file');
-
-        if (verifyDrop && verifyInput) {
-            verifyDrop.addEventListener('click', () => verifyInput.click());
-
-            verifyDrop.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                verifyDrop.classList.add('dragover');
-            });
-
-            verifyDrop.addEventListener('dragleave', () => verifyDrop.classList.remove('dragover'));
-
-            verifyDrop.addEventListener('drop', (e) => {
-                e.preventDefault();
-                verifyDrop.classList.remove('dragover');
-                if (e.dataTransfer.files.length) {
-                    handleVerifyFile(e.dataTransfer.files[0]);
-                }
-            });
-
-            verifyInput.addEventListener('change', (e) => {
-                if (e.target.files.length) {
-                    handleVerifyFile(e.target.files[0]);
-                }
-            });
-        }
-
-        function verifyC2PAFromURL() {
-            const url = document.getElementById('c2pa-verify-url').value;
-            if (!url) return;
-
-            const formData = new FormData();
-            formData.append('image_url', url);
-            performVerification(formData, url);
-        }
-
-        function handleVerifyFile(file) {
-            const formData = new FormData();
-            formData.append('image_file', file);
-
-            // Show preview safely
-            const preview = document.getElementById('c2pa-verify-preview');
-            preview.innerHTML = '';
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = document.createElement('img');
-                img.src = e.target.result;
-                preview.appendChild(img);
-            };
-            reader.readAsDataURL(file);
-
-            performVerification(formData);
-        }
-
-        async function performVerification(formData, imageUrl = null) {
-            const results = document.getElementById('c2pa-verify-results');
-            const status = document.getElementById('c2pa-verify-status');
-
-            results.style.display = 'flex';
-            status.innerHTML = 'Verifying...';
-            status.className = 'c2pa-status';
-
-            // Store current image for viewing
-            if (imageUrl) {
-                window.currentVerifyImage = imageUrl;
-            } else if (formData.has('image_file')) {
-                // If it's a file, we already have it in the preview logic, 
-                // but let's store it explicitly for the 'View Blob' button
-                const file = formData.get('image_file');
-                if (window.currentVerifyBlob) URL.revokeObjectURL(window.currentVerifyBlob);
-                window.currentVerifyBlob = URL.createObjectURL(file);
-                window.currentVerifyImage = window.currentVerifyBlob;
-            }
-
-            // Clear fields
-            document.querySelectorAll('.field-value').forEach(el => el.textContent = '-');
-
-
-            try {
-                const API = window.API || 'http://127.0.0.1:7777';
-                const res = await fetch(API + '/api/c2pa/verify', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await res.json();
-
-                if (data.success && data.has_c2pa) {
-                    status.innerHTML = '✅ C2PA Metadata Verified';
-                    status.className = 'c2pa-status valid';
-                    populateMetadata(data.manifest);
-
-                    // Store manifest for JSON view
-                    window.currentManifest = data.manifest;
-                } else {
-                    status.innerHTML = '❌ No C2PA Metadata Found';
-                    status.className = 'c2pa-status invalid';
-                    document.getElementById('v-validation').textContent = 'Invalid / None';
-                }
-
-                // Show URL image preview if applicable
-                if (imageUrl) {
-                    const preview = document.getElementById('c2pa-verify-preview');
-                    if (!preview.hasChildNodes()) {
-                        const img = document.createElement('img');
-                        img.src = imageUrl;
-                        preview.appendChild(img);
-                    }
-                }
-
-            } catch (e) {
-                console.error(e);
-                status.innerHTML = 'Error verifying image';
-                status.className = 'c2pa-status invalid';
-            }
-        }
-
-        function populateMetadata(m) {
-            const setText = (id, txt) => {
-                const el = document.getElementById(id);
-                if (el) el.textContent = txt || '-';
-            };
-
-            setText('v-validation', m.validation_status || 'Valid');
-            setText('v-manifest', m.active_manifest || m.label || 'UUID-...');
-            setText('v-date', m.date_created);
-            setText('v-author', m.author || m.creator);
-            setText('v-generator', m.claim_generator);
-            setText('v-title', m.title);
-            setText('v-issuer', m.cert_issuer);
-            setText('v-filename', m.file_name || 'image.jpg'); // Fallback
-            setText('v-filesize', m.file_size ? (m.file_size / 1024).toFixed(1) + ' KB' : '-');
-            setText('v-filetype', m.format || m.file_type || 'image/jpeg');
-            setText('v-segments', m.assertions ? m.assertions.length + ' segments' : '1 segment');
-        }
-
-        function viewManifestJSON() {
-            if (window.currentManifest) {
-                // Open new window with JSON
-                const w = window.open('', '_blank');
-                w.document.write('<pre>' + JSON.stringify(window.currentManifest, null, 2) + '</pre>');
-            } else {
-                alert('No manifest loaded');
-            }
-        }
-
-        function viewImageBlob() {
-            if (window.currentVerifyImage) {
-                window.open(window.currentVerifyImage, '_blank');
-            } else {
-                alert('No image loaded to view. Please verify an image first.');
-            }
-        }
-
-
-        // --- Sign Tab Logic ---
-
-        const signDrop = document.getElementById('c2pa-sign-dropzone');
-        const signInput = document.getElementById('c2pa-sign-file');
-        let fileToSign = null;
-
-        if (signDrop && signInput) {
-            signDrop.addEventListener('click', () => signInput.click());
-
-            signDrop.addEventListener('dragover', (e) => { e.preventDefault(); signDrop.classList.add('dragover'); });
-            signDrop.addEventListener('dragleave', () => signDrop.classList.remove('dragover'));
-
-            signDrop.addEventListener('drop', (e) => {
-                e.preventDefault();
-                signDrop.classList.remove('dragover');
-                if (e.dataTransfer.files.length) handleSignFile(e.dataTransfer.files[0]);
-            });
-
-            signInput.addEventListener('change', (e) => {
-                if (e.target.files.length) handleSignFile(e.target.files[0]);
-            });
-        }
-
-        function handleSignFile(file) {
-            fileToSign = file;
-            document.querySelector('#c2pa-sign-dropzone .dropzone-text').textContent = 'Selected: ' + file.name;
-            const btn = document.getElementById('c2pa-sign-btn');
-            if (btn) btn.disabled = false;
-        }
-
-        async function signC2PAImage() {
-            if (!fileToSign) return;
-
-            const btn = document.getElementById('c2pa-sign-btn');
-            const status = document.getElementById('c2pa-sign-status');
-            const results = document.getElementById('c2pa-sign-results');
-
-            btn.disabled = true;
-            btn.textContent = 'Signing...';
-            results.style.display = 'block';
-            status.innerHTML = 'Signing image...';
-            status.className = 'c2pa-status';
-
-            const formData = new FormData();
-            formData.append('image_file', fileToSign);
-            formData.append('creator', document.getElementById('s-author').value);
-            formData.append('title', document.getElementById('s-title').value);
-            formData.append('action', document.getElementById('s-action').value);
-
-            // Add other fields to match verify tab if needed
-            formData.append('claim_generator', document.getElementById('s-generator').value);
-
-            try {
-                const API = window.API || 'http://127.0.0.1:7777';
-                const res = await fetch(API + '/api/c2pa/sign', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    status.innerHTML = '✅ Image Signed Successfully';
-                    status.className = 'c2pa-status valid';
-
-                    const output = document.getElementById('c2pa-sign-output');
-                    output.innerHTML = `
-                        <p style="margin-bottom: 10px;">File saved to: ${data.output_filename}</p>
-                        <div class="c2pa-actions" style="margin-top: 15px;">
-                            <button class="c2pa-btn-gold" onclick="window.open('${API}/api/c2pa/download/${data.output_filename}')">Download Signed Image</button>
-                            <button class="c2pa-btn" onclick="window.open('${API}/api/c2pa/signed-images')">Manage Signed Folder</button>
-                        </div>
-                    `;
-
-                } else {
-
-                    throw new Error(data.error || 'Signing failed');
-                }
-            } catch (e) {
-                status.innerHTML = '❌ Signing Failed: ' + e.message;
-                status.className = 'c2pa-status invalid';
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Sign Image';
-            }
-        }
+        // C2PA module removed (dashboard cleanup)
+        function openC2PAWindow() { /* removed */ }
+        function closeC2PAWindow() { /* removed */ }
     </script>
 
     <!-- GOOGLE CALENDAR MODULE SCRIPT -->

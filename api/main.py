@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, conlist, field_validator, ValidationError
 from pathlib import Path
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import sys
 import json
 import uuid
@@ -106,13 +106,6 @@ except ImportError as e:
     print(f"Warning: Agents module not available: {e}")
     AGENTS_AVAILABLE = False
 
-# Import C2PA module (Content Provenance)
-try:
-    from api.c2pa.routes import router as c2pa_router
-    C2PA_AVAILABLE = True
-except ImportError as e:
-    print(f"Warning: C2PA module not available: {e}")
-    C2PA_AVAILABLE = False
 
 # Import calendar module (Google Calendar)
 try:
@@ -204,8 +197,8 @@ async def add_cache_control_headers(request: Request, call_next):
     """
     response = await call_next(request)
 
-    # Only apply no-cache to API endpoints (not static files or root)
-    if request.url.path.startswith("/api/"):
+    # No-cache for API endpoints and root HTML (prevents stale page after restart)
+    if request.url.path.startswith("/api/") or request.url.path == "/":
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -229,9 +222,6 @@ if TERMINAL_AVAILABLE:
 if AGENTS_AVAILABLE:
     app.include_router(agents_router)
 
-# Include the C2PA router (Content Provenance)
-if C2PA_AVAILABLE:
-    app.include_router(c2pa_router)
 
 # Include the calendar router (Google Calendar)
 if CALENDAR_AVAILABLE:
@@ -272,8 +262,18 @@ app.mount("/static", StaticFiles(directory=UI_DIR / "static"), name="static")
 
 @app.get("/")
 async def root():
-    """Serve the dashboard"""
-    return FileResponse(UI_DIR / "index.html")
+    """Serve the dashboard (no-cache to prevent stale page after restart)"""
+    html_path = UI_DIR / "index.html"
+    content = html_path.read_bytes()
+    return Response(
+        content=content,
+        media_type="text/html",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    )
 
 
 @app.get("/api/actions")
@@ -323,6 +323,61 @@ async def system_stats():
             "available_gb": round(memory.available / (1024**3), 1)
         }
     }
+
+
+WATCHER_HEARTBEAT_PATH = Path(__file__).parent.parent / "data" / "watcher_heartbeat.json"
+
+
+@app.get("/api/system/watcher")
+async def watcher_status():
+    """
+    Get inbox watcher status from its heartbeat file.
+
+    Health is computed from heartbeat freshness:
+    - <6s: healthy (watcher polls every 2s)
+    - 6-10s: degraded (heartbeat is slow)
+    - >10s: error (watcher likely crashed)
+    - File missing: inactive (never started)
+    """
+    if not WATCHER_HEARTBEAT_PATH.exists():
+        return {
+            "status": "inactive",
+            "message": "Watcher has not started",
+            "tracked_count": 0,
+            "settling_count": 0,
+        }
+
+    try:
+        data = json.loads(WATCHER_HEARTBEAT_PATH.read_text(encoding="utf-8"))
+        ts = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - ts).total_seconds()
+
+        if age < 6:
+            health = "healthy"
+        elif age < 10:
+            health = "degraded"
+        else:
+            health = "error"
+
+        return {
+            "status": health,
+            "age_seconds": round(age, 1),
+            "pid": data.get("pid"),
+            "uptime_seconds": data.get("uptime_seconds", 0),
+            "poll_count": data.get("poll_count", 0),
+            "tracked_count": data.get("tracked_count", 0),
+            "settling_count": data.get("settling_count", 0),
+            "tracked_files": data.get("tracked_files", []),
+            "recent_activity": data.get("recent_activity", []),
+            "last_heartbeat": data.get("timestamp"),
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to read heartbeat: {str(e)}",
+            "tracked_count": 0,
+            "settling_count": 0,
+        }
 
 
 # =============================================================================
@@ -959,233 +1014,10 @@ async def delete_all_stopwatches():
     return {"success": True, "message": "All stopwatches deleted"}
 
 
-# =============================================================================
-# TASK LIST ENDPOINTS
-# =============================================================================
-
-TASKS_FILE = Path(__file__).parent.parent / "data" / "tasks.json"
 
 
-class TaskCreate(BaseModel):
-    text: str = Field(..., min_length=1, max_length=500)
-    priority: str = Field(default="medium", min_length=1, max_length=20, pattern=r'^[a-z]+$')
-    description: Optional[str] = Field(None, max_length=2000)
 
 
-class TaskUpdate(BaseModel):
-    text: Optional[str] = Field(None, min_length=1, max_length=500)
-    priority: Optional[str] = Field(None, min_length=1, max_length=20, pattern=r'^[a-z]+$')
-    completed: Optional[bool] = None
-    description: Optional[str] = Field(None, max_length=2000)
-
-
-def load_tasks() -> list:
-    """Load tasks from JSON file."""
-    if TASKS_FILE.exists():
-        try:
-            data = json.loads(TASKS_FILE.read_text(encoding="utf-8"))
-            tasks = data.get("tasks", [])
-            # Ensure all tasks have a description field (backward compatibility)
-            for task in tasks:
-                if "description" not in task:
-                    task["description"] = ""
-            return tasks
-        except Exception as e:
-            print(f"Warning: Failed to load tasks: {e}")
-    return []
-
-
-def save_tasks(tasks: list):
-    """Save tasks to JSON file."""
-    TASKS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    TASKS_FILE.write_text(
-        json.dumps({"tasks": tasks}, indent=2),
-        encoding="utf-8"
-    )
-
-
-@app.get("/api/tasks")
-async def get_tasks():
-    """Get all tasks."""
-    return {"tasks": load_tasks()}
-
-
-@app.post("/api/tasks")
-async def create_task(task: TaskCreate):
-    """Create a new task."""
-    tasks = load_tasks()
-    new_task = {
-        "id": str(uuid.uuid4())[:8],
-        "text": task.text,
-        "priority": task.priority,
-        "completed": False,
-        "description": task.description or ""
-    }
-    tasks.append(new_task)
-    save_tasks(tasks)
-    return {"success": True, "task": new_task}
-
-
-@app.put("/api/tasks/{task_id}")
-async def update_task(task_id: str, update: TaskUpdate):
-    """Update a task."""
-    tasks = load_tasks()
-    for task in tasks:
-        if task["id"] == task_id:
-            if update.text is not None:
-                task["text"] = update.text
-            if update.priority is not None:
-                task["priority"] = update.priority
-            if update.completed is not None:
-                task["completed"] = update.completed
-            if update.description is not None:
-                task["description"] = update.description
-            save_tasks(tasks)
-            return {"success": True, "task": task}
-    return {"success": False, "message": "Task not found"}
-
-
-@app.delete("/api/tasks/{task_id}")
-async def delete_task(task_id: str):
-    """Delete a task."""
-    tasks = load_tasks()
-    tasks = [t for t in tasks if t["id"] != task_id]
-    save_tasks(tasks)
-    return {"success": True}
-
-
-@app.post("/api/tasks/clear-completed")
-async def clear_completed():
-    """Delete all completed tasks."""
-    tasks = load_tasks()
-    tasks = [t for t in tasks if not t.get("completed", False)]
-    save_tasks(tasks)
-    return {"success": True, "remaining": len(tasks)}
-
-
-# =============================================================================
-# QUICK NOTES ENDPOINTS (Scratchpad/Note-taking)
-# =============================================================================
-
-NOTES_FILE = Path(__file__).parent.parent / "data" / "notes.json"
-
-
-class NoteCreate(BaseModel):
-    """Request model for creating a new note."""
-    content: str = Field(..., min_length=1, max_length=10000)
-    title: Optional[str] = Field(None, max_length=200)
-
-
-class NoteUpdate(BaseModel):
-    """Request model for updating an existing note."""
-    content: Optional[str] = Field(None, min_length=1, max_length=10000)
-    title: Optional[str] = Field(None, max_length=200)
-
-
-def load_notes() -> list:
-    """Load notes from JSON file."""
-    if NOTES_FILE.exists():
-        try:
-            data = json.loads(NOTES_FILE.read_text(encoding="utf-8"))
-            return data.get("notes", [])
-        except Exception as e:
-            print(f"Warning: Failed to load notes: {e}")
-    return []
-
-
-def save_notes(notes: list):
-    """Save notes to JSON file."""
-    NOTES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    NOTES_FILE.write_text(
-        json.dumps({"notes": notes}, indent=2),
-        encoding="utf-8"
-    )
-
-
-@app.get("/api/notes")
-async def get_notes():
-    """
-    Get all notes.
-
-    Returns notes sorted by updated_at (newest first).
-    """
-    notes = load_notes()
-    # Sort by updated_at descending (newest first)
-    notes.sort(key=lambda n: n.get("updated_at", n.get("created_at", "")), reverse=True)
-    return {"notes": notes}
-
-
-@app.get("/api/notes/{note_id}")
-async def get_note(note_id: str):
-    """Get a single note by ID."""
-    notes = load_notes()
-    for note in notes:
-        if note["id"] == note_id:
-            return {"success": True, "note": note}
-    return {"success": False, "message": "Note not found"}
-
-
-@app.post("/api/notes", status_code=201)
-async def create_note(note: NoteCreate):
-    """
-    Create a new note.
-
-    Timestamps are generated server-side in ISO 8601 format.
-    """
-    notes = load_notes()
-    now = datetime.utcnow().isoformat() + "Z"
-
-    new_note = {
-        "id": str(uuid.uuid4())[:8],
-        "title": note.title or "",
-        "content": note.content,
-        "created_at": now,
-        "updated_at": now
-    }
-    notes.append(new_note)
-    save_notes(notes)
-    return {"success": True, "note": new_note}
-
-
-@app.put("/api/notes/{note_id}")
-async def update_note(note_id: str, update: NoteUpdate):
-    """
-    Update an existing note.
-
-    Updates the updated_at timestamp automatically.
-    """
-    notes = load_notes()
-    for note in notes:
-        if note["id"] == note_id:
-            if update.content is not None:
-                note["content"] = update.content
-            if update.title is not None:
-                note["title"] = update.title
-            note["updated_at"] = datetime.utcnow().isoformat() + "Z"
-            save_notes(notes)
-            return {"success": True, "note": note}
-    return {"success": False, "message": "Note not found"}
-
-
-@app.delete("/api/notes/{note_id}")
-async def delete_note(note_id: str):
-    """Delete a note."""
-    notes = load_notes()
-    original_count = len(notes)
-    notes = [n for n in notes if n["id"] != note_id]
-
-    if len(notes) == original_count:
-        return {"success": False, "message": "Note not found"}
-
-    save_notes(notes)
-    return {"success": True}
-
-
-@app.delete("/api/notes")
-async def delete_all_notes():
-    """Delete all notes (with confirmation required in frontend)."""
-    save_notes([])
-    return {"success": True, "message": "All notes deleted"}
 
 
 # =============================================================================
@@ -1249,191 +1081,6 @@ async def get_periodic_elements():
 
     return {"elements": elements, "layout": layout}
 
-
-# =============================================================================
-# HEURISTICS ENDPOINTS (Tricks & Debugging Patterns)
-# =============================================================================
-
-HEURISTICS_FILE = Path(__file__).parent.parent / "data" / "heuristics.json"
-
-
-class HeuristicCreate(BaseModel):
-    """Request model for creating a new heuristic."""
-    trigger_conditions: List[str] = Field(..., min_items=1, max_items=10, description="When to apply this trick")
-    action: str = Field(..., min_length=1, max_length=1000, description="What to do")
-    anti_action: Optional[str] = Field(None, max_length=1000, description="What NOT to do")
-    rationale: Optional[str] = Field(None, max_length=1000, description="Why this works")
-    pattern: Optional[str] = Field(None, max_length=50, description="Pattern category")
-
-
-class HeuristicUpdate(BaseModel):
-    """Request model for updating a heuristic."""
-    trigger_conditions: Optional[List[str]] = Field(None, min_items=1, max_items=10)
-    action: Optional[str] = Field(None, min_length=1, max_length=1000)
-    anti_action: Optional[str] = Field(None, max_length=1000)
-    rationale: Optional[str] = Field(None, max_length=1000)
-    pattern: Optional[str] = Field(None, max_length=50)
-
-
-def load_heuristics() -> dict:
-    """Load heuristics from JSON file."""
-    if HEURISTICS_FILE.exists():
-        try:
-            return json.loads(HEURISTICS_FILE.read_text(encoding="utf-8"))
-        except Exception as e:
-            print(f"Warning: Failed to load heuristics: {e}")
-    return {"heuristics": [], "meta": {"last_updated": "", "total_heuristics": 0}}
-
-
-def save_heuristics(data: dict):
-    """Save heuristics to JSON file."""
-    HEURISTICS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    data["meta"]["last_updated"] = datetime.utcnow().isoformat() + "Z"
-    data["meta"]["total_heuristics"] = len(data.get("heuristics", []))
-    HEURISTICS_FILE.write_text(
-        json.dumps(data, indent=2),
-        encoding="utf-8"
-    )
-
-
-@app.get("/api/heuristics")
-async def get_heuristics():
-    """
-    Get all heuristics (tricks & patterns).
-
-    Returns all stored debugging tricks with their usage stats.
-    """
-    data = load_heuristics()
-    return {
-        "success": True,
-        "heuristics": data.get("heuristics", []),
-        "meta": data.get("meta", {})
-    }
-
-
-@app.get("/api/heuristics/{heuristic_id}")
-async def get_heuristic(heuristic_id: str):
-    """Get a single heuristic by ID."""
-    data = load_heuristics()
-    for h in data.get("heuristics", []):
-        if h["id"] == heuristic_id:
-            return {"success": True, "heuristic": h}
-    return {"success": False, "message": "Heuristic not found"}
-
-
-@app.post("/api/heuristics", status_code=201)
-async def create_heuristic(heuristic: HeuristicCreate):
-    """
-    Create a new heuristic (trick).
-
-    Capture a debugging pattern that worked for future reference.
-    """
-    data = load_heuristics()
-    heuristics = data.get("heuristics", [])
-
-    # Generate next ID
-    existing_ids = [h.get("id", "") for h in heuristics]
-    max_num = 0
-    for hid in existing_ids:
-        if hid.startswith("h"):
-            try:
-                num = int(hid[1:])
-                max_num = max(max_num, num)
-            except ValueError:
-                pass
-    new_id = f"h{max_num + 1:03d}"
-
-    now = datetime.utcnow().strftime("%Y-%m-%d")
-    new_heuristic = {
-        "id": new_id,
-        "trigger_conditions": heuristic.trigger_conditions,
-        "action": heuristic.action,
-        "anti_action": heuristic.anti_action or "",
-        "rationale": heuristic.rationale or "",
-        "source_debrief": now,
-        "pattern": heuristic.pattern or "general",
-        "confidence": 0.80,
-        "times_seen": 1,
-        "times_applied": 0,
-        "tokens_saved_estimate": 200
-    }
-
-    heuristics.append(new_heuristic)
-    data["heuristics"] = heuristics
-    save_heuristics(data)
-
-    return {"success": True, "heuristic": new_heuristic}
-
-
-@app.put("/api/heuristics/{heuristic_id}")
-async def update_heuristic(heuristic_id: str, update: HeuristicUpdate):
-    """Update an existing heuristic."""
-    data = load_heuristics()
-    heuristics = data.get("heuristics", [])
-
-    for h in heuristics:
-        if h["id"] == heuristic_id:
-            if update.trigger_conditions is not None:
-                h["trigger_conditions"] = update.trigger_conditions
-            if update.action is not None:
-                h["action"] = update.action
-            if update.anti_action is not None:
-                h["anti_action"] = update.anti_action
-            if update.rationale is not None:
-                h["rationale"] = update.rationale
-            if update.pattern is not None:
-                h["pattern"] = update.pattern
-
-            data["heuristics"] = heuristics
-            save_heuristics(data)
-            return {"success": True, "heuristic": h}
-
-    return {"success": False, "message": "Heuristic not found"}
-
-
-@app.post("/api/heuristics/{heuristic_id}/apply")
-async def apply_heuristic(heuristic_id: str):
-    """
-    Mark a heuristic as applied.
-
-    Increments times_applied counter and updates confidence.
-    """
-    data = load_heuristics()
-    heuristics = data.get("heuristics", [])
-
-    for h in heuristics:
-        if h["id"] == heuristic_id:
-            h["times_applied"] = h.get("times_applied", 0) + 1
-            h["times_seen"] = h.get("times_seen", 0) + 1
-            # Increase confidence slightly with each successful application
-            h["confidence"] = min(0.99, h.get("confidence", 0.8) + 0.02)
-
-            data["heuristics"] = heuristics
-            save_heuristics(data)
-            return {
-                "success": True,
-                "heuristic": h,
-                "message": f"Applied! Now used {h['times_applied']} times."
-            }
-
-    return {"success": False, "message": "Heuristic not found"}
-
-
-@app.delete("/api/heuristics/{heuristic_id}")
-async def delete_heuristic(heuristic_id: str):
-    """Delete a heuristic."""
-    data = load_heuristics()
-    heuristics = data.get("heuristics", [])
-    original_count = len(heuristics)
-
-    heuristics = [h for h in heuristics if h["id"] != heuristic_id]
-
-    if len(heuristics) == original_count:
-        return {"success": False, "message": "Heuristic not found"}
-
-    data["heuristics"] = heuristics
-    save_heuristics(data)
-    return {"success": True}
 
 
 # =============================================================================
@@ -1712,50 +1359,115 @@ async def run_sanity_check_endpoint():
 @app.post("/api/server/restart")
 async def restart_server():
     """
-    Restart the iHIM server by killing and restarting the process.
+    Restart the iHIM server by killing ALL processes on port 7777, then starting fresh.
 
-    Spawns a detached process that:
-    1. Waits 1 second for this response to complete
-    2. Kills all Python processes
-    3. Starts a new server via run.py
-
-    The frontend should poll /api/health until the server is back.
+    Uses port-based PID lookup (not process name) to catch both uvicorn
+    parent (reloader) and child (worker) processes. Writes a temp PS1 script
+    and runs via -File to avoid variable/escaping issues with -Command.
     """
     import subprocess
     import os
+    import tempfile
     from pathlib import Path
 
     if sys.platform != "win32":
         return {"success": False, "message": "Only supported on Windows currently"}
 
-    # Get paths
     ihim_dir = Path(__file__).parent.parent
     run_script = ihim_dir / "run.py"
 
     if not run_script.exists():
         return {"success": False, "message": f"run.py not found at {run_script}"}
 
-    # PowerShell script to kill and restart
-    # Escape single quotes in path for PowerShell by doubling them
-    ihim_dir_escaped = str(ihim_dir).replace("'", "''")
-    ps_script = f"""
-    Start-Sleep -Seconds 1
-    Stop-Process -Name python -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
-    Set-Location '{ihim_dir_escaped}'
-    Start-Process python -ArgumentList 'run.py' -WindowStyle Hidden
-    """
+    python_path = str(Path(sys.executable))
 
-    # Spawn detached PowerShell process
+    # Write PS script to a temp file — avoids $variable escaping issues with -Command
+    log_path = str(Path(tempfile.gettempdir()) / "ihim_restart.log").replace("\\", "/")
+    ps_script = f"""
+$log = "{log_path}"
+"[$(Get-Date)] Restart script started" | Out-File $log
+
+Start-Sleep -Seconds 1
+
+# Collect ALL python PIDs on port 7777 — both direct listeners and their parents
+$targets = @()
+$procs = (Get-NetTCPConnection -LocalPort 7777 -ErrorAction SilentlyContinue).OwningProcess | Sort-Object -Unique
+"[$(Get-Date)] Port 7777 PIDs: $procs" | Out-File $log -Append
+
+foreach ($p in $procs) {{
+    if ($p -and $p -gt 0) {{
+        $targets += $p
+        # Walk up: if parent is also python, include it (reloader pattern)
+        $parent = (Get-CimInstance Win32_Process -Filter "ProcessId = $p" -ErrorAction SilentlyContinue).ParentProcessId
+        if ($parent -and $parent -gt 0) {{
+            $parentProc = Get-Process -Id $parent -ErrorAction SilentlyContinue
+            if ($parentProc -and $parentProc.ProcessName -eq 'python') {{
+                $targets += $parent
+                "[$(Get-Date)] Including python parent PID $parent" | Out-File $log -Append
+            }}
+        }}
+    }}
+}}
+
+$targets = $targets | Sort-Object -Unique
+"[$(Get-Date)] Kill targets: $targets" | Out-File $log -Append
+
+# Kill each target with /T (process tree)
+foreach ($t in $targets) {{
+    "[$(Get-Date)] taskkill /F /PID $t /T" | Out-File $log -Append
+    taskkill /F /PID $t /T 2>&1 | Out-File $log -Append
+}}
+Start-Sleep -Seconds 2
+
+# Second pass — catch anything still holding the port
+$still = (Get-NetTCPConnection -LocalPort 7777 -ErrorAction SilentlyContinue).OwningProcess | Sort-Object -Unique
+if ($still) {{
+    "[$(Get-Date)] Second pass PIDs: $still" | Out-File $log -Append
+    foreach ($p in $still) {{
+        if ($p -and $p -gt 0) {{
+            taskkill /F /PID $p /T 2>&1 | Out-File $log -Append
+        }}
+    }}
+}}
+
+# Wait for port to actually clear (up to 10 seconds)
+$waited = 0
+while ($waited -lt 10) {{
+    $check = Get-NetTCPConnection -LocalPort 7777 -State Listen -ErrorAction SilentlyContinue
+    if (-not $check) {{ break }}
+    Start-Sleep -Seconds 1
+    $waited++
+}}
+"[$(Get-Date)] Port clear after $waited seconds" | Out-File $log -Append
+
+# Start fresh server (IHIM_SUPERVISED=1 suppresses browser popup)
+$env:IHIM_SUPERVISED = "1"
+Start-Process -FilePath '{python_path}' -ArgumentList 'run.py' -WorkingDirectory '{ihim_dir}' -WindowStyle Hidden
+"[$(Get-Date)] Started new server" | Out-File $log -Append
+
+# Clean up this temp script
+Start-Sleep -Seconds 2
+Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+"""
+
     try:
+        # Write to temp .ps1 file (won't be inside IHIM dir, so no reload trigger)
+        fd, ps_path = tempfile.mkstemp(suffix=".ps1", prefix="ihim_restart_")
+        with os.fdopen(fd, "w") as f:
+            f.write(ps_script)
+
+        # Spawn via WMI so the PS process is parented by WmiPrvSE.exe,
+        # NOT by this Python process. This is critical because the PS script
+        # uses taskkill /T which kills the entire process tree — if PS were
+        # a child of Python, it would kill itself mid-execution.
+        wmi_cmd = f'powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps_path}"'
         subprocess.Popen(
-            ["powershell.exe", "-Command", ps_script],
-            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
-            close_fds=True,
+            ["wmic", "process", "call", "create", wmi_cmd],
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         return {
             "success": True,
-            "message": "Server restart initiated - wait 3 seconds and refresh",
+            "message": "Server restart initiated — killing by port PID",
             "pid": os.getpid()
         }
     except Exception as e:

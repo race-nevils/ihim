@@ -26,20 +26,6 @@ ACTIONS = {
         "category": "files",
     },
     # Tools
-    "task_list": {
-        "name": "Task List",
-        "description": "Manage your tasks and priorities",
-        "icon": "checklist",
-        "category": "tools",
-        "has_modal": True,
-    },
-    "quick_notes": {
-        "name": "Quick Notes",
-        "description": "Jot down ideas, notes, and reminders",
-        "icon": "note",
-        "category": "tools",
-        "has_modal": True,
-    },
     "flight_path": {
         "name": "Flight Path",
         "description": "Visual map of project dependencies and structure",
@@ -68,24 +54,10 @@ ACTIONS = {
         "icon": "timer",
         "category": "tools",
     },
-    "heuristics": {
-        "name": "Tricks & Heuristics",
-        "description": "Debugging tricks and patterns that work",
-        "icon": "lightbulb",
-        "category": "tools",
-        "has_modal": True,
-    },
     "standards_library": {
         "name": "Standards Library",
         "description": "Compliance modules - HIPAA, SOC 2, and more",
         "icon": "shield",
-        "category": "tools",
-        "has_modal": True,
-    },
-    "c2pa_verify": {
-        "name": "C2PA Verify",
-        "description": "Verify C2PA content authenticity and sign images",
-        "icon": "verified",
         "category": "tools",
         "has_modal": True,
     },
@@ -136,14 +108,6 @@ def run_action(action_id: str) -> dict:
             return {"success": True, "message": "Opening workspace folder"}
         return {"success": False, "message": "Failed to open folder"}
 
-    elif action_id == "task_list":
-        # Handled by UI (modal)
-        return {"success": True, "message": "Opening task list..."}
-
-    elif action_id == "quick_notes":
-        # Handled by UI (modal)
-        return {"success": True, "message": "Opening notes..."}
-
     elif action_id == "flight_path":
         # Handled by UI (modal)
         return {"success": True, "message": "Opening Flight Path..."}
@@ -160,17 +124,9 @@ def run_action(action_id: str) -> dict:
         # Handled by UI (spawns floating stopwatch widgets)
         return {"success": True, "message": "Opening Stopwatch..."}
 
-    elif action_id == "heuristics":
-        # Handled by UI (modal for viewing/adding heuristics)
-        return {"success": True, "message": "Opening Tricks & Heuristics..."}
-
     elif action_id == "standards_library":
         # Handled by UI (modal for managing compliance modules)
         return {"success": True, "message": "Opening Standards Library..."}
-
-    elif action_id == "c2pa_verify":
-        # Handled by UI (modal for C2PA verification and signing)
-        return {"success": True, "message": "Opening C2PA Verify..."}
 
     elif action_id == "google_calendar":
         # Handled by UI (modal for Google Calendar)

@@ -223,8 +223,6 @@ def check_data_files(report: SanityReport):
     data_dir = Path(__file__).parent.parent / "data"
 
     json_files = [
-        "tasks.json",
-        "notes.json",
         "metrics.json",
         "feedback_history.json",
     ]

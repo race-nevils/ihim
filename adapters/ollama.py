@@ -2,8 +2,9 @@
 import json
 import logging
 import os
+from typing import AsyncGenerator, Optional
+
 import httpx
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -140,3 +141,72 @@ class OllamaAdapter:
         response = self.client.get(f"{self.base_url}/api/tags")
         response.raise_for_status()
         return [m["name"] for m in response.json().get("models", [])]
+
+
+class AsyncOllamaAdapter:
+    """Async adapter for Ollama chat API with streaming.
+
+    Used by Brain Chat for the 14B conversational model.
+    The sync OllamaAdapter above continues serving 7B classification.
+    """
+
+    CHAT_MODEL = "qwen2.5:14b-reason"
+
+    def __init__(self, base_url: Optional[str] = None):
+        self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.client = httpx.AsyncClient(timeout=300.0)  # 14B needs generous timeout
+
+    async def stream_chat(
+        self,
+        messages: list[dict],
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+    ) -> AsyncGenerator[str, None]:
+        """Stream chat completion tokens from Ollama /api/chat.
+
+        Args:
+            messages: OpenAI-format messages array [{role, content}, ...]
+            model: Model name (defaults to 14b-reason)
+            temperature: Sampling temperature (0.7 for conversational)
+
+        Yields:
+            Token strings as they arrive.
+        """
+        model = model or self.CHAT_MODEL
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "options": {"temperature": temperature},
+        }
+
+        async with self.client.stream(
+            "POST",
+            f"{self.base_url}/api/chat",
+            json=payload,
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                    token = chunk.get("message", {}).get("content", "")
+                    if token:
+                        yield token
+                    if chunk.get("done"):
+                        break
+                except json.JSONDecodeError:
+                    continue
+
+    async def health_check(self) -> bool:
+        """Check if Ollama is running and accessible."""
+        try:
+            response = await self.client.get(f"{self.base_url}/api/tags")
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    async def close(self):
+        """Close the async HTTP client."""
+        await self.client.aclose()

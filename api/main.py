@@ -30,7 +30,7 @@ from api.flightpath.scanner import scan_project, get_directory_graph
 # Import feedback system components
 try:
     from team.feedback.aggregator import aggregate_session, get_session_feedback, save_session_feedback
-    from team.feedback.metrics import get_metrics, get_metrics_summary, update_metrics
+    from team.feedback.metrics import get_metrics, update_metrics
     from team.feedback.processor import process_session_results, save_feedback_entry
     from team.feedback.optimizer import generate_optimizations, get_optimizations_for_agent
 
@@ -122,6 +122,14 @@ try:
 except ImportError as e:
     print(f"Warning: Brain module not available: {e}")
     BRAIN_AVAILABLE = False
+
+# Import chat module (Brain Chat with RAG)
+try:
+    from api.chat.routes import router as chat_router
+    CHAT_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Chat module not available: {e}")
+    CHAT_AVAILABLE = False
 
 app = FastAPI(title="iHIM", description="Your Command Center")
 
@@ -230,6 +238,10 @@ if CALENDAR_AVAILABLE:
 # Include the brain router (Second Brain Search)
 if BRAIN_AVAILABLE:
     app.include_router(brain_router)
+
+# Include the chat router (Brain Chat with RAG)
+if CHAT_AVAILABLE:
+    app.include_router(chat_router)
 
 
 # Request models
@@ -693,19 +705,6 @@ async def feedback_status():
     }
 
 
-@app.get("/api/feedback/metrics")
-async def get_feedback_metrics():
-    """
-    Get metrics summary showing improvement over time.
-
-    Returns session count, success rates, trends, and top learnings.
-    """
-    if not FEEDBACK_AVAILABLE:
-        return {"error": "Feedback system not available"}
-
-    return get_metrics_summary()
-
-
 @app.get("/api/feedback/session/{session_id}")
 async def get_session_feedback_endpoint(session_id: str):
     """
@@ -1017,69 +1016,6 @@ async def delete_all_stopwatches():
 
 
 
-
-
-
-# =============================================================================
-# PERIODIC TABLE ENDPOINTS (Team Mode Elements)
-# =============================================================================
-
-@app.get("/api/periodic-elements")
-async def get_periodic_elements():
-    """Return periodic table elements and layout for the UI."""
-    import os
-    import json
-
-    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-    # Load elements
-    elements_path = os.path.join(base_path, "data", "periodic_elements.json")
-    layout_path = os.path.join(base_path, "data", "periodic_layout.json")
-
-    elements = []
-    layout = []
-
-    try:
-        if os.path.exists(elements_path):
-            with open(elements_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Handle wrapper object: {"meta": {...}, "elements": [...]}
-                elements = data.get("elements", data) if isinstance(data, dict) else data
-    except Exception as e:
-        print(f"Error loading elements: {e}")
-
-    try:
-        if os.path.exists(layout_path):
-            with open(layout_path, 'r', encoding='utf-8') as f:
-                layout_data = json.load(f)
-                layout = layout_data.get('layout', [])
-    except Exception as e:
-        print(f"Error loading layout: {e}")
-
-    # Fallback if no files exist
-    if not elements:
-        elements = [
-            {"symbol": "O", "name": "the agent", "category": "tiers", "description": "Architect tier - full permissions"},
-            {"symbol": "S", "name": "the agent", "category": "tiers", "description": "Operator tier - read/write"},
-            {"symbol": "H", "name": "the agent", "category": "tiers", "description": "Scout tier - read-only"},
-            {"symbol": "Ye", "name": "Yellow Mode", "category": "modes", "description": "Fast build: 2S + 4W + 4O"},
-            {"symbol": "Re", "name": "Red Mode", "category": "modes", "description": "Discovery: 8S + 2H monitors"},
-            {"symbol": "Gr", "name": "Green Mode", "category": "modes", "description": "Verify gate: 10H"},
-            {"symbol": "Bl", "name": "Blue Mode", "category": "modes", "description": "Recon swarm: 10H READ-ONLY"}
-        ]
-
-    if not layout:
-        layout = [
-            {"symbol": "O", "row": 1, "col": 1},
-            {"symbol": "S", "row": 1, "col": 2},
-            {"symbol": "H", "row": 1, "col": 3},
-            {"symbol": "Ye", "row": 1, "col": 15},
-            {"symbol": "Re", "row": 1, "col": 16},
-            {"symbol": "Gr", "row": 1, "col": 17},
-            {"symbol": "Bl", "row": 1, "col": 18}
-        ]
-
-    return {"elements": elements, "layout": layout}
 
 
 

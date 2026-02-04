@@ -279,24 +279,6 @@ def build_topology() -> SystemTopology:
     ))
 
     nodes.append(ComponentNode(
-        id="data-tasks",
-        name="Tasks",
-        type=ComponentType.DATA,
-        parent="data-stores",
-        description="Task list data",
-        file_path=str(IHIM_ROOT / "data" / "tasks.json"),
-    ))
-
-    nodes.append(ComponentNode(
-        id="data-notes",
-        name="Notes",
-        type=ComponentType.DATA,
-        parent="data-stores",
-        description="Quick notes data",
-        file_path=str(IHIM_ROOT / "data" / "notes.json"),
-    ))
-
-    nodes.append(ComponentNode(
         id="data-slash-commands",
         name="Slash Commands Data",
         type=ComponentType.DATA,
@@ -345,15 +327,6 @@ def build_topology() -> SystemTopology:
         parent="learning-system",
         description="Post-task efficiency analysis: signal latency, counterfactuals, scoring",
         file_path=str(IHIM_ROOT.parent / "harness dir" / "commands" / "debrief.md"),
-    ))
-
-    nodes.append(ComponentNode(
-        id="heuristics-bank",
-        name="Heuristics Bank",
-        type=ComponentType.LEARNING,
-        parent="learning-system",
-        description="IF-THEN decision rules extracted from debriefs",
-        file_path=str(IHIM_ROOT / "data" / "heuristics.json"),
     ))
 
     nodes.append(ComponentNode(
@@ -422,13 +395,8 @@ def build_topology() -> SystemTopology:
     edges.append(SystemEdge(source="feedback-optimizer", target="team-spawner", edge_type="data-flow"))
     edges.append(SystemEdge(source="sanity-check", target="api-server", edge_type="dependency"))
     edges.append(SystemEdge(source="slash-commands", target="data-slash-commands", edge_type="data-flow"))
-    # corrected edge
-    edges.append(SystemEdge(source="api-server", target="heuristics-bank", edge_type="data-flow"))
-
     # Self-Improvement System edges (Swiss Cheese Layer connections)
     edges.append(SystemEdge(source="debrief-engine", target="debriefs-log", edge_type="data-flow"))
-    edges.append(SystemEdge(source="debrief-engine", target="heuristics-bank", edge_type="data-flow"))
-    edges.append(SystemEdge(source="heuristics-bank", target="memory-claude", edge_type="data-flow"))
     edges.append(SystemEdge(source="feedback-metrics", target="learning-system", edge_type="data-flow"))
 
     # Guardrails edges
@@ -436,7 +404,6 @@ def build_topology() -> SystemTopology:
     edges.append(SystemEdge(source="guardrails-system", target="team-spawner", edge_type="dependency"))
 
     # Memory System edges
-    edges.append(SystemEdge(source="memory-claude", target="heuristics-bank", edge_type="data-flow"))
     edges.append(SystemEdge(source="debriefs-log", target="memory-archive", edge_type="data-flow"))
 
     return SystemTopology(nodes=nodes, edges=edges)

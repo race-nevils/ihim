@@ -50,104 +50,9 @@
 
         <div class="bar-spacer"></div>
 
-        <!-- Agent Scores -->
-        <div class="bar-widget bar-clickable" id="agent-metrics" onclick="openMetricsModal()">
-            <span class="bar-label">Score</span>
-            <span id="metrics-overall-score" class="bar-score">--</span>
-            <span class="bar-cats">
-                <span title="Completion">C:<span id="cat-completion">--</span></span>
-                <span title="Quality">Q:<span id="cat-quality">--</span></span>
-                <span title="Efficiency">E:<span id="cat-efficiency">--</span></span>
-                <span title="Collaboration">T:<span id="cat-collaboration">--</span></span>
-            </span>
-        </div>
-
-        <div class="bar-spacer"></div>
-
-        <!-- Periodic Table Toggle -->
-        <div class="bar-widget bar-clickable" id="periodic-toggle" onclick="togglePeriodicTable()"
-            title="Toggle Periodic Table">
-            <span class="bar-label">⚛ Elements</span>
-        </div>
-    </div>
-
-    <!-- Metrics Modal -->
-    <div id="metrics-modal" class="modal">
-        <div class="modal-content metrics-modal-content">
-            <div class="modal-header">
-                <h2>Agent Performance Scores</h2>
-                <button class="close-btn" onclick="closeMetricsModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <!-- Overall Score -->
-                <div class="score-hero">
-                    <div class="score-circle">
-                        <span id="modal-overall-score" class="score-big">--</span>
-                    </div>
-                    <div class="score-label">Overall Score</div>
-                    <div id="modal-agent-count" class="score-subtitle">-- agents</div>
-                </div>
-
-                <!-- Category Scores -->
-                <div class="category-scores">
-                    <div class="category-row">
-                        <span class="category-name">Completion</span>
-                        <div class="category-bar-bg">
-                            <div id="bar-completion" class="category-bar" style="width: 0%"></div>
-                        </div>
-                        <span id="score-completion" class="category-value">--</span>
-                    </div>
-                    <div class="category-row">
-                        <span class="category-name">Quality</span>
-                        <div class="category-bar-bg">
-                            <div id="bar-quality" class="category-bar" style="width: 0%"></div>
-                        </div>
-                        <span id="score-quality" class="category-value">--</span>
-                    </div>
-                    <div class="category-row">
-                        <span class="category-name">Efficiency</span>
-                        <div class="category-bar-bg">
-                            <div id="bar-efficiency" class="category-bar" style="width: 0%"></div>
-                        </div>
-                        <span id="score-efficiency" class="category-value">--</span>
-                    </div>
-                    <div class="category-row">
-                        <span class="category-name">Collaboration</span>
-                        <div class="category-bar-bg">
-                            <div id="bar-collaboration" class="category-bar" style="width: 0%"></div>
-                        </div>
-                        <span id="score-collaboration" class="category-value">--</span>
-                    </div>
-                </div>
-
-                <!-- Per-Agent Breakdown -->
-                <div class="agent-breakdown">
-                    <h3>Per-Agent Scores</h3>
-                    <div id="agent-score-list" class="agent-score-list">
-                        <div class="no-agents">No agent data yet</div>
-                    </div>
-                </div>
-
-                <!-- Learnings & Blockers -->
-                <div class="insights-grid">
-                    <div class="insights-section">
-                        <h3>Top Learnings</h3>
-                        <ul id="metric-learnings" class="learnings-list">
-                            <li>No learnings yet</li>
-                        </ul>
-                    </div>
-                    <div class="insights-section">
-                        <h3>Common Blockers</h3>
-                        <ul id="metric-blockers" class="blockers-list">
-                            <li>No blockers recorded</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <span id="metrics-last-updated">Last updated: --</span>
-                <button class="refresh-btn" onclick="loadMetrics()">Refresh</button>
-            </div>
+        <!-- Brain Chat toggle -->
+        <div class="bar-widget" onclick="toggleChatWindow()" style="cursor:pointer;" title="Brain Chat">
+            <span class="bar-label" style="color:var(--color-power);">Chat</span>
         </div>
     </div>
 
@@ -1544,153 +1449,9 @@
 
         setInterval(updateWatcherStatus, 5000);
 
-        // =====================
-        // Agent Metrics
-        // =====================
-        async function loadMetrics() {
-            try {
-                const res = await fetch(`${API}/api/feedback/metrics`);
-                const data = await res.json();
-
-                if (data.error) {
-                    // Feedback system not available
-                    const overallEl = document.getElementById('metrics-overall-score');
-                    if (overallEl) overallEl.textContent = '--';
-                    return;
-                }
-
-                // Get scores from response
-                const scores = data.scores || {};
-
-                // Update widget - overall score
-                const overall = scores.overall || 0;
-                const overallEl = document.getElementById('metrics-overall-score');
-                if (overallEl) overallEl.textContent = Math.round(overall);
-
-                // Update widget - category scores (with guards)
-                const completionEl = document.getElementById('cat-completion');
-                const qualityEl = document.getElementById('cat-quality');
-                const efficiencyEl = document.getElementById('cat-efficiency');
-                const collaborationEl = document.getElementById('cat-collaboration');
-
-                if (completionEl) completionEl.textContent = Math.round(scores.completion || 0);
-                if (qualityEl) qualityEl.textContent = Math.round(scores.quality || 0);
-                if (efficiencyEl) efficiencyEl.textContent = Math.round(scores.efficiency || 0);
-                if (collaborationEl) collaborationEl.textContent = Math.round(scores.collaboration || 0);
-
-                // Update modal if open
-                updateMetricsModal(data);
-
-            } catch (err) {
-                console.error('Failed to load metrics:', err);
-            }
-        }
-
-        function getScoreColor(score) {
-            if (score >= 80) return '#22c55e'; // Green
-            if (score >= 60) return '#3d6f9a'; // Blue
-            if (score >= 40) return '#f59e0b'; // Amber
-            return '#ef4444'; // Red
-        }
-
-        function updateMetricsModal(data) {
-            const scores = data.scores || {};
-            const agentScores = data.agent_scores || {};
-
-            // Overall score in hero
-            const overall = scores.overall || 0;
-            document.getElementById('modal-overall-score').textContent = Math.round(overall);
-            document.getElementById('modal-agent-count').textContent = `${data.agent_count || 0} agents`;
-
-            // Category bars
-            ['completion', 'quality', 'efficiency', 'collaboration'].forEach(cat => {
-                const val = scores[cat] || 0;
-                document.getElementById(`score-${cat}`).textContent = Math.round(val);
-                const bar = document.getElementById(`bar-${cat}`);
-                bar.style.width = `${val}%`;
-                bar.style.backgroundColor = getScoreColor(val);
-            });
-
-            // Per-agent breakdown
-            const agentList = document.getElementById('agent-score-list');
-            const agents = Object.entries(agentScores);
-            if (agents.length > 0) {
-                agentList.innerHTML = agents.map(([name, s]) => `
-                    <div class="agent-score-row">
-                        <span class="agent-name">${escapeHtml(name)}</span>
-                        <span class="agent-overall" style="color: ${getScoreColor(s.overall)}">${Math.round(s.overall)}</span>
-                        <span class="agent-cats">
-                            C:${Math.round(s.completion)} Q:${Math.round(s.quality)} E:${Math.round(s.efficiency)} T:${Math.round(s.collaboration)}
-                        </span>
-                    </div>
-                `).join('');
-            } else {
-                agentList.innerHTML = '<div class="no-agents">No agent data yet</div>';
-            }
-
-            // Learnings
-            const learningsEl = document.getElementById('metric-learnings');
-            const learnings = data.top_learnings || [];
-            if (learnings.length > 0) {
-                learningsEl.innerHTML = learnings.map(l => `<li>${escapeHtml(l)}</li>`).join('');
-            } else {
-                learningsEl.innerHTML = '<li class="empty">No learnings yet</li>';
-            }
-
-            // Blockers
-            const blockersEl = document.getElementById('metric-blockers');
-            const blockers = data.common_blockers || [];
-            if (blockers.length > 0) {
-                blockersEl.innerHTML = blockers.map(b => `<li>${escapeHtml(b)}</li>`).join('');
-            } else {
-                blockersEl.innerHTML = '<li class="empty">No blockers recorded</li>';
-            }
-
-            // Last updated
-            if (data.last_updated) {
-                document.getElementById('metrics-last-updated').textContent =
-                    'Last updated: ' + new Date(data.last_updated).toLocaleString();
-            }
-        }
-
-        function openMetricsModal() {
-            document.getElementById('metrics-modal').classList.add('active');
-            loadMetrics();
-        }
-
-        function closeMetricsModal() {
-            document.getElementById('metrics-modal').classList.remove('active');
-        }
-
-        // Close metrics modal on outside click
-        document.getElementById('metrics-modal').addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal')) {
-                closeMetricsModal();
-            }
-        });
-
-        // Metrics polling
-        let metricsInterval = null;
-
-        function startMetricsPolling() {
-            if (metricsInterval) return; // Already running
-            metricsInterval = setInterval(loadMetrics, 30000);
-        }
-
-        function stopMetricsPolling() {
-            if (metricsInterval) {
-                clearInterval(metricsInterval);
-                metricsInterval = null;
-            }
-        }
-
-        // Start polling
-        startMetricsPolling();
-
         // Global cleanup function
         function cleanupIntervals() {
             stopSystemMonitor();
-            stopMetricsPolling();
 
             // Clean up FlightPath health polling
             if (typeof flightPath !== 'undefined' && flightPath && flightPath.stopHealthPolling) {
@@ -3935,96 +3696,6 @@
         stopwatchManager.init();
 
         // =============================================================================
-        // PERIODIC TABLE (workspace System Elements) - Simplified
-        // =============================================================================
-
-        function togglePeriodicTable() {
-            const panel = document.getElementById('periodic-table-panel');
-            if (panel) {
-                panel.classList.toggle('hidden');
-                if (!panel.classList.contains('hidden') && !panel.dataset.loaded) {
-                    loadPeriodicElements();
-                    panel.dataset.loaded = 'true';
-                }
-            }
-        }
-
-        async function loadPeriodicElements() {
-            try {
-                const res = await fetch('/api/periodic-elements');
-                const data = await res.json();
-                renderPeriodicTable(data.elements || [], data.layout || []);
-            } catch (e) {
-                console.error('Periodic load failed:', e);
-                renderFallbackTable();
-            }
-        }
-
-        function renderPeriodicTable(elements, layout) {
-            const grid = document.getElementById('periodic-grid');
-            if (!grid) return;
-            grid.innerHTML = '';
-            layout.forEach(pos => {
-                const el = elements.find(e => e.symbol === pos.symbol);
-                if (el) {
-                    const div = document.createElement('div');
-                    div.className = 'element ' + el.category;
-                    div.textContent = el.symbol;
-                    div.style.gridRow = pos.row;
-                    div.style.gridColumn = pos.col;
-                    div.title = el.name + ': ' + el.description;
-                    div.addEventListener('mouseenter', () => showElementInfo(el));
-                    div.addEventListener('mouseleave', hideElementInfo);
-                    grid.appendChild(div);
-                }
-            });
-        }
-
-        function renderFallbackTable() {
-            const grid = document.getElementById('periodic-grid');
-            const fallback = [
-                { symbol: 'H', name: 'the agent', category: 'tiers', row: 1, col: 1, description: 'Scout tier - READ-ONLY' },
-                { symbol: 'S', name: 'the agent', category: 'tiers', row: 2, col: 1, description: 'Operator tier - Read/Write' },
-                { symbol: 'O', name: 'the agent', category: 'tiers', row: 3, col: 1, description: 'Architect tier - Full' }
-            ];
-            fallback.forEach(el => {
-                const div = document.createElement('div');
-                div.className = 'element ' + el.category;
-                div.textContent = el.symbol;
-                div.style.gridRow = el.row;
-                div.style.gridColumn = el.col;
-                div.title = el.name + ': ' + el.description;
-                div.addEventListener('mouseenter', () => showElementInfo(el));
-                div.addEventListener('mouseleave', hideElementInfo);
-                grid.appendChild(div);
-            });
-        }
-
-        function showElementInfo(element) {
-            const info = document.getElementById('periodic-info');
-            if (info) {
-                info.querySelector('.info-symbol').textContent = element.symbol;
-                info.querySelector('.info-name').textContent = element.name;
-                info.querySelector('.info-category').textContent = element.category;
-                info.querySelector('.info-desc').textContent = element.description;
-                info.classList.add('visible');
-            }
-        }
-
-        function hideElementInfo() {
-            const info = document.getElementById('periodic-info');
-            if (info) info.classList.remove('visible');
-        }
-
-        // Keyboard shortcut
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'p') {
-                e.preventDefault();
-                togglePeriodicTable();
-            }
-        });
-
-        // =============================================================================
         // WIDGET RESIZE FUNCTIONALITY
         // =============================================================================
 
@@ -4035,7 +3706,7 @@
 
             let activeResize = null;
 
-            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window'];
+            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'chat-window'];
 
             // Restore saved sizes from localStorage
             widgetIds.forEach(widgetId => {
@@ -4279,7 +3950,6 @@
             loadActions();
             updateSystemMonitor();
             updateWatcherStatus();
-            loadMetrics();
             initializeWidgetResize();
         }
 
@@ -4291,36 +3961,6 @@
             initializeApp();
         }
     </script>
-
-    <!-- Periodic Table Panel -->
-    <div id="periodic-table-panel" class="periodic-panel hidden">
-        <div class="periodic-header">
-            <span>System Elements</span>
-            <button class="periodic-close" onclick="togglePeriodicTable()">×</button>
-        </div>
-        <div class="periodic-grid" id="periodic-grid">
-            <!-- Elements rendered by JS -->
-        </div>
-        <div class="periodic-legend">
-            <div class="legend-item tiers">Tiers</div>
-            <div class="legend-item modes">Modes</div>
-            <div class="legend-item phases">Phases</div>
-            <div class="legend-item structures">Structures</div>
-            <div class="legend-item metrics">Metrics</div>
-            <div class="legend-item heuristics">Heuristics</div>
-            <div class="legend-item units">Units</div>
-            <div class="legend-item patterns">Patterns</div>
-            <div class="legend-item components">Components</div>
-            <div class="legend-item roles">Roles</div>
-            <div class="legend-item status">Status</div>
-        </div>
-        <div class="periodic-info" id="periodic-info">
-            <div class="info-symbol"></div>
-            <div class="info-name"></div>
-            <div class="info-category"></div>
-            <div class="info-desc"></div>
-        </div>
-    </div>
 
     <!-- C2PA MODULE REMOVED -->
     <script>
@@ -4617,6 +4257,338 @@
                 btn.disabled = false;
                 btn.textContent = 'Create on GCal';
             }
+        }
+    </script>
+
+<!-- Brain Chat Window (Draggable) -->
+    <div id="chat-window" class="chat-window" style="display: none;">
+        <div class="chat-header chat-drag-handle">
+            <div class="chat-header-left">
+                <span class="chat-status-dot" id="chat-status-dot"></span>
+                <span class="chat-header-label">Brain Chat</span>
+            </div>
+            <div class="chat-header-actions">
+                <button onclick="chatManager.clearHistory()" title="Clear history">&#8634;</button>
+                <button onclick="toggleChatMinimize()" title="Minimize">&#8722;</button>
+                <button onclick="closeChatWindow()" title="Close">&times;</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="chat-welcome">
+                <strong>Brain Chat</strong>
+                Ask questions about your Second Brain.<br>
+                RAG-powered by the 14B model.
+            </div>
+        </div>
+        <div class="chat-retrieval-indicator" id="chat-retrieval-indicator">
+            <span class="chat-retrieval-pulse"></span>
+            <span>Searching brain...</span>
+        </div>
+        <div class="chat-input-area">
+            <textarea id="chat-input" placeholder="Ask your brain..." rows="1"
+                      onkeydown="chatManager.handleKeydown(event)"
+                      oninput="chatManager.autoResize(this)"></textarea>
+            <button class="chat-send-btn" id="chat-send-btn" onclick="chatManager.send()">Send</button>
+        </div>
+    </div>
+
+    <!-- BRAIN CHAT MODULE SCRIPT -->
+    <script>
+        // ==========================================
+        // BRAIN CHAT MODULE LOGIC
+        // ==========================================
+
+        const chatManager = {
+            ws: null,
+            sessionId: null,
+            isGenerating: false,
+            currentAssistantEl: null,
+            currentSources: null,
+            reconnectTimer: null,
+            reconnectAttempts: 0,
+
+            init() {
+                this.sessionId = 'chat-' + Date.now().toString(36);
+                this.connect();
+            },
+
+            connect() {
+                if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+                    return;
+                }
+
+                const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const url = `${protocol}//${location.host}/api/chat/ws/${this.sessionId}`;
+
+                this.ws = new WebSocket(url);
+
+                this.ws.onopen = () => {
+                    this.reconnectAttempts = 0;
+                    if (this.reconnectTimer) {
+                        clearTimeout(this.reconnectTimer);
+                        this.reconnectTimer = null;
+                    }
+                };
+
+                this.ws.onmessage = (e) => {
+                    try {
+                        const data = JSON.parse(e.data);
+                        this.handleMessage(data);
+                    } catch (err) {
+                        console.error('Chat WS parse error:', err);
+                    }
+                };
+
+                this.ws.onclose = () => {
+                    this.updateStatus('disconnected');
+                    // Auto-reconnect with backoff
+                    if (this.reconnectAttempts < 10) {
+                        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+                        this.reconnectAttempts++;
+                        this.reconnectTimer = setTimeout(() => this.connect(), delay);
+                    }
+                };
+
+                this.ws.onerror = () => {
+                    this.updateStatus('disconnected');
+                };
+            },
+
+            handleMessage(data) {
+                switch (data.type) {
+                    case 'connected':
+                        this.updateStatus('connected');
+                        break;
+
+                    case 'retrieval_start':
+                        document.getElementById('chat-retrieval-indicator').classList.add('active');
+                        break;
+
+                    case 'retrieval_result':
+                        document.getElementById('chat-retrieval-indicator').classList.remove('active');
+                        this.currentSources = data.entries || [];
+                        break;
+
+                    case 'generation_start':
+                        this.isGenerating = true;
+                        this.currentAssistantEl = this.addMessageBubble('assistant', '');
+                        document.getElementById('chat-send-btn').disabled = true;
+                        break;
+
+                    case 'token':
+                        if (this.currentAssistantEl) {
+                            const textNode = this.currentAssistantEl.querySelector('.chat-msg-text');
+                            if (textNode) {
+                                textNode.textContent += data.content;
+                            }
+                            this.scrollToBottom();
+                        }
+                        break;
+
+                    case 'generation_end':
+                        this.isGenerating = false;
+                        document.getElementById('chat-send-btn').disabled = false;
+                        if (this.currentAssistantEl && this.currentSources && this.currentSources.length > 0) {
+                            this.addSourceChips(this.currentAssistantEl, this.currentSources);
+                        }
+                        this.currentAssistantEl = null;
+                        this.currentSources = null;
+                        this.scrollToBottom();
+                        break;
+
+                    case 'cleared':
+                        const msgs = document.getElementById('chat-messages');
+                        msgs.innerHTML = '<div class="chat-welcome"><strong>Brain Chat</strong>History cleared. Ask a new question.</div>';
+                        break;
+
+                    case 'error':
+                        this.addMessageBubble('system', 'Error: ' + data.message);
+                        this.isGenerating = false;
+                        document.getElementById('chat-send-btn').disabled = false;
+                        break;
+
+                    case 'pong':
+                        break;
+                }
+            },
+
+            send() {
+                const input = document.getElementById('chat-input');
+                const text = input.value.trim();
+                if (!text || this.isGenerating) return;
+
+                if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                    this.addMessageBubble('system', 'Not connected. Reconnecting...');
+                    this.connect();
+                    return;
+                }
+
+                this.addMessageBubble('user', text);
+                this.ws.send(JSON.stringify({ type: 'message', content: text }));
+                input.value = '';
+                this.autoResize(input);
+                this.scrollToBottom();
+            },
+
+            handleKeydown(event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    this.send();
+                }
+            },
+
+            clearHistory() {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify({ type: 'clear' }));
+                }
+            },
+
+            addMessageBubble(role, text) {
+                const msgs = document.getElementById('chat-messages');
+                // Remove welcome message if present
+                const welcome = msgs.querySelector('.chat-welcome');
+                if (welcome) welcome.remove();
+
+                const bubble = document.createElement('div');
+                bubble.className = `chat-msg ${role}`;
+
+                const textSpan = document.createElement('span');
+                textSpan.className = 'chat-msg-text';
+                textSpan.textContent = text;
+                bubble.appendChild(textSpan);
+
+                msgs.appendChild(bubble);
+                this.scrollToBottom();
+                return bubble;
+            },
+
+            addSourceChips(el, sources) {
+                if (!sources || sources.length === 0) return;
+                const container = document.createElement('div');
+                container.className = 'chat-source-chips';
+                sources.forEach(s => {
+                    const chip = document.createElement('span');
+                    chip.className = 'chat-source-chip';
+                    chip.textContent = `${s.category}: ${s.title}`;
+                    chip.title = `Score: ${s.score}`;
+                    container.appendChild(chip);
+                });
+                el.appendChild(container);
+            },
+
+            scrollToBottom() {
+                const msgs = document.getElementById('chat-messages');
+                msgs.scrollTop = msgs.scrollHeight;
+            },
+
+            autoResize(textarea) {
+                textarea.style.height = 'auto';
+                textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px';
+            },
+
+            updateStatus(state) {
+                const dot = document.getElementById('chat-status-dot');
+                if (!dot) return;
+                dot.className = 'chat-status-dot ' + state;
+            },
+
+            destroy() {
+                if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+                if (this.ws) {
+                    this.ws.onclose = null;
+                    this.ws.close();
+                }
+            }
+        };
+
+        function openChatWindow() {
+            const win = document.getElementById('chat-window');
+            if (!win) return;
+
+            // Restore position
+            const saved = localStorage.getItem('chatWindowPosition');
+            if (saved) {
+                const { x, y } = JSON.parse(saved);
+                win.style.left = x + 'px';
+                win.style.top = y + 'px';
+                win.style.right = 'auto';
+                win.style.bottom = 'auto';
+            }
+
+            win.style.display = 'flex';
+            win.classList.remove('minimized');
+
+            if (!win.dataset.dragInitialized) {
+                initializeChatDrag();
+                win.dataset.dragInitialized = 'true';
+            }
+
+            // Connect if not already
+            if (!chatManager.ws || chatManager.ws.readyState !== WebSocket.OPEN) {
+                chatManager.init();
+            }
+
+            document.getElementById('chat-input').focus();
+        }
+
+        function closeChatWindow() {
+            const win = document.getElementById('chat-window');
+            if (win) win.style.display = 'none';
+        }
+
+        function toggleChatWindow() {
+            const win = document.getElementById('chat-window');
+            if (!win) return;
+            if (win.style.display === 'none' || !win.style.display) {
+                openChatWindow();
+            } else {
+                closeChatWindow();
+            }
+        }
+
+        function toggleChatMinimize() {
+            const win = document.getElementById('chat-window');
+            if (win) win.classList.toggle('minimized');
+        }
+
+        function initializeChatDrag() {
+            const win = document.getElementById('chat-window');
+            const handle = win.querySelector('.chat-drag-handle');
+            let isDragging = false, startX, startY, startLeft, startTop;
+
+            handle.addEventListener('mousedown', (e) => {
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                // Switch from right/bottom positioning to left/top for dragging
+                const rect = win.getBoundingClientRect();
+                win.style.left = rect.left + 'px';
+                win.style.top = rect.top + 'px';
+                win.style.right = 'auto';
+                win.style.bottom = 'auto';
+                startLeft = rect.left;
+                startTop = rect.top;
+                document.body.style.userSelect = 'none';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                win.style.left = (startLeft + dx) + 'px';
+                win.style.top = (startTop + dy) + 'px';
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!isDragging) return;
+                isDragging = false;
+                document.body.style.userSelect = '';
+                localStorage.setItem('chatWindowPosition', JSON.stringify({
+                    x: parseInt(win.style.left),
+                    y: parseInt(win.style.top)
+                }));
+            });
         }
     </script>
 

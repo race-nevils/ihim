@@ -438,44 +438,6 @@ def check_data_stores() -> ComponentHealth:
     )
 
 
-def check_data_tasks() -> ComponentHealth:
-    """Check tasks.json file."""
-    file_path = IHIM_ROOT / "data" / "tasks.json"
-    status, msg, metrics = check_json_file(file_path)
-
-    # For tasks, staleness is expected - override to healthy if valid
-    if status == HealthStatus.DEGRADED and ("Valid" in msg or "stale" in msg):
-        status = HealthStatus.HEALTHY
-        msg = f"{metrics.get('item_count', 0)} tasks"
-
-    return ComponentHealth(
-        id="data-tasks",
-        status=status,
-        message=msg,
-        last_check=datetime.now().isoformat(),
-        metrics=metrics
-    )
-
-
-def check_data_notes() -> ComponentHealth:
-    """Check notes.json file."""
-    file_path = IHIM_ROOT / "data" / "notes.json"
-    status, msg, metrics = check_json_file(file_path)
-
-    # For notes, staleness is expected - override to healthy if valid
-    if status == HealthStatus.DEGRADED and ("Valid" in msg or "stale" in msg):
-        status = HealthStatus.HEALTHY
-        msg = f"{metrics.get('item_count', 0)} notes"
-
-    return ComponentHealth(
-        id="data-notes",
-        status=status,
-        message=msg,
-        last_check=datetime.now().isoformat(),
-        metrics=metrics
-    )
-
-
 def check_data_team_state() -> ComponentHealth:
     """Check team_state.json file."""
     file_path = IHIM_ROOT / "team" / "team_state.json"
@@ -745,11 +707,9 @@ def check_project_legal() -> ComponentHealth:
 def check_learning_system() -> ComponentHealth:
     """Check self-improvement system."""
     debrief_cmd = WORKSPACE_ROOT / "harness dir" / "commands" / "debrief.md"
-    heuristics = IHIM_ROOT / "data" / "heuristics.json"
 
     metrics = {
         "debrief_exists": debrief_cmd.exists(),
-        "heuristics_exists": heuristics.exists(),
     }
 
     if not debrief_cmd.exists():
@@ -776,30 +736,6 @@ def check_debrief_engine() -> ComponentHealth:
     status, msg, metrics = check_file_exists(file_path)
     return ComponentHealth(
         id="debrief-engine",
-        status=status,
-        message=msg,
-        last_check=datetime.now().isoformat(),
-        metrics=metrics
-    )
-
-
-def check_heuristics_bank() -> ComponentHealth:
-    """Check heuristics.json file."""
-    file_path = IHIM_ROOT / "data" / "heuristics.json"
-    status, msg, metrics = check_json_file(file_path)
-
-    # Get heuristic count
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                metrics["heuristic_count"] = len(data)
-                msg = f"{len(data)} heuristics"
-    except Exception:
-        pass
-
-    return ComponentHealth(
-        id="heuristics-bank",
         status=status,
         message=msg,
         last_check=datetime.now().isoformat(),
@@ -872,7 +808,6 @@ HEALTH_CHECKS: Dict[str, callable] = {
     "project-legal": check_project_legal,
     "learning-system": check_learning_system,
     "debrief-engine": check_debrief_engine,
-    "heuristics-bank": check_heuristics_bank,
     "debriefs-log": check_debriefs_log,
 
     # iHIM systems (child of workspace)
@@ -890,8 +825,6 @@ HEALTH_CHECKS: Dict[str, callable] = {
     "feedback-optimizer": check_feedback_optimizer,
     "feedback-metrics": check_feedback_metrics,
     "data-stores": check_data_stores,
-    "data-tasks": check_data_tasks,
-    "data-notes": check_data_notes,
     "data-slash-commands": check_data_slash_commands,
     "data-team-state": check_data_team_state,
     "sanity-check": check_sanity,

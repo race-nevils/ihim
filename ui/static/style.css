@@ -1664,231 +1664,6 @@ main {
     flex: 1;
 }
 
-.bar-score {
-    color: var(--accent-red);
-    font-weight: 600;
-    font-size: 0.9rem;
-    margin-right: var(--space-2);
-    text-shadow: 0 0 10px var(--accent-red-50);
-}
-
-.bar-cats {
-    display: flex;
-    gap: var(--space-2);
-    color: var(--text-muted);
-    font-size: 0.6rem;
-}
-
-.bar-cats span {
-    display: flex;
-    gap: 2px;
-}
-
-/* ===================== */
-/* Metrics Modal         */
-/* ===================== */
-.metrics-modal-content {
-    max-width: 600px;
-    width: 90%;
-}
-
-/* Score Hero */
-.score-hero {
-    text-align: center;
-    padding: 24px;
-    background: linear-gradient(180deg, rgba(61, 111, 154, 0.15) 0%, transparent 100%);
-    border-radius: 12px;
-    margin-bottom: 24px;
-}
-
-.score-circle {
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    border: 3px solid #DAA520;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 12px;
-}
-
-.score-big {
-    font-size: 2.5rem;
-    font-weight: 300;
-    color: #fff;
-}
-
-.score-label {
-    font-size: 0.9rem;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-}
-
-.score-subtitle {
-    font-size: 0.75rem;
-    color: #555;
-    margin-top: 4px;
-}
-
-/* Category Scores */
-.category-scores {
-    margin-bottom: 24px;
-}
-
-.category-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.category-name {
-    width: 100px;
-    font-size: 0.8rem;
-    color: #888;
-}
-
-.category-bar-bg {
-    flex: 1;
-    height: 8px;
-    background: #1a1a1a;
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-.category-bar {
-    height: 100%;
-    background: #DAA520;
-    border-radius: 4px;
-    transition: width 0.5s ease, background-color 0.3s ease;
-}
-
-.category-value {
-    width: 40px;
-    text-align: right;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: #e5e5e5;
-}
-
-/* Agent Breakdown */
-.agent-breakdown {
-    margin-bottom: 24px;
-}
-
-.agent-breakdown h3 {
-    font-size: 0.8rem;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 12px;
-}
-
-.agent-score-list {
-    background: #111;
-    border-radius: 8px;
-    padding: 8px;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.agent-score-row {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid #1a1a1a;
-}
-
-.agent-score-row:last-child {
-    border-bottom: none;
-}
-
-.agent-name {
-    flex: 1;
-    font-size: 0.85rem;
-    color: #e5e5e5;
-}
-
-.agent-overall {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-right: 16px;
-}
-
-.agent-cats {
-    font-size: 0.7rem;
-    color: #666;
-    font-family: 'SF Mono', monospace;
-}
-
-.no-agents {
-    color: #555;
-    font-size: 0.85rem;
-    text-align: center;
-    padding: 16px;
-}
-
-/* Insights Grid */
-.insights-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 16px;
-}
-
-.insights-section h3 {
-    font-size: 0.75rem;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 8px;
-}
-
-.learnings-list,
-.blockers-list {
-    list-style: none;
-    background: #111;
-    border-radius: 8px;
-    padding: 12px 16px;
-}
-
-.learnings-list li,
-.blockers-list li {
-    padding: 8px 0;
-    border-bottom: 1px solid #1a1a1a;
-    font-size: 0.85rem;
-    color: #ccc;
-}
-
-.learnings-list li:last-child,
-.blockers-list li:last-child {
-    border-bottom: none;
-}
-
-.learnings-list li.empty,
-.blockers-list li.empty {
-    color: #555;
-    font-style: italic;
-}
-
-.refresh-btn {
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 6px;
-    padding: 8px 16px;
-    color: #888;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.refresh-btn:hover {
-    background: #222;
-    color: #fff;
-    border-color: #DAA520;
-}
-
 /* ===================== */
 /* Flight Path Modal     */
 /* ===================== */
@@ -5029,397 +4804,6 @@ main {
     }
 }
 
-/* =================================================================
-   PERIODIC TABLE PANEL STYLES
-   Added: 2025-12-28
-   Red Team Wave 2 - CSS Enhancement
-   ================================================================= */
-
-/* Periodic Table Panel */
-.periodic-panel {
-    position: fixed;
-    bottom: 40px;
-    /* above bottom bar */
-    left: 0;
-    right: 0;
-    height: 300px;
-    background: #0a0a0a;
-    border-top: 1px solid #333;
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    transform: translateY(100%);
-    /* Start hidden by default */
-    transition: transform 0.3s ease, z-index 0s ease 0.3s;
-    will-change: transform;
-    pointer-events: none;
-    /* Disable interaction when hidden */
-}
-
-.periodic-panel.hidden {
-    transform: translateY(100%);
-    z-index: -1;
-    /* Move behind everything when hidden */
-    pointer-events: none;
-    /* Ensure no interaction when hidden */
-}
-
-/* When visible, enable interaction and raise z-index */
-.periodic-panel:not(.hidden) {
-    transform: translateY(0);
-    z-index: 100;
-    pointer-events: auto;
-    transition: transform 0.3s ease;
-}
-
-.periodic-grid {
-    display: grid;
-    grid-template-columns: repeat(18, 40px);
-    grid-template-rows: repeat(7, 40px);
-    gap: 2px;
-    padding: 10px;
-    justify-content: center;
-}
-
-.element {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: bold;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.element:hover {
-    transform: scale(1.2);
-    z-index: 10;
-    box-shadow: 0 0 10px currentColor;
-}
-
-/* Category Colors - workspace Periodic Table Elements */
-.element.tiers {
-    background: #1e3a5f;
-    border: 1px solid #FFD700;
-    color: #FFD700;
-}
-
-.element.modes {
-    background: #3d1f1f;
-    border: 1px solid #ff6b6b;
-    color: #ff6b6b;
-}
-
-.element.phases {
-    background: #1f3d3a;
-    border: 1px solid #4ecdc4;
-    color: #4ecdc4;
-}
-
-.element.structures {
-    background: #2d1f4a;
-    border: 1px solid #a855f7;
-    color: #a855f7;
-}
-
-.element.metrics {
-    background: #3d2f1f;
-    border: 1px solid #f59e0b;
-    color: #f59e0b;
-}
-
-.element.heuristics {
-    background: #1f3d1f;
-    border: 1px solid #22c55e;
-    color: #22c55e;
-}
-
-.element.units {
-    background: #3d1f3a;
-    border: 1px solid #ec4899;
-    color: #ec4899;
-}
-
-.element.patterns {
-    background: #1f1f4a;
-    border: 1px solid #6366f1;
-    color: #6366f1;
-}
-
-.element.components {
-    background: #1f2d3d;
-    border: 1px solid #60a5fa;
-    color: #60a5fa;
-}
-
-.element.roles {
-    background: #2d1f3d;
-    border: 1px solid #c084fc;
-    color: #c084fc;
-}
-
-.element.status {
-    background: #3d2d1f;
-    border: 1px solid #fb923c;
-    color: #fb923c;
-}
-
-/* Element Info Panel */
-.element-info {
-    background: #1a1a1a;
-    border-top: 1px solid #333;
-    padding: 15px;
-    height: 80px;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.element-info .symbol {
-    font-size: 32px;
-    font-weight: bold;
-    width: 60px;
-    text-align: center;
-}
-
-.element-info .details {
-    flex: 1;
-}
-
-.element-info .name {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 4px;
-}
-
-.element-info .description {
-    font-size: 12px;
-    color: #888;
-    line-height: 1.4;
-}
-
-/* Responsive adjustments for smaller screens */
-@media (max-width: 768px) {
-    .periodic-grid {
-        grid-template-columns: repeat(18, 30px);
-        grid-template-rows: repeat(7, 30px);
-        gap: 1px;
-    }
-
-    .element {
-        width: 30px;
-        height: 30px;
-        font-size: 10px;
-    }
-
-    .periodic-panel {
-        height: 250px;
-    }
-}
-
-/* =================================================================
-   PERIODIC TABLE ENHANCEMENTS - Wave 2 Polish Pass
-   ================================================================= */
-
-/* Periodic Table Header with Close Button */
-.periodic-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 16px;
-    border-bottom: 1px solid #333;
-    font-size: 14px;
-    color: #888;
-    background: #0f0f0f;
-}
-
-.periodic-close {
-    background: none;
-    border: none;
-    color: #888;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 0 8px;
-    transition: color 0.2s ease;
-}
-
-.periodic-close:hover {
-    color: #fff;
-}
-
-/* Enhanced Info Panel with Fade-in Animation */
-.periodic-info {
-    position: absolute;
-    bottom: 60px;
-    right: 20px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 12px;
-    min-width: 200px;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-}
-
-.periodic-info.visible {
-    opacity: 1;
-    animation: fadeInUp 0.3s ease;
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.info-symbol {
-    font-size: 24px;
-    font-weight: bold;
-    color: #fff;
-}
-
-.info-name {
-    font-size: 16px;
-    color: #ccc;
-    margin-top: 4px;
-}
-
-.info-category {
-    font-size: 12px;
-    color: #888;
-    text-transform: uppercase;
-    margin-top: 4px;
-    letter-spacing: 0.5px;
-}
-
-.info-desc {
-    font-size: 13px;
-    color: #aaa;
-    margin-top: 8px;
-    line-height: 1.4;
-}
-
-/* Category Legend */
-.periodic-legend {
-    display: flex;
-    gap: 16px;
-    padding: 8px 16px;
-    border-top: 1px solid #333;
-    flex-wrap: wrap;
-    background: #0f0f0f;
-    align-items: center;
-}
-
-.legend-item {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.legend-item::before {
-    content: '';
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-}
-
-/* Legend Category Colors */
-.legend-item.tiers::before {
-    background: #FFD700;
-}
-
-.legend-item.modes::before {
-    background: #ff6b6b;
-}
-
-.legend-item.phases::before {
-    background: #4ecdc4;
-}
-
-.legend-item.structures::before {
-    background: #a855f7;
-}
-
-.legend-item.metrics::before {
-    background: #f59e0b;
-}
-
-.legend-item.heuristics::before {
-    background: #22c55e;
-}
-
-.legend-item.units::before {
-    background: #ec4899;
-}
-
-.legend-item.patterns::before {
-    background: #6366f1;
-}
-
-.legend-item.components::before {
-    background: #60a5fa;
-}
-
-.legend-item.roles::before {
-    background: #c084fc;
-}
-
-.legend-item.status::before {
-    background: #fb923c;
-}
-
-/* Enhanced Element Glow on Hover */
-.element:hover {
-    transform: scale(1.2);
-    z-index: 10;
-    box-shadow: 0 0 15px currentColor, 0 0 25px currentColor;
-    filter: brightness(1.2);
-}
-
-/* Animation removed - transform-based visibility (lines 4091-4107) handles panel toggle */
-
-/* Responsive Adjustments for Smaller Screens */
-@media (max-width: 800px) {
-    .periodic-grid {
-        transform: scale(0.7);
-        transform-origin: top center;
-    }
-
-    .periodic-panel {
-        height: 250px;
-    }
-
-    .periodic-legend {
-        gap: 8px;
-    }
-
-    .legend-item {
-        font-size: 10px;
-        padding: 2px 6px;
-    }
-}
-
-/* =================================================================
-   END PERIODIC TABLE PANEL STYLES
-   ================================================================= */
-
 /* Widget resize is now handled via edge detection in JavaScript - no visible handles needed */
 
 /* =================================================================
@@ -5927,5 +5311,280 @@ main {
 
 .cal-cancel-btn:hover {
     background: rgba(255, 255, 255, 0.05);
+}
+
+
+/* ============================================ */
+/* BRAIN CHAT WINDOW                            */
+/* ============================================ */
+
+.chat-window {
+    position: fixed;
+    bottom: 44px;
+    right: 20px;
+    width: 420px;
+    height: 600px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg), 0 2px 6px rgba(139, 92, 246, 0.2);
+    z-index: 100;
+    overflow: hidden;
+}
+
+.chat-window.minimized {
+    height: auto;
+}
+
+.chat-window.minimized .chat-messages,
+.chat-window.minimized .chat-input-area,
+.chat-window.minimized .chat-retrieval-indicator {
+    display: none;
+}
+
+/* Header */
+.chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(139, 92, 246, 0.08);
+    border-bottom: 1px solid var(--glass-border);
+    cursor: grab;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.chat-header:active {
+    cursor: grabbing;
+}
+
+.chat-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chat-header-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-power);
+    letter-spacing: 0.3px;
+}
+
+.chat-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.chat-status-dot.connected {
+    background: var(--color-safe);
+    box-shadow: 0 0 4px var(--color-safe-glow);
+}
+
+.chat-status-dot.disconnected {
+    background: var(--accent-red);
+}
+
+.chat-header-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.chat-header-actions button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.chat-header-actions button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+/* Messages container */
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.chat-messages::-webkit-scrollbar {
+    width: 5px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+}
+
+/* Message bubbles */
+.chat-msg {
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+.chat-msg.user {
+    align-self: flex-end;
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    color: var(--text-primary);
+}
+
+.chat-msg.assistant {
+    align-self: flex-start;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+}
+
+.chat-msg.system {
+    align-self: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 4px 8px;
+}
+
+/* Source chips */
+.chat-source-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.chat-source-chip {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 8px;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    color: var(--color-power);
+    white-space: nowrap;
+}
+
+/* Retrieval indicator */
+.chat-retrieval-indicator {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.chat-retrieval-indicator.active {
+    display: flex;
+}
+
+.chat-retrieval-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-power);
+    animation: chatPulse 1s ease-in-out infinite;
+}
+
+@keyframes chatPulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* Input area */
+.chat-input-area {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, 0.15);
+    flex-shrink: 0;
+}
+
+.chat-input-area textarea {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    resize: none;
+    min-height: 36px;
+    max-height: 100px;
+    outline: none;
+    line-height: 1.4;
+}
+
+.chat-input-area textarea:focus {
+    border-color: rgba(139, 92, 246, 0.4);
+}
+
+.chat-input-area textarea::placeholder {
+    color: var(--text-muted);
+}
+
+.chat-send-btn {
+    background: var(--color-power);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+    height: 36px;
+    transition: opacity 0.15s;
+}
+
+.chat-send-btn:hover {
+    opacity: 0.85;
+}
+
+.chat-send-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Welcome message */
+.chat-welcome {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.chat-welcome strong {
+    color: var(--color-power);
+    font-size: 14px;
+    display: block;
+    margin-bottom: 6px;
 }
 

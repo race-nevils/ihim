@@ -50,7 +50,11 @@ Calendar rules:
 - No specific date → calendar = null
 - Use ISO format for date: YYYY-MM-DD
 - Use 24h format for time: HH:MM
-- Default duration: 1 hour (if not specified)
+- If a time RANGE is given (e.g., "8am-10am", "8:30am to 10:30am"), set both "time" (start) and "end_time" (end)
+- If only start time, set "end_time" to null
+- Day name alone ("Friday") → resolve to the UPCOMING occurrence from today's date
+- "next Friday" → the Friday of NEXT week (always 7+ days away)
+- "this Friday" → the Friday of THIS week
 
 EXAMPLES:
 - "Need to clean oil from prop" → Tasks, calendar: null (no date)
@@ -61,7 +65,7 @@ EXAMPLES:
 - "Sarah's phone number is 555-1234" → People, calendar: null (no date)
 
 Return ONLY valid JSON:
-{{"category": "<Tasks|People|Projects|Ideas|Reference>", "confidence": <0.0-1.0>, "summary": "<1 sentence describing the note>", "calendar": null | {{"is_event": true, "title": "<short event title>", "date": "<YYYY-MM-DD>", "time": "<HH:MM>" | null, "all_day": <true|false>}}}}
+{{"category": "<Tasks|People|Projects|Ideas|Reference>", "confidence": <0.0-1.0>, "summary": "<1 sentence describing the note>", "calendar": null | {{"is_event": true, "title": "<short event title>", "date": "<YYYY-MM-DD>", "time": "<HH:MM>" | null, "end_time": "<HH:MM>" | null, "all_day": <true|false>}}}}
 
 Today's date: {{today}}
 
@@ -71,9 +75,10 @@ JSON response:"""
 
 
 def get_classify_prompt(content: str) -> str:
-    """Format the classification prompt with today's date injected."""
-    today = date.today().isoformat()
-    return CLASSIFY_PROMPT.replace("{{today}}", today).format(content=content)
+    """Format the classification prompt with today's date and day-of-week injected."""
+    today = date.today()
+    today_str = f"{today.isoformat()} ({today.strftime('%A')})"
+    return CLASSIFY_PROMPT.replace("{{today}}", today_str).format(content=content)
 
 
 def slugify(text: str) -> str:

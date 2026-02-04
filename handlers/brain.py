@@ -50,9 +50,13 @@ def _push_single_event(event_data: dict, classification: dict, content: str, cre
         created = service.events().insert(calendarId="primary", body=event_body).execute()
     else:
         start_dt = f"{date_str}T{time_str}:00"
-        start_obj = datetime.fromisoformat(start_dt)
-        end_obj = start_obj + timedelta(hours=1)
-        end_dt = end_obj.strftime("%Y-%m-%dT%H:%M:%S")
+        end_time = event_data.get("end_time")
+        if end_time:
+            end_dt = f"{date_str}T{end_time}:00"
+        else:
+            start_obj = datetime.fromisoformat(start_dt)
+            end_obj = start_obj + timedelta(hours=1)
+            end_dt = end_obj.strftime("%Y-%m-%dT%H:%M:%S")
         created = push_event(creds, summary=title, start=start_dt, end=end_dt,
                              description=content or classification.get("summary", ""))
 

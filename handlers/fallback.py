@@ -51,6 +51,18 @@ _BARE_TIME_OF_DAY_RE = re.compile(
 )
 _TIME_NOON_RE = re.compile(r"\bat\s+(noon|midnight)\b", re.IGNORECASE)
 
+# Time range: "8:30am-10:30am", "3pm to 5pm", "8am - 10:30am"
+_TIME_RANGE_RE = re.compile(
+    r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:[-\u2013\u2014]|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b",
+    re.IGNORECASE,
+)
+
+# Bare 12h time without "at" prefix: "8:30am", "3pm"
+_BARE_TIME_12H_RE = re.compile(
+    r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b",
+    re.IGNORECASE,
+)
+
 # Stopwords for summary overlap check
 _STOPWORDS = frozenset(
     "a an the is are was were be been being have has had do does did "
@@ -77,6 +89,13 @@ _STRONG_RELATIVE_DATES = {
 _STRONG_RELATIVE_DAY_RE = re.compile(
     r"\b(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday"
     r"|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\b",
+    re.IGNORECASE,
+)
+
+# Bare day-of-week without prefix: "Friday", "Monday"
+# Full names only to avoid false positives ("sat" = past tense of "sit")
+_BARE_DAY_RE = re.compile(
+    r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
     re.IGNORECASE,
 )
 
@@ -177,6 +196,16 @@ _TIME_OF_DAY_MAP = {
 }
 
 
+def _parse_12h(hour: int, minute: int, period: str) -> tuple:
+    """Convert 12-hour time to 24-hour format. Returns (hour, minute)."""
+    period = period.lower()
+    if period == "pm" and hour != 12:
+        hour += 12
+    elif period == "am" and hour == 12:
+        hour = 0
+    return hour, minute
+
+
 def extract_date(content: str) -> Optional[dict]:
     """Extract date/time from content using regex patterns.
 
@@ -238,35 +267,47 @@ def extract_date(content: str) -> Optional[dict]:
 
     date_iso = event_date.isoformat()
 
-    # Extract time
+    # Extract time (check range first, then single time patterns)
     time_str = None
+    end_time_str = None
     all_day = True
 
-    tm = _TIME_12H_RE.search(content)
-    if tm:
-        hour = int(tm.group(1))
-        minute = int(tm.group(2)) if tm.group(2) else 0
-        period = tm.group(3).lower()
-        if period == "pm" and hour != 12:
-            hour += 12
-        elif period == "am" and hour == 12:
-            hour = 0
-        time_str = f"{hour:02d}:{minute:02d}"
+    # Time range: "8:30am-10:30am", "3pm to 5pm"
+    trm = _TIME_RANGE_RE.search(content)
+    if trm:
+        sh, sm = _parse_12h(int(trm.group(1)), int(trm.group(2) or 0), trm.group(3))
+        eh, em = _parse_12h(int(trm.group(4)), int(trm.group(5) or 0), trm.group(6))
+        time_str = f"{sh:02d}:{sm:02d}"
+        end_time_str = f"{eh:02d}:{em:02d}"
         all_day = False
     else:
-        tm = _TIME_NOON_RE.search(content)
+        # "at 8:30am"
+        tm = _TIME_12H_RE.search(content)
         if tm:
-            word = tm.group(1).lower()
-            time_str = "12:00" if word == "noon" else "00:00"
+            h, m = _parse_12h(int(tm.group(1)), int(tm.group(2) or 0), tm.group(3))
+            time_str = f"{h:02d}:{m:02d}"
             all_day = False
         else:
-            tm = _TIME_OF_DAY_RE.search(content)
-            if not tm:
-                tm = _BARE_TIME_OF_DAY_RE.search(content)
+            tm = _TIME_NOON_RE.search(content)
             if tm:
-                period = tm.group(1).lower()
-                time_str = {"morning": "09:00", "afternoon": "14:00", "evening": "18:00"}[period]
+                word = tm.group(1).lower()
+                time_str = "12:00" if word == "noon" else "00:00"
                 all_day = False
+            else:
+                # Bare time: "8:30am" (no "at" prefix)
+                tm = _BARE_TIME_12H_RE.search(content)
+                if tm:
+                    h, m = _parse_12h(int(tm.group(1)), int(tm.group(2) or 0), tm.group(3))
+                    time_str = f"{h:02d}:{m:02d}"
+                    all_day = False
+                else:
+                    tm = _TIME_OF_DAY_RE.search(content)
+                    if not tm:
+                        tm = _BARE_TIME_OF_DAY_RE.search(content)
+                    if tm:
+                        period = tm.group(1).lower()
+                        time_str = {"morning": "09:00", "afternoon": "14:00", "evening": "18:00"}[period]
+                        all_day = False
 
     # Build title from content (first ~8 words, title-cased)
     # Strip frontmatter first
@@ -281,13 +322,16 @@ def extract_date(content: str) -> Optional[dict]:
         title = title[:57] + "..."
     title = title.title()
 
-    return {
+    result = {
         "is_event": True,
         "title": title,
         "date": date_iso,
         "time": time_str,
         "all_day": all_day,
     }
+    if end_time_str:
+        result["end_time"] = end_time_str
+    return result
 
 
 def validate_summary(content: str, summary: Optional[str]) -> str:
@@ -483,22 +527,35 @@ def _resolve_date_from_keyword(keyword: str, today: date) -> str:
 
 
 def _resolve_time_from_text(text: str) -> tuple:
-    """Extract time-of-day from text using keyword map.
+    """Extract time-of-day from text using patterns and keyword map.
 
-    Returns (time_str or None, all_day: bool).
+    Returns (start_time_str or None, end_time_str or None, all_day: bool).
     """
     text_lower = text.lower()
+
+    # Time range: "8:30am-10:30am", "3pm to 5pm"
+    m = _TIME_RANGE_RE.search(text)
+    if m:
+        sh, sm = _parse_12h(int(m.group(1)), int(m.group(2) or 0), m.group(3))
+        eh, em = _parse_12h(int(m.group(4)), int(m.group(5) or 0), m.group(6))
+        return f"{sh:02d}:{sm:02d}", f"{eh:02d}:{em:02d}", False
+
+    # Bare 12h time: "8:30am", "3pm"
+    m = _BARE_TIME_12H_RE.search(text)
+    if m:
+        h, mi = _parse_12h(int(m.group(1)), int(m.group(2) or 0), m.group(3))
+        return f"{h:02d}:{mi:02d}", None, False
 
     # Check multi-word time phrases first
     for phrase in ("before lunch", "after lunch", "before dinner",
                    "after dinner", "breakfast time"):
         if phrase in text_lower:
-            return _TIME_OF_DAY_MAP[phrase], False
+            return _TIME_OF_DAY_MAP[phrase], None, False
 
     # Check "lunchtime" and "supper"
     for word in ("lunchtime", "supper"):
         if word in text_lower:
-            return _TIME_OF_DAY_MAP[word], False
+            return _TIME_OF_DAY_MAP[word], None, False
 
     # Single-word time-of-day
     words = set(re.findall(r"[a-z]+", text_lower))
@@ -506,9 +563,9 @@ def _resolve_time_from_text(text: str) -> tuple:
                "morning", "afternoon", "evening", "sunset", "dusk",
                "tonight"):
         if kw in words:
-            return _TIME_OF_DAY_MAP[kw], False
+            return _TIME_OF_DAY_MAP[kw], None, False
 
-    return None, True
+    return None, None, True
 
 
 def _build_title(content: str) -> str:
@@ -568,6 +625,16 @@ def detect_calendar_by_keywords(content: str) -> Optional[dict]:
         if m:
             matched_keyword = m.group(0).lower()
             resolved_date = _resolve_date_from_keyword(matched_keyword, today)
+
+    # Check bare day-of-week ("Friday", "Monday" — no prefix needed)
+    if not matched_keyword:
+        m = _BARE_DAY_RE.search(text)
+        if m:
+            day_name = m.group(1).lower()
+            if day_name in _DAYS_OF_WEEK:
+                matched_keyword = day_name
+                # Resolve as upcoming occurrence (same as "this [day]")
+                resolved_date = _resolve_date_from_keyword("this " + day_name, today)
 
     # Check relative periods
     if not matched_keyword:
@@ -682,7 +749,7 @@ def detect_calendar_by_keywords(content: str) -> Optional[dict]:
         return None
 
     # Step 5: Resolve time
-    time_str, all_day = _resolve_time_from_text(text)
+    time_str, end_time_str, all_day = _resolve_time_from_text(text)
 
     # Special case: "tonight" sets both date (today) and time (20:00)
     if matched_keyword == "tonight" and time_str is None:
@@ -695,12 +762,16 @@ def detect_calendar_by_keywords(content: str) -> Optional[dict]:
     logger.info(
         f"[keyword-fallback] Detected '{matched_keyword}' → "
         f"date={resolved_date}, time={time_str}"
+        f"{f', end={end_time_str}' if end_time_str else ''}"
     )
 
-    return {
+    result = {
         "is_event": True,
         "title": title,
         "date": resolved_date,
         "time": time_str,
         "all_day": all_day,
     }
+    if end_time_str:
+        result["end_time"] = end_time_str
+    return result

@@ -99,6 +99,8 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             if deterministic_calendar.get("time"):
                 calendar_data["time"] = deterministic_calendar["time"]
                 calendar_data["all_day"] = False
+            if deterministic_calendar.get("end_time"):
+                calendar_data["end_time"] = deterministic_calendar["end_time"]
             calendar_fallback_used = True
             keyword_fallback_used = bool(keyword_calendar)
 

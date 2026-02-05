@@ -1,11 +1,10 @@
 """LangGraph workflow definition for the Second Brain orchestrator.
 
 Pipeline flow:
-    detect_intent → route_by_intent → handler (brain/task) → END
+    input → brain_handler → END
 
-Simplified to 2 handlers:
-- brain: notes, ideas, memories, references, questions
-- task: todos, action items, reminders, appointments (stub for now)
+All notes route through the brain handler, which handles classification,
+deduplication, storage, and calendar auto-push.
 """
 import sys
 from pathlib import Path
@@ -16,8 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from langgraph.graph import StateGraph, END
 
 from orchestrator.state import PipelineState
-from orchestrator.intent import detect_intent, route_by_intent
-from handlers import brain, task
+from handlers import brain
 
 
 def create_orchestrator():
@@ -25,9 +23,8 @@ def create_orchestrator():
 
     The workflow:
     1. Receives input text (from a READY file)
-    2. Detects intent using the fast model
-    3. Routes to brain or task handler based on intent
-    4. Handler processes the input and returns result
+    2. Routes directly to brain handler for classification + storage
+    3. Brain handler processes: classify → dedup → store → calendar push
 
     Returns:
         Compiled LangGraph workflow ready for invocation
@@ -35,27 +32,14 @@ def create_orchestrator():
     # Create the state graph
     graph = StateGraph(PipelineState)
 
-    # Add nodes
-    graph.add_node("detect_intent", detect_intent)
+    # Single node — brain handles everything
     graph.add_node("brain_handler", brain.handle)
-    graph.add_node("task_handler", task.handle)
 
-    # Set entry point
-    graph.set_entry_point("detect_intent")
+    # Entry straight to brain
+    graph.set_entry_point("brain_handler")
 
-    # Add conditional routing based on intent
-    graph.add_conditional_edges(
-        "detect_intent",
-        route_by_intent,
-        {
-            "brain_handler": "brain_handler",
-            "task_handler": "task_handler"
-        }
-    )
-
-    # All handlers terminate the graph
+    # Handler terminates the graph
     graph.add_edge("brain_handler", END)
-    graph.add_edge("task_handler", END)
 
     # Compile and return
     return graph.compile()
@@ -77,6 +61,5 @@ if __name__ == "__main__":
     for text in test_inputs:
         print(f"Input: {text}")
         result = orchestrator.invoke({"input_text": text})
-        print(f"  Intent: {result.get('intent')} (confidence: {result.get('intent_confidence', 0):.2f})")
         print(f"  Result: {result.get('result')}")
         print()

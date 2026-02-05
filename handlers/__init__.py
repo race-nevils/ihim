@@ -1,5 +1,4 @@
-"""Handlers for intent types in the orchestrator."""
+"""Handlers for the orchestrator."""
 from . import brain
-from . import task
 
-__all__ = ["brain", "task"]
+__all__ = ["brain"]

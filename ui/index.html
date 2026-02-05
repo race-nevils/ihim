@@ -3696,7 +3696,7 @@
                 statusEl.innerHTML = '<span class="cal-status-ok">Connected</span>';
 
                 // Load events from cache
-                const res = await fetch(`${API}/api/calendar/events?days_ahead=14`);
+                const res = await fetch(`${API}/api/calendar/events?days_ahead=365`);
                 const data = await res.json();
                 calendarCache = data;
 
@@ -3793,7 +3793,7 @@
                 const res = await fetch(`${API}/api/calendar/sync`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ days_ahead: 14, days_behind: 1 })
+                    body: JSON.stringify({ days_ahead: 365, days_behind: 7 })
                 });
                 const data = await res.json();
                 if (data.success) {

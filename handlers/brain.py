@@ -163,7 +163,7 @@ def _push_to_calendar(classification: dict, content: str = "",
 
 @observe(name="brain_handler")
 def handle(state: OrchestratorState) -> OrchestratorState:
-    """Handle brain intent: classify and store the note.
+    """Classify and store the note.
 
     Flow:
     1. Check for existing entry (dedup)

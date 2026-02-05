@@ -86,7 +86,7 @@ async def calendar_auth_revoke():
 
 
 @router.get("/events")
-async def get_events(days_ahead: int = 14):
+async def get_events(days_ahead: int = 365):
     """Get calendar events from local cache.
 
     The frontend should call /sync to refresh the cache when needed.
@@ -170,7 +170,7 @@ async def remove_event(event_id: str, calendar_id: str = "primary"):
 
 
 @router.get("/entries")
-async def get_brain_calendar_entries(days_ahead: int = 14):
+async def get_brain_calendar_entries(days_ahead: int = 365):
     """Get brain entries that have calendar event data."""
     from data.database import get_upcoming_events
     entries = get_upcoming_events(days_ahead=days_ahead)

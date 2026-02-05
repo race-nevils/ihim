@@ -35,6 +35,6 @@ class PushBrainEntryRequest(BaseModel):
 
 class SyncRequest(BaseModel):
     """Request to sync events from Google Calendar."""
-    days_ahead: int = Field(14, ge=1, le=90)
-    days_behind: int = Field(1, ge=0, le=30)
+    days_ahead: int = Field(365, ge=1, le=730)
+    days_behind: int = Field(7, ge=0, le=365)
     calendar_id: str = Field("primary")

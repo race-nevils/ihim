@@ -29,7 +29,7 @@ Phase 2: JSON-LD Foundation (Building)
 ```
 Raw Capture (mobile/desktop)
        ↓
-   Orchestrator (intent detection)
+   Orchestrator (classify → store)
        ↓
    JSON-LD File (source of truth)
        ├── SQLite index (fast queries)

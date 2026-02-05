@@ -195,7 +195,7 @@ class InboxWatcher:
 
                 # Check if the HANDLER returned an error action
                 # (brain handler catches exceptions internally, returns {"action": "error"})
-                # Note: state-level "error" field may contain non-fatal warnings (e.g., intent fallback)
+                # Note: state-level "error" field may contain non-fatal warnings
                 if action == "error":
                     error_msg = result.get("error", result.get("result", {}).get("error", "unknown"))
                     logger.warning(f"Processor returned error for {original_name}: {error_msg}")
@@ -265,7 +265,6 @@ class InboxWatcher:
                         print(f"[ERROR] {result['file']}: {result['error']}")
                     else:
                         file_result = result.get("result", {})
-                        intent = file_result.get("intent", "unknown")
                         action = result.get("action_type", "unknown")
                         category = file_result.get("category", "")
 

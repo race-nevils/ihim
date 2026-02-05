@@ -34,11 +34,17 @@ def _build_service(creds: Credentials):
 
 def pull_events(
     creds: Credentials,
-    days_ahead: int = 14,
-    days_behind: int = 1,
+    days_ahead: int = 365,
+    days_behind: int = 7,
     calendar_id: str = "primary",
 ) -> list[dict]:
     """Fetch events from Google Calendar API.
+
+    Defaults to 365 days ahead / 7 days behind. Personal calendar scale
+    makes narrow windows unnecessary, and wider coverage ensures all
+    future events get JSON-LD files with linked metadata.
+
+    Paginates automatically for large result sets.
 
     Returns list of event dicts in GCal API format.
     """
@@ -47,20 +53,29 @@ def pull_events(
     time_min = (now - timedelta(days=days_behind)).isoformat()
     time_max = (now + timedelta(days=days_ahead)).isoformat()
 
-    events_result = (
-        service.events()
-        .list(
-            calendarId=calendar_id,
-            timeMin=time_min,
-            timeMax=time_max,
-            maxResults=100,
-            singleEvents=True,
-            orderBy="startTime",
-        )
-        .execute()
-    )
+    all_events = []
+    page_token = None
 
-    return events_result.get("items", [])
+    while True:
+        events_result = (
+            service.events()
+            .list(
+                calendarId=calendar_id,
+                timeMin=time_min,
+                timeMax=time_max,
+                maxResults=250,
+                singleEvents=True,
+                orderBy="startTime",
+                pageToken=page_token,
+            )
+            .execute()
+        )
+        all_events.extend(events_result.get("items", []))
+        page_token = events_result.get("nextPageToken")
+        if not page_token:
+            break
+
+    return all_events
 
 
 def push_event(
@@ -246,23 +261,49 @@ def save_event_jsonld(event: dict) -> Optional[Path]:
         return None
 
 
+def _get_existing_gcal_ids() -> set[str]:
+    """Get set of GCal event IDs that already have local JSON-LD files.
+
+    Scans Calendar directory so sync_and_store can skip events that
+    already have sovereign local storage (preserving any enrichments).
+    """
+    existing = set()
+    if CALENDAR_DIR.exists():
+        for f in CALENDAR_DIR.glob("cal-*.jsonld"):
+            try:
+                doc = json.loads(f.read_text(encoding="utf-8"))
+                gcal_id = doc.get("ihim:gcalEventId") or doc.get("identifier")
+                if gcal_id:
+                    existing.add(gcal_id)
+            except (json.JSONDecodeError, OSError):
+                continue
+    return existing
+
+
 def sync_and_store(
     creds: Credentials,
-    days_ahead: int = 14,
-    days_behind: int = 1,
+    days_ahead: int = 365,
+    days_behind: int = 7,
     calendar_id: str = "primary",
 ) -> dict:
-    """Full sync: pull from GCal, update cache, write JSON-LD files.
+    """Full sync: pull from GCal, update cache, write JSON-LD for NEW events only.
+
+    Existing JSON-LD files are never overwritten or deleted. Only events
+    that don't already have a local JSON-LD file get one created.
 
     Returns the cache dict with events and cached_at timestamp.
     """
     events = pull_events(creds, days_ahead, days_behind, calendar_id)
     save_to_cache(events)
 
-    # Write JSON-LD for each event
+    # Only create JSON-LD for events not already stored locally
+    existing_ids = _get_existing_gcal_ids()
+    new_count = 0
     for event in events:
-        save_event_jsonld(event)
+        if event.get("id") not in existing_ids:
+            save_event_jsonld(event)
+            new_count += 1
 
     cache = load_from_cache()
-    logger.info(f"Synced {len(events)} calendar events")
+    logger.info(f"Synced {len(events)} calendar events ({new_count} new JSON-LD files)")
     return cache

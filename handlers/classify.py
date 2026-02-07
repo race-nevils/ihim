@@ -32,11 +32,35 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
     """
     adapter = OllamaAdapter()
 
-    # LLM classification (today's date injected for relative date resolution)
-    classification = adapter.generate_json(
-        get_classify_prompt(content),
-        model=OllamaAdapter.FAST_MODEL
-    )
+    # === NEW Layer 1: Instruction Extraction ===
+    from handlers.instructions import extract_instructions
+    extraction = extract_instructions(content, source_filename or "")
+    clean_content = extraction["clean_content"]
+    instructions = extraction["instructions"]
+    category_hints = extraction["category_hints"]
+
+    # === NEW Layer 2: Entity Type Detection ===
+    from handlers.entity import detect_entity_type
+    entity = detect_entity_type(clean_content, source_filename or "")
+
+    if entity and entity.get("confidence", 0) >= 0.9:
+        # High-confidence entity detection - skip LLM
+        classification = {
+            "category": entity["entity_type"],
+            "confidence": entity["confidence"],
+            "summary": clean_content[:100] if clean_content else content[:100],
+            "calendar": None,
+            "entity_detected": True,
+            "entity_pattern": entity.get("pattern", ""),
+        }
+        logger.info(f"[entity-skip-llm] High-confidence entity detected: {entity['entity_type']}")
+    else:
+        # === EXISTING Layer 3: LLM Classification ===
+        # Pass CLEAN content (instructions stripped)
+        classification = adapter.generate_json(
+            get_classify_prompt(clean_content or content),
+            model=OllamaAdapter.FAST_MODEL
+        )
 
     # Guard: if LLM returned an error or unexpected type, provide safe defaults
     if classification.get("error"):
@@ -166,6 +190,43 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
         summary_fallback_used = True
         logger.info(f"[fallback] Summary replaced (contamination detected)")
 
+    # === NEW Layer 9: Instruction Application ===
+    # Instructions affect behavior, not classification
+    instruction_applied = False
+    for instr in instructions:
+        if instr["type"] == "urgency":
+            classification["urgency"] = instr.get("level", "normal")
+            instruction_applied = True
+        elif instr["type"] == "categorization" and category_hints:
+            # Explicit category hint from user
+            # Check if it's a valid category (case-insensitive)
+            CATEGORIES = ["Tasks", "Ideas", "Projects", "People", "Reference", "Misc"]
+            for hint in category_hints:
+                matched_cat = next(
+                    (c for c in CATEGORIES if c.lower() == hint.lower()),
+                    None
+                )
+                if matched_cat:
+                    logger.info(f"[category-hint] User hint: {matched_cat}")
+                    classification["category"] = matched_cat
+                    classification["user_category_hint"] = True
+                    instruction_applied = True
+                    break
+
+    # === NEW Layer 10: Correction Pattern Check ===
+    from handlers.corrections import check_correction_match
+    learned_category = check_correction_match(content, source_filename or "")
+    learned_override = False
+    if learned_category and learned_category != classification["category"]:
+        logger.info(
+            f"[learned-pattern] Applying correction: "
+            f"{classification['category']} -> {learned_category}"
+        )
+        classification["original_category"] = classification["category"]
+        classification["category"] = learned_category
+        classification["learned_override"] = True
+        learned_override = True
+
     # Log to Langfuse — resolve calendar to single dict for metadata
     final_calendar = classification.get("calendar")
     if isinstance(final_calendar, list):
@@ -189,6 +250,10 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             "recurrence_detected": recurrence_detected,
             "calendar_date_overridden": calendar_date_overridden,
             "summary_fallback_used": summary_fallback_used,
+            "instructions_extracted": len(instructions),
+            "entity_detected": classification.get("entity_detected", False),
+            "instruction_applied": instruction_applied,
+            "learned_override": learned_override,
         }
     )
 

@@ -175,3 +175,111 @@ async def get_nutrition():
         "staples": staples,
         "days": days
     }
+
+
+def parse_glossary_sections(content: str) -> Dict[str, Any]:
+    """
+    Parse exercise glossary markdown into structured categories.
+    Returns {global_cues, categories: [{name, exercises: [...]}], substitution_map, checklist}
+    """
+    # Extract global cues
+    global_cues_match = re.search(r'## Global Cues \(use everywhere\)(.+?)(?=\n---)', content, re.DOTALL)
+    global_cues = global_cues_match.group(1).strip() if global_cues_match else ""
+
+    # Extract categories (A through H)
+    categories = []
+    category_pattern = r'\n# ([A-H]\)) ([^\n]+)\n\n((?:## \d+\).*?\n(?:.*?\n)*?)+?)(?=\n# [A-H]\)|\n# Quick Substitution|$)'
+
+    for match in re.finditer(category_pattern, content, re.DOTALL):
+        category_letter = match.group(1)
+        category_name = match.group(2).strip()
+        category_content = match.group(3)
+
+        # Parse exercises within this category
+        exercises = []
+        exercise_pattern = r'## (\d+)\) ([^\n]+)\n(.*?)(?=\n## \d+\)|$)'
+
+        for ex_match in re.finditer(exercise_pattern, category_content, re.DOTALL):
+            number = ex_match.group(1)
+            name = ex_match.group(2).strip()
+            details = ex_match.group(3).strip()
+
+            # Extract structured fields
+            target = ""
+            setup = ""
+            do = ""
+            cues = ""
+            errors = ""
+            scale = ""
+            goal = ""
+            rule = ""
+            avoid = ""
+
+            for line in details.split('\n'):
+                if line.startswith('**Target:**'):
+                    target = line.replace('**Target:**', '').strip()
+                elif line.startswith('**Setup:**'):
+                    setup = line.replace('**Setup:**', '').strip()
+                elif line.startswith('**Do:**'):
+                    do = line.replace('**Do:**', '').strip()
+                elif line.startswith('**Cues:**'):
+                    cues = line.replace('**Cues:**', '').strip()
+                elif line.startswith('**Errors:**'):
+                    errors = line.replace('**Errors:**', '').strip()
+                elif line.startswith('**Scale:**'):
+                    scale = line.replace('**Scale:**', '').strip()
+                elif line.startswith('**Goal:**'):
+                    goal = line.replace('**Goal:**', '').strip()
+                elif line.startswith('**Rule:**'):
+                    rule = line.replace('**Rule:**', '').strip()
+                elif line.startswith('**Avoid:**'):
+                    avoid = line.replace('**Avoid:**', '').strip()
+
+            exercises.append({
+                "number": number,
+                "name": name,
+                "target": target,
+                "setup": setup,
+                "do": do,
+                "cues": cues,
+                "errors": errors,
+                "scale": scale,
+                "goal": goal,
+                "rule": rule,
+                "avoid": avoid
+            })
+
+        categories.append({
+            "letter": category_letter,
+            "name": category_name,
+            "exercises": exercises
+        })
+
+    # Extract substitution map
+    sub_match = re.search(r'# Quick Substitution Map(.+?)(?=\n# 10-Second)', content, re.DOTALL)
+    substitution_map = sub_match.group(1).strip() if sub_match else ""
+
+    # Extract checklist
+    checklist_match = re.search(r'# 10-Second Checklist(.+?)$', content, re.DOTALL)
+    checklist = checklist_match.group(1).strip() if checklist_match else ""
+
+    return {
+        "global_cues": global_cues,
+        "categories": categories,
+        "substitution_map": substitution_map,
+        "checklist": checklist
+    }
+
+
+@router.get("/glossary")
+async def get_glossary():
+    """Get exercise glossary with all movements from the program."""
+    file_path = HEALTH_DATA_DIR / "glossary" / "exercise_glossary.md"
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Glossary file not found")
+
+    content = file_path.read_text(encoding='utf-8')
+    parsed = parse_glossary_sections(content)
+
+    return parsed

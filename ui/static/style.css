@@ -5846,6 +5846,99 @@ main {
     color: var(--text-primary);
 }
 
+/* Glossary-specific styles */
+.health-category-card {
+    margin-bottom: var(--space-2);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.health-category-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    background: rgba(139, 92, 246, 0.08);
+    transition: all 0.2s;
+}
+
+.health-category-header:hover {
+    background: rgba(139, 92, 246, 0.15);
+}
+
+.health-category-name {
+    font-weight: 700;
+    color: #a78bfa;
+    font-size: 0.9rem;
+}
+
+.health-category-content {
+    padding: var(--space-2);
+    border-top: 1px solid var(--glass-border);
+}
+
+.health-exercise-card {
+    margin-bottom: var(--space-2);
+    padding: var(--space-2);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    border-left: 3px solid #8b5cf6;
+}
+
+.health-exercise-name {
+    font-weight: 600;
+    color: var(--accent-gold);
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+}
+
+.health-exercise-field {
+    margin-bottom: 6px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.health-exercise-field strong {
+    color: #fbbf24;
+    margin-right: 4px;
+}
+
+.health-exercise-errors {
+    color: #fca5a5;
+}
+
+.health-exercise-errors strong {
+    color: #dc2626;
+}
+
+.health-substitutions {
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    background: rgba(16, 185, 129, 0.08);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.health-substitutions h3 {
+    color: #34d399;
+}
+
+.health-checklist {
+    margin-top: var(--space-2);
+    padding: var(--space-2);
+    background: rgba(59, 130, 246, 0.08);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.health-checklist h3 {
+    color: #60a5fa;
+}
+
 .health-meal strong {
     color: #fbbf24;
     display: block;

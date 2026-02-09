@@ -380,6 +380,7 @@
         <div class="health-tabs">
             <button class="health-tab-btn active" data-tab="workouts" onclick="switchHealthTab('workouts')">Workouts</button>
             <button class="health-tab-btn" data-tab="nutrition" onclick="switchHealthTab('nutrition')">Nutrition</button>
+            <button class="health-tab-btn" data-tab="glossary" onclick="switchHealthTab('glossary')">Glossary</button>
         </div>
 
         <!-- Workouts Tab -->
@@ -393,6 +394,13 @@
         <div id="health-tab-nutrition" class="health-tab-content" style="display: none;">
             <div class="health-body" id="nutrition-body">
                 <div class="health-loading">Loading nutrition plan...</div>
+            </div>
+        </div>
+
+        <!-- Glossary Tab -->
+        <div id="health-tab-glossary" class="health-tab-content" style="display: none;">
+            <div class="health-body" id="glossary-body">
+                <div class="health-loading">Loading glossary...</div>
             </div>
         </div>
     </div>
@@ -3926,6 +3934,7 @@
 
         let workoutsData = null;
         let nutritionData = null;
+        let glossaryData = null;
 
         async function openHealthWindow() {
             const win = document.getElementById('health-window');
@@ -3975,16 +3984,14 @@
                 btn.classList.toggle('active', btn.dataset.tab === tab);
             });
 
-            // Show/hide content
-            const workoutsTab = document.getElementById('health-tab-workouts');
-            const nutritionTab = document.getElementById('health-tab-nutrition');
+            // Show/hide all tab content
+            document.querySelectorAll('.health-tab-content').forEach(content => {
+                content.style.display = content.id === `health-tab-${tab}` ? 'block' : 'none';
+            });
 
-            if (tab === 'workouts') {
-                workoutsTab.style.display = 'block';
-                nutritionTab.style.display = 'none';
-            } else {
-                workoutsTab.style.display = 'none';
-                nutritionTab.style.display = 'block';
+            // Lazy load glossary when first accessed
+            if (tab === 'glossary' && !glossaryData) {
+                loadGlossary();
             }
         }
 
@@ -4101,6 +4108,91 @@
                 content.style.display = 'none';
                 icon.textContent = '▼';
             }
+        }
+
+        async function loadGlossary() {
+            const bodyEl = document.getElementById('glossary-body');
+            try {
+                const res = await fetch(`${API}/api/health/glossary`);
+                const data = await res.json();
+                glossaryData = data;
+                renderGlossary(data);
+            } catch (e) {
+                bodyEl.innerHTML = `<div class="health-error">Failed to load glossary: ${e.message}</div>`;
+            }
+        }
+
+        function renderGlossary(data) {
+            const bodyEl = document.getElementById('glossary-body');
+
+            // Global cues section
+            let html = '<div class="health-section health-universal">';
+            html += '<h3>Global Cues (use everywhere)</h3>';
+            html += '<div class="health-rules-text">' + escapeHtml(data.global_cues).replace(/\n/g, '<br>') + '</div>';
+            html += '</div>';
+
+            // Render categories
+            data.categories.forEach((category, catIdx) => {
+                const categoryId = `glossary-category-${catIdx}`;
+                html += `<div class="health-category-card">`;
+                html += `<div class="health-category-header" onclick="toggleHealthDay('${categoryId}')">`;
+                html += `<span class="health-category-name">${escapeHtml(category.letter)} ${escapeHtml(category.name)}</span>`;
+                html += `<span class="health-expand-icon" id="${categoryId}-icon">▼</span>`;
+                html += `</div>`;
+                html += `<div class="health-category-content" id="${categoryId}" style="display: none;">`;
+
+                // Render exercises in this category
+                category.exercises.forEach(exercise => {
+                    html += `<div class="health-exercise-card">`;
+                    html += `<div class="health-exercise-name">${exercise.number}) ${escapeHtml(exercise.name)}</div>`;
+
+                    if (exercise.target) {
+                        html += `<div class="health-exercise-field"><strong>Target:</strong> ${escapeHtml(exercise.target)}</div>`;
+                    }
+                    if (exercise.goal) {
+                        html += `<div class="health-exercise-field"><strong>Goal:</strong> ${escapeHtml(exercise.goal)}</div>`;
+                    }
+                    if (exercise.setup) {
+                        html += `<div class="health-exercise-field"><strong>Setup:</strong> ${escapeHtml(exercise.setup)}</div>`;
+                    }
+                    if (exercise.do) {
+                        html += `<div class="health-exercise-field"><strong>Do:</strong> ${escapeHtml(exercise.do)}</div>`;
+                    }
+                    if (exercise.rule) {
+                        html += `<div class="health-exercise-field"><strong>Rule:</strong> ${escapeHtml(exercise.rule)}</div>`;
+                    }
+                    if (exercise.cues) {
+                        html += `<div class="health-exercise-field"><strong>Cues:</strong> ${escapeHtml(exercise.cues)}</div>`;
+                    }
+                    if (exercise.errors) {
+                        html += `<div class="health-exercise-field health-exercise-errors"><strong>Errors:</strong> ${escapeHtml(exercise.errors)}</div>`;
+                    }
+                    if (exercise.avoid) {
+                        html += `<div class="health-exercise-field health-exercise-errors"><strong>Avoid:</strong> ${escapeHtml(exercise.avoid)}</div>`;
+                    }
+                    if (exercise.scale) {
+                        html += `<div class="health-exercise-field"><strong>Scale:</strong> ${escapeHtml(exercise.scale)}</div>`;
+                    }
+
+                    html += `</div>`;
+                });
+
+                html += `</div></div>`;
+            });
+
+            // Substitution map
+            html += '<div class="health-section health-substitutions">';
+            html += '<h3>Quick Substitution Map</h3>';
+            html += '<div class="health-rules-text">' + escapeHtml(data.substitution_map).replace(/\n/g, '<br>') + '</div>';
+            html += '</div>';
+
+            // 10-second checklist
+            html += '<div class="health-section health-checklist">';
+            html += '<h3>10-Second Checklist</h3>';
+            html += '<div class="health-rules-text">' + escapeHtml(data.checklist).replace(/\n/g, '<br>') + '</div>';
+            html += '</div>';
+
+            bodyEl.innerHTML = html;
         }
     </script>
 

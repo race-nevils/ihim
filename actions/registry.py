@@ -68,6 +68,13 @@ ACTIONS = {
         "category": "tools",
         "has_modal": True,
     },
+    "health": {
+        "name": "Health",
+        "description": "Hybrid home workout program + nutrition plan",
+        "icon": "heart-pulse",
+        "category": "tools",
+        "has_modal": True,
+    },
     # Team actions (consolidated into Mission Control)
     "software_dev_team": {
         "name": "Feature Builder",

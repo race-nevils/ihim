@@ -131,6 +131,14 @@ except ImportError as e:
     print(f"Warning: Chat module not available: {e}")
     CHAT_AVAILABLE = False
 
+# Import health module (Health Dashboard)
+try:
+    from api.health.routes import router as health_router
+    HEALTH_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Health module not available: {e}")
+    HEALTH_AVAILABLE = False
+
 app = FastAPI(title="iHIM", description="Your Command Center")
 
 # CORS middleware for Chrome extension access
@@ -242,6 +250,10 @@ if BRAIN_AVAILABLE:
 # Include the chat router (Brain Chat with RAG)
 if CHAT_AVAILABLE:
     app.include_router(chat_router)
+
+# Include the health router (Health Dashboard)
+if HEALTH_AVAILABLE:
+    app.include_router(health_router)
 
 
 # Request models

@@ -369,6 +369,34 @@
         </div>
     </div>
 
+<!-- Health Window (Draggable) -->
+    <div id="health-window" class="health-window" style="display: none;">
+        <div class="health-header health-drag-handle">
+            <span class="health-label"><i data-lucide="heart-pulse" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Health Dashboard</span>
+            <button class="health-close" onclick="closeHealthWindow()">&times;</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="health-tabs">
+            <button class="health-tab-btn active" data-tab="workouts" onclick="switchHealthTab('workouts')">Workouts</button>
+            <button class="health-tab-btn" data-tab="nutrition" onclick="switchHealthTab('nutrition')">Nutrition</button>
+        </div>
+
+        <!-- Workouts Tab -->
+        <div id="health-tab-workouts" class="health-tab-content active">
+            <div class="health-body" id="workouts-body">
+                <div class="health-loading">Loading workouts...</div>
+            </div>
+        </div>
+
+        <!-- Nutrition Tab -->
+        <div id="health-tab-nutrition" class="health-tab-content" style="display: none;">
+            <div class="health-body" id="nutrition-body">
+                <div class="health-loading">Loading nutrition plan...</div>
+            </div>
+        </div>
+    </div>
+
 
 <!-- Mission Control Window (Draggable) -->
     <div id="mc-window" class="mc-window" style="display: none;">
@@ -680,6 +708,10 @@
             }
             if (actionId === 'google_calendar') {
                 openCalendarWindow();
+                return;
+            }
+            if (actionId === 'health') {
+                openHealthWindow();
                 return;
             }
 
@@ -3469,7 +3501,7 @@
         // =============================================================================
 
         function initializeWidgetResize() {
-            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'chat-window'];
+            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'health-window', 'chat-window'];
 
             // Restore saved sizes from localStorage
             widgetIds.forEach(widgetId => {
@@ -3882,6 +3914,192 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Create on GCal';
+            }
+        }
+    </script>
+
+    <!-- HEALTH DASHBOARD MODULE SCRIPT -->
+    <script>
+        // ==========================================
+        // HEALTH DASHBOARD MODULE LOGIC
+        // ==========================================
+
+        let workoutsData = null;
+        let nutritionData = null;
+
+        async function openHealthWindow() {
+            const win = document.getElementById('health-window');
+            if (!win) return;
+
+            // Restore or center position
+            let posRestored = false;
+            try {
+                const saved = localStorage.getItem('healthWindowPosition');
+                if (saved) {
+                    const { x, y } = JSON.parse(saved);
+                    if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
+                        win.style.left = x + 'px';
+                        win.style.top = y + 'px';
+                        posRestored = true;
+                    }
+                }
+            } catch (e) { console.warn('Failed to restore health position:', e); }
+            if (!posRestored) {
+                win.style.left = Math.max(0, (window.innerWidth - 700) / 2) + 'px';
+                win.style.top = Math.max(0, (window.innerHeight - 600) / 2) + 'px';
+            }
+
+            win.style.display = 'flex';
+
+            if (!win.dataset.dragInitialized) {
+                makeDraggable('health-window', '.health-drag-handle', 'healthWindowPosition');
+                win.dataset.dragInitialized = 'true';
+            }
+
+            // Re-render Lucide icons
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            // Load data if not already loaded
+            if (!workoutsData) await loadWorkouts();
+            if (!nutritionData) await loadNutrition();
+        }
+
+        function closeHealthWindow() {
+            const win = document.getElementById('health-window');
+            if (win) win.style.display = 'none';
+        }
+
+        function switchHealthTab(tab) {
+            // Update tab buttons
+            document.querySelectorAll('.health-tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+
+            // Show/hide content
+            const workoutsTab = document.getElementById('health-tab-workouts');
+            const nutritionTab = document.getElementById('health-tab-nutrition');
+
+            if (tab === 'workouts') {
+                workoutsTab.style.display = 'block';
+                nutritionTab.style.display = 'none';
+            } else {
+                workoutsTab.style.display = 'none';
+                nutritionTab.style.display = 'block';
+            }
+        }
+
+        async function loadWorkouts() {
+            const bodyEl = document.getElementById('workouts-body');
+            try {
+                const res = await fetch(`${API}/api/health/workouts/hybrid_home_program.md`);
+                const data = await res.json();
+                workoutsData = data;
+                renderWorkouts(data);
+            } catch (e) {
+                bodyEl.innerHTML = `<div class="health-error">Failed to load workouts: ${e.message}</div>`;
+            }
+        }
+
+        function renderWorkouts(data) {
+            const bodyEl = document.getElementById('workouts-body');
+
+            // Show universal rules first
+            let html = '<div class="health-section health-universal">';
+            html += '<h3>Universal Rules</h3>';
+            html += '<div class="health-rules-text">' + escapeHtml(data.universal_rules).replace(/\n/g, '<br>') + '</div>';
+            html += '</div>';
+
+            // Render each day as expandable section
+            data.days.forEach((day, idx) => {
+                const dayId = `workout-day-${idx}`;
+                html += `<div class="health-day-card">`;
+                html += `<div class="health-day-header" onclick="toggleHealthDay('${dayId}')">`;
+                html += `<span class="health-day-name">${day.day}</span>`;
+                html += `<span class="health-day-title">${escapeHtml(day.title)}</span>`;
+                html += `<span class="health-expand-icon" id="${dayId}-icon">▼</span>`;
+                html += `</div>`;
+                html += `<div class="health-day-content" id="${dayId}" style="display: none;">`;
+
+                if (day.extras) {
+                    html += `<div class="health-extras">${escapeHtml(day.extras).replace(/\n/g, '<br>')}</div>`;
+                }
+
+                html += `<div class="health-subsection">`;
+                html += `<strong>Primary Plan:</strong><br>`;
+                html += escapeHtml(day.primary_plan).replace(/\n/g, '<br>');
+                html += `</div>`;
+
+                html += `<div class="health-subsection health-minimum">`;
+                html += `<strong>Minimum Effective Dose:</strong><br>`;
+                html += escapeHtml(day.minimum_dose).replace(/\n/g, '<br>');
+                html += `</div>`;
+
+                html += `</div></div>`;
+            });
+
+            bodyEl.innerHTML = html;
+        }
+
+        async function loadNutrition() {
+            const bodyEl = document.getElementById('nutrition-body');
+            try {
+                const res = await fetch(`${API}/api/health/nutrition`);
+                const data = await res.json();
+                nutritionData = data;
+                renderNutrition(data);
+            } catch (e) {
+                bodyEl.innerHTML = `<div class="health-error">Failed to load nutrition: ${e.message}</div>`;
+            }
+        }
+
+        function renderNutrition(data) {
+            const bodyEl = document.getElementById('nutrition-body');
+
+            // Show nutrition rules and staples
+            let html = '<div class="health-section health-universal">';
+            html += '<h3>Nutrition Guidelines</h3>';
+            html += '<div class="health-rules-text">' + escapeHtml(data.nutrition_rules).replace(/\n/g, '<br>') + '</div>';
+            html += '<h4>High-Protein Staples</h4>';
+            html += '<div class="health-rules-text">' + escapeHtml(data.staples).replace(/\n/g, '<br>') + '</div>';
+            html += '</div>';
+
+            // Render each day
+            data.days.forEach((day, idx) => {
+                const dayId = `nutrition-day-${idx}`;
+                html += `<div class="health-day-card">`;
+                html += `<div class="health-day-header" onclick="toggleHealthDay('${dayId}')">`;
+                html += `<span class="health-day-name">${day.day}</span>`;
+                html += `<span class="health-day-title">${escapeHtml(day.title)}</span>`;
+                html += `<span class="health-expand-icon" id="${dayId}-icon">▼</span>`;
+                html += `</div>`;
+                html += `<div class="health-day-content" id="${dayId}" style="display: none;">`;
+
+                if (day.targets) {
+                    html += `<div class="health-targets"><strong>Targets:</strong> ${escapeHtml(day.targets)}</div>`;
+                }
+
+                html += `<div class="health-meals">`;
+                for (const [mealType, mealContent] of Object.entries(day.meals)) {
+                    html += `<div class="health-meal">`;
+                    html += `<strong>${mealType.charAt(0).toUpperCase() + mealType.slice(1)}:</strong><br>`;
+                    html += escapeHtml(mealContent).replace(/\n/g, '<br>');
+                    html += `</div>`;
+                }
+                html += `</div></div></div>`;
+            });
+
+            bodyEl.innerHTML = html;
+        }
+
+        function toggleHealthDay(dayId) {
+            const content = document.getElementById(dayId);
+            const icon = document.getElementById(dayId + '-icon');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.textContent = '▲';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '▼';
             }
         }
     </script>

@@ -5603,3 +5603,251 @@ main {
     margin-bottom: 6px;
 }
 
+/* ===================================================================
+   HEALTH DASHBOARD WINDOW (Draggable)
+   =================================================================== */
+
+.health-window {
+    position: fixed;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    width: 700px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg), 0 2px 6px rgba(220, 38, 38, 0.15);
+    z-index: 100;
+    min-width: 400px;
+    min-height: 300px;
+    overflow: hidden;
+    resize: both;
+}
+
+.health-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-2);
+    cursor: move;
+    user-select: none;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.health-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.health-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.health-close:hover {
+    background: rgba(220, 38, 38, 0.15);
+    color: #dc2626;
+}
+
+.health-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: var(--space-3);
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 8px;
+}
+
+.health-tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.health-tab-btn:hover {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+}
+
+.health-tab-btn.active {
+    background: rgba(220, 38, 38, 0.15);
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.health-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 200px;
+}
+
+.health-body {
+    padding: var(--space-2) 0;
+}
+
+.health-loading,
+.health-error {
+    text-align: center;
+    padding: var(--space-4);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.health-error {
+    color: #dc2626;
+}
+
+.health-section {
+    margin-bottom: var(--space-4);
+    padding: var(--space-3);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid #dc2626;
+}
+
+.health-section h3,
+.health-section h4 {
+    color: #dc2626;
+    margin-top: 0;
+    margin-bottom: var(--space-2);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.health-rules-text {
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.health-day-card {
+    margin-bottom: var(--space-2);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.health-day-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    background: rgba(220, 38, 38, 0.08);
+    transition: all 0.2s;
+}
+
+.health-day-header:hover {
+    background: rgba(220, 38, 38, 0.15);
+}
+
+.health-day-name {
+    font-weight: 700;
+    color: #dc2626;
+    font-size: 0.9rem;
+    min-width: 80px;
+}
+
+.health-day-title {
+    flex: 1;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.health-expand-icon {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    transition: transform 0.2s;
+}
+
+.health-day-content {
+    padding: var(--space-3);
+    border-top: 1px solid var(--glass-border);
+}
+
+.health-subsection {
+    margin-bottom: var(--space-3);
+    padding: var(--space-2);
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.health-subsection strong {
+    color: #fbbf24;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.health-minimum {
+    border-left: 3px solid #10b981;
+}
+
+.health-extras {
+    margin-bottom: var(--space-2);
+    padding: var(--space-2);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+.health-targets {
+    margin-bottom: var(--space-2);
+    padding: 8px 12px;
+    background: rgba(220, 38, 38, 0.1);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+}
+
+.health-meals {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.health-meal {
+    padding: var(--space-2);
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.health-meal strong {
+    color: #fbbf24;
+    display: block;
+    margin-bottom: 4px;
+}

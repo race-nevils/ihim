@@ -17,27 +17,36 @@ CATEGORIES = ["Tasks", "Projects", "People", "Ideas", "Reference", "Misc"]
 CONFIDENCE_THRESHOLD = 0.8
 
 # LLM classification prompt - Decision tree for mutual exclusivity
+# Tasks = dated/calendar items, Projects = undated action items
 CLASSIFY_PROMPT = """Classify this note into exactly ONE category by following this decision tree IN ORDER:
 
-STEP 1: Is there a specific ACTION to complete? (verb like: clean, call, buy, fix, remind, send, check)
-  → YES: Category = "Tasks"
+STEP 1: Is this about a PERSON (name mentioned, relationship, contact info, conversation)?
+  → YES: Category = "People"
   → NO: Continue to Step 2
 
-STEP 2: Is this about a PERSON (name mentioned, relationship, contact info, conversation)?
-  → YES: Category = "People"
+STEP 2: Does it have a SPECIFIC DATE or TIME for an action, appointment, or deadline?
+  → YES: Category = "Tasks"
   → NO: Continue to Step 3
 
-STEP 3: Is this a MULTI-STEP GOAL with a deadline or end state? (project, initiative, thing being built)
+STEP 3: Is there an ACTION to complete but NO specific date? (verb like: clean, call, buy, fix, build, send, check)
   → YES: Category = "Projects"
   → NO: Continue to Step 4
 
-STEP 4: Is this EXPLORATION or BRAINSTORMING? (what if, maybe, wondering, idea, concept, no commitment)
-  → YES: Category = "Ideas"
+STEP 4: Is this a MULTI-STEP initiative or thing being built (no specific deadline)?
+  → YES: Category = "Projects"
   → NO: Continue to Step 5
 
-STEP 5: Is this STATIC INFORMATION to remember? (facts, addresses, how-to, reference, documentation)
+STEP 5: Is this EXPLORATION or BRAINSTORMING? (what if, maybe, wondering, idea, concept, no commitment)
+  → YES: Category = "Ideas"
+  → NO: Continue to Step 6
+
+STEP 6: Is this STATIC INFORMATION to remember? (facts, addresses, how-to, reference, documentation)
   → YES: Category = "Reference"
   → NO: Category = "Ideas" (default for unclear content)
+
+KEY DISTINCTION - Tasks vs Projects:
+- Tasks = has a specific date/time, goes on calendar, displayed chronologically
+- Projects = no specific date, "anytime" items that just need to get done eventually
 
 CALENDAR DETECTION (check independently of category):
 Does this note mention a SPECIFIC DATE or TIME for an event, appointment, meeting, or deadline?
@@ -57,11 +66,12 @@ Calendar rules:
 - "this Friday" → the Friday of THIS week
 
 EXAMPLES:
-- "Need to clean oil from prop" → Tasks, calendar: null (no date)
 - "Dentist appointment February 2nd" → Tasks, calendar: {{"is_event": true, "title": "Dentist Appointment", "date": "2026-02-02", "time": null, "all_day": true}}
 - "Meeting with Sarah at 3pm on Feb 4th" → People, calendar: {{"is_event": true, "title": "Meeting with Sarah", "date": "2026-02-04", "time": "15:00", "all_day": false}}
 - "Tax documents due by Feb 16th" → Tasks, calendar: {{"is_event": true, "title": "Tax Documents Due", "date": "2026-02-16", "time": null, "all_day": true}}
-- "What if we used Redis?" → Ideas, calendar: null (no date)
+- "Need to clean oil from prop" → Projects, calendar: null (action but no date = Project)
+- "Build a waitlist signup feature" → Projects, calendar: null (multi-step, no deadline)
+- "What if we used Redis?" → Ideas, calendar: null (no date, no action)
 - "Sarah's phone number is 555-1234" → People, calendar: null (no date)
 
 Return ONLY valid JSON:

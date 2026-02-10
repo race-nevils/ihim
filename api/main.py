@@ -139,6 +139,14 @@ except ImportError as e:
     print(f"Warning: Health module not available: {e}")
     HEALTH_AVAILABLE = False
 
+# Import dashboard module (Vault Dashboard)
+try:
+    from api.dashboard.routes import router as dashboard_router
+    DASHBOARD_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Dashboard module not available: {e}")
+    DASHBOARD_AVAILABLE = False
+
 app = FastAPI(title="iHIM", description="Your Command Center")
 
 # CORS middleware for Chrome extension access
@@ -254,6 +262,10 @@ if CHAT_AVAILABLE:
 # Include the health router (Health Dashboard)
 if HEALTH_AVAILABLE:
     app.include_router(health_router)
+
+# Include the dashboard router (Vault Dashboard)
+if DASHBOARD_AVAILABLE:
+    app.include_router(dashboard_router)
 
 
 # Request models

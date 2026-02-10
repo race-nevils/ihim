@@ -50,6 +50,11 @@
 
         <div class="bar-spacer"></div>
 
+        <!-- Vault Dashboard toggle -->
+        <div class="bar-widget" onclick="toggleVaultWindow()" style="cursor:pointer;" title="Vault Dashboard">
+            <span class="bar-label" style="color:var(--accent-gold);">Vault</span>
+        </div>
+
         <!-- Brain Chat toggle -->
         <div class="bar-widget" onclick="toggleChatWindow()" style="cursor:pointer;" title="Brain Chat">
             <span class="bar-label" style="color:var(--color-power);">Chat</span>
@@ -3509,7 +3514,7 @@
         // =============================================================================
 
         function initializeWidgetResize() {
-            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'health-window', 'chat-window'];
+            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'health-window', 'chat-window', 'vault-window'];
 
             // Restore saved sizes from localStorage
             widgetIds.forEach(widgetId => {
@@ -4196,6 +4201,52 @@
         }
     </script>
 
+<!-- Vault Dashboard Window (Draggable) -->
+    <div id="vault-window" class="vault-window" style="display: none;">
+        <div class="vault-header vault-drag-handle">
+            <span class="vault-label"><i data-lucide="archive" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Vault</span>
+            <button class="vault-close" onclick="closeVaultWindow()">&times;</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="vault-tabs">
+            <button class="vault-tab-btn active" data-tab="tasks" onclick="switchVaultTab('tasks')">Tasks</button>
+            <button class="vault-tab-btn" data-tab="projects" onclick="switchVaultTab('projects')">Projects</button>
+            <button class="vault-tab-btn" data-tab="documents" onclick="switchVaultTab('documents')">Documents</button>
+        </div>
+
+        <!-- Tasks Tab -->
+        <div id="vault-tab-tasks" class="vault-tab-content active">
+            <div class="vault-body" id="vault-tasks-body">
+                <div class="vault-loading">Loading tasks...</div>
+            </div>
+        </div>
+
+        <!-- Projects Tab -->
+        <div id="vault-tab-projects" class="vault-tab-content" style="display: none;">
+            <div class="vault-body" id="vault-projects-body">
+                <div class="vault-loading">Loading projects...</div>
+            </div>
+        </div>
+
+        <!-- Documents Tab -->
+        <div id="vault-tab-documents" class="vault-tab-content" style="display: none;">
+            <div class="vault-doc-controls">
+                <select id="vault-doc-category" onchange="vaultManager.loadDocuments()">
+                    <option value="">All Categories</option>
+                </select>
+                <select id="vault-doc-sort" onchange="vaultManager.loadDocuments()">
+                    <option value="created_at">Newest</option>
+                    <option value="updated_at">Recently Updated</option>
+                    <option value="title">Title A-Z</option>
+                </select>
+            </div>
+            <div class="vault-body" id="vault-docs-body">
+                <div class="vault-loading">Loading documents...</div>
+            </div>
+        </div>
+    </div>
+
 <!-- Brain Chat Window (Draggable) -->
     <div id="chat-window" class="chat-window" style="display: none;">
         <div class="chat-header chat-drag-handle">
@@ -4501,6 +4552,253 @@
             if (win) win.classList.toggle('minimized');
         }
 
+    </script>
+
+    <!-- VAULT DASHBOARD MODULE SCRIPT -->
+    <script>
+        // ==========================================
+        // VAULT DASHBOARD MODULE LOGIC
+        // ==========================================
+
+        const vaultManager = {
+            initialized: false,
+            docsPage: 0,
+            docsLimit: 30,
+            expandedDoc: null,
+
+            async loadTasks() {
+                const body = document.getElementById('vault-tasks-body');
+                if (!body) return;
+                body.innerHTML = '<div class="vault-loading">Loading tasks...</div>';
+                try {
+                    const res = await fetch('/api/dashboard/tasks');
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || 'Failed');
+                    this.renderChecklist(body, data.tasks, 'task');
+                } catch (e) {
+                    body.innerHTML = '<div class="vault-loading">Failed to load tasks.</div>';
+                }
+            },
+
+            async loadProjects() {
+                const body = document.getElementById('vault-projects-body');
+                if (!body) return;
+                body.innerHTML = '<div class="vault-loading">Loading projects...</div>';
+                try {
+                    const res = await fetch('/api/dashboard/projects');
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || 'Failed');
+                    this.renderChecklist(body, data.projects, 'project');
+                } catch (e) {
+                    body.innerHTML = '<div class="vault-loading">Failed to load projects.</div>';
+                }
+            },
+
+            renderChecklist(container, items, type) {
+                if (!items || items.length === 0) {
+                    container.innerHTML = `<div class="vault-empty">No ${type}s found.</div>`;
+                    return;
+                }
+
+                const pending = items.filter(i => !i.is_completed);
+                const completed = items.filter(i => i.is_completed);
+                let html = '';
+
+                // Pending items
+                pending.forEach(item => {
+                    const meta = type === 'task'
+                        ? (item.event_date || '') + (item.event_start_time ? ' ' + item.event_start_time : '')
+                        : this.formatDate(item.created_at);
+                    html += this.itemHTML(item, meta, false);
+                });
+
+                // Divider + completed
+                if (completed.length > 0) {
+                    html += `<div class="vault-divider">
+                        <span class="vault-divider-line"></span>
+                        <span class="vault-divider-label">Completed (${completed.length})</span>
+                        <span class="vault-divider-line"></span>
+                    </div>`;
+                    completed.forEach(item => {
+                        const meta = item.completed_at ? 'Done ' + this.formatDate(item.completed_at) : '';
+                        html += this.itemHTML(item, meta, true);
+                    });
+                }
+
+                html += `<div class="vault-count">${pending.length} open, ${completed.length} done</div>`;
+                container.innerHTML = html;
+            },
+
+            itemHTML(item, meta, isCompleted) {
+                const cls = isCompleted ? 'vault-item completed' : 'vault-item';
+                const checked = isCompleted ? 'checked' : '';
+                return `<div class="${cls}">
+                    <input type="checkbox" ${checked} onchange="vaultManager.toggle('${item.id}')">
+                    <div class="vault-item-info">
+                        <div class="vault-item-title">${this.esc(item.title)}</div>
+                        <div class="vault-item-meta">${this.esc(meta)}</div>
+                    </div>
+                </div>`;
+            },
+
+            async toggle(entryId) {
+                try {
+                    await fetch(`/api/dashboard/tasks/${entryId}/toggle`, { method: 'PATCH' });
+                    // Refresh whichever tab is active
+                    const tasksTab = document.getElementById('vault-tab-tasks');
+                    if (tasksTab && tasksTab.style.display !== 'none') {
+                        this.loadTasks();
+                    } else {
+                        this.loadProjects();
+                    }
+                } catch (e) {
+                    console.error('Toggle failed:', e);
+                }
+            },
+
+            async loadDocuments() {
+                const body = document.getElementById('vault-docs-body');
+                if (!body) return;
+                body.innerHTML = '<div class="vault-loading">Loading documents...</div>';
+
+                const cat = document.getElementById('vault-doc-category')?.value || '';
+                const sort = document.getElementById('vault-doc-sort')?.value || 'created_at';
+                const offset = this.docsPage * this.docsLimit;
+
+                try {
+                    let url = `/api/dashboard/entries?limit=${this.docsLimit}&offset=${offset}&sort=${sort}`;
+                    if (cat) url += `&category=${encodeURIComponent(cat)}`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || 'Failed');
+                    this.renderDocuments(body, data);
+                } catch (e) {
+                    body.innerHTML = '<div class="vault-loading">Failed to load documents.</div>';
+                }
+            },
+
+            renderDocuments(container, data) {
+                const { entries, total, offset, limit } = data;
+                if (!entries || entries.length === 0) {
+                    container.innerHTML = '<div class="vault-empty">No documents found.</div>';
+                    return;
+                }
+
+                let html = '';
+                entries.forEach(entry => {
+                    const isExpanded = this.expandedDoc === entry.id;
+                    html += `<div class="vault-doc-item" onclick="vaultManager.toggleExpand('${entry.id}')">
+                        <span class="vault-doc-badge">${this.esc(entry.category)}</span>
+                        <div class="vault-item-info">
+                            <div class="vault-item-title">${this.esc(entry.title)}</div>
+                            <div class="vault-item-meta">${this.formatDate(entry.created_at)}</div>
+                        </div>
+                    </div>`;
+                    if (isExpanded) {
+                        const content = entry.content || entry.summary || 'No content available.';
+                        html += `<div class="vault-doc-expand">${this.esc(content)}</div>`;
+                    }
+                });
+
+                // Pagination
+                const totalPages = Math.ceil(total / limit);
+                const currentPage = Math.floor(offset / limit) + 1;
+                html += `<div class="vault-pagination">
+                    <button ${currentPage <= 1 ? 'disabled' : ''} onclick="vaultManager.docsPage--;vaultManager.loadDocuments()">Prev</button>
+                    <span>${currentPage} / ${totalPages}</span>
+                    <button ${currentPage >= totalPages ? 'disabled' : ''} onclick="vaultManager.docsPage++;vaultManager.loadDocuments()">Next</button>
+                </div>`;
+
+                container.innerHTML = html;
+            },
+
+            toggleExpand(entryId) {
+                this.expandedDoc = this.expandedDoc === entryId ? null : entryId;
+                this.loadDocuments();
+            },
+
+            async loadCategories() {
+                try {
+                    const res = await fetch('/api/dashboard/categories');
+                    const data = await res.json();
+                    if (!data.success) return;
+                    const select = document.getElementById('vault-doc-category');
+                    if (!select) return;
+                    // Keep first "All" option, add categories
+                    select.innerHTML = '<option value="">All Categories</option>';
+                    for (const [cat, count] of Object.entries(data.categories)) {
+                        select.innerHTML += `<option value="${this.esc(cat)}">${this.esc(cat)} (${count})</option>`;
+                    }
+                } catch (e) {
+                    // Silent fail
+                }
+            },
+
+            formatDate(dateStr) {
+                if (!dateStr) return '';
+                try {
+                    const d = new Date(dateStr);
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                } catch {
+                    return dateStr;
+                }
+            },
+
+            esc(text) {
+                if (!text) return '';
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        };
+
+        async function openVaultWindow() {
+            const win = document.getElementById('vault-window');
+            if (!win) return;
+            win.style.display = 'flex';
+
+            if (!vaultManager.initialized) {
+                vaultManager.initialized = true;
+                makeDraggable('vault-window', '.vault-drag-handle', 'vaultWindowPosition');
+            }
+
+            // Load active tab data
+            vaultManager.loadTasks();
+            vaultManager.loadCategories();
+
+            // Re-init icons
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function closeVaultWindow() {
+            const win = document.getElementById('vault-window');
+            if (win) win.style.display = 'none';
+        }
+
+        function toggleVaultWindow() {
+            const win = document.getElementById('vault-window');
+            if (!win) return;
+            if (win.style.display === 'none' || !win.style.display) {
+                openVaultWindow();
+            } else {
+                closeVaultWindow();
+            }
+        }
+
+        function switchVaultTab(tab) {
+            // Switch tab buttons
+            document.querySelectorAll('.vault-tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+            // Switch tab content
+            document.querySelectorAll('.vault-tab-content').forEach(content => {
+                content.style.display = content.id === `vault-tab-${tab}` ? 'block' : 'none';
+            });
+            // Load data for the active tab
+            if (tab === 'tasks') vaultManager.loadTasks();
+            else if (tab === 'projects') vaultManager.loadProjects();
+            else if (tab === 'documents') { vaultManager.docsPage = 0; vaultManager.loadDocuments(); }
+        }
     </script>
 
 </body>

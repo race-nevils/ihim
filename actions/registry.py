@@ -75,6 +75,13 @@ ACTIONS = {
         "category": "tools",
         "has_modal": True,
     },
+    "workspaces": {
+        "name": "Workspaces",
+        "description": "Active git branches and parallel development sessions",
+        "icon": "git-branch",
+        "category": "tools",
+        "has_modal": True,
+    },
     # Team actions (consolidated into Mission Control)
     "software_dev_team": {
         "name": "Feature Builder",
@@ -138,6 +145,14 @@ def run_action(action_id: str) -> dict:
     elif action_id == "google_calendar":
         # Handled by UI (modal for Google Calendar)
         return {"success": True, "message": "Opening Google Calendar..."}
+
+    elif action_id == "health":
+        # Handled by UI (modal for Health program)
+        return {"success": True, "message": "Opening Health..."}
+
+    elif action_id == "workspaces":
+        # Handled by UI (modal for Workspaces)
+        return {"success": True, "message": "Opening Workspaces..."}
 
     elif action_id == "software_dev_team":
         # This action is handled by the UI (shows input modal)

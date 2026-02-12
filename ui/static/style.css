@@ -6255,3 +6255,199 @@ main {
     color: var(--text-muted);
     padding: 4px 12px;
 }
+
+/* ========================================
+   WORKSPACES WINDOW (Git Worktrees)
+   ======================================== */
+
+.workspaces-window {
+    position: fixed;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    width: 600px;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg), 0 2px 6px rgba(139, 92, 246, 0.15);
+    z-index: 100;
+    min-width: 400px;
+    min-height: 250px;
+    overflow: hidden;
+    resize: both;
+}
+
+.workspaces-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--glass-border);
+    cursor: move;
+    user-select: none;
+}
+
+.workspaces-label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+}
+
+.workspaces-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s;
+}
+
+.workspaces-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--accent);
+}
+
+.workspaces-body {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.workspaces-loading,
+.workspaces-error,
+.workspaces-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--space-8);
+}
+
+.workspaces-empty p {
+    margin: 0.5rem 0;
+}
+
+.workspaces-hint {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+}
+
+.workspaces-hint code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.workspaces-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.workspace-item {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    transition: all 0.2s;
+}
+
+.workspace-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+.workspace-item.status-active {
+    border-left: 3px solid #10b981;
+}
+
+.workspace-item.status-merged {
+    border-left: 3px solid #6b7280;
+}
+
+.workspace-item.status-stale {
+    border-left: 3px solid #f59e0b;
+}
+
+.workspace-item.status-closed {
+    border-left: 3px solid #ef4444;
+}
+
+.workspace-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-2);
+}
+
+.workspace-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--accent);
+}
+
+.workspace-status-badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.workspace-status-badge.status-active {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.workspace-status-badge.status-merged {
+    background: rgba(107, 114, 128, 0.2);
+    color: #9ca3af;
+}
+
+.workspace-status-badge.status-stale {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+.workspace-status-badge.status-closed {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.workspace-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.workspace-branch code {
+    background: rgba(139, 92, 246, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    color: #a78bfa;
+}
+
+.workspace-purpose {
+    font-style: italic;
+    color: var(--text-dim);
+}
+
+.workspace-activity {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}

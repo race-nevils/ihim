@@ -608,6 +608,7 @@
             'shield': 'shield-check',
             'lightbulb': 'lightbulb',
             'calendar': 'calendar-days',
+            'git-branch': 'git-branch',
             'default': 'zap'
         };
 
@@ -725,6 +726,10 @@
             }
             if (actionId === 'health') {
                 openHealthWindow();
+                return;
+            }
+            if (actionId === 'workspaces') {
+                toggleWorkspacesWindow();
                 return;
             }
 
@@ -3514,7 +3519,7 @@
         // =============================================================================
 
         function initializeWidgetResize() {
-            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'health-window', 'chat-window', 'vault-window'];
+            const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'health-window', 'chat-window', 'vault-window', 'workspaces-window'];
 
             // Restore saved sizes from localStorage
             widgetIds.forEach(widgetId => {
@@ -4247,6 +4252,18 @@
         </div>
     </div>
 
+<!-- Workspaces Window (Draggable) -->
+    <div id="workspaces-window" class="workspaces-window" style="display: none;">
+        <div class="workspaces-header workspaces-drag-handle">
+            <span class="workspaces-label"><i data-lucide="git-branch" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Workspaces</span>
+            <button class="workspaces-close" onclick="closeWorkspacesWindow()">&times;</button>
+        </div>
+
+        <div class="workspaces-body" id="workspaces-body">
+            <div class="workspaces-loading">Loading workspaces...</div>
+        </div>
+    </div>
+
 <!-- Brain Chat Window (Draggable) -->
     <div id="chat-window" class="chat-window" style="display: none;">
         <div class="chat-header chat-drag-handle">
@@ -4798,6 +4815,108 @@
             if (tab === 'tasks') vaultManager.loadTasks();
             else if (tab === 'projects') vaultManager.loadProjects();
             else if (tab === 'documents') { vaultManager.docsPage = 0; vaultManager.loadDocuments(); }
+        }
+
+        // =============================================================================
+        // WORKSPACES WINDOW
+        // =============================================================================
+
+        const workspacesManager = {
+            initialized: false,
+
+            async loadWorkspaces() {
+                const body = document.getElementById('workspaces-body');
+                if (!body) return;
+                body.innerHTML = '<div class="workspaces-loading">Loading workspaces...</div>';
+
+                try {
+                    const res = await fetch('/api/workspaces');
+                    const data = await res.json();
+
+                    if (!data.success) {
+                        throw new Error('Failed to load workspaces');
+                    }
+
+                    if (data.workspaces.length === 0) {
+                        body.innerHTML = `
+                            <div class="workspaces-empty">
+                                <p>No active workspaces</p>
+                                <p class="workspaces-hint">Use <code>/workspace create &lt;name&gt;</code> in the agent harness to create a workspace</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    // Render workspaces
+                    let html = '<div class="workspaces-list">';
+                    data.workspaces.forEach(ws => {
+                        const statusClass = ws.status === 'active' ? 'status-active' :
+                                          ws.status === 'merged' ? 'status-merged' :
+                                          ws.status === 'stale' ? 'status-stale' : 'status-closed';
+
+                        html += `
+                            <div class="workspace-item ${statusClass}">
+                                <div class="workspace-header">
+                                    <span class="workspace-name">${this.escapeHtml(ws.name)}</span>
+                                    <span class="workspace-status-badge ${statusClass}">${ws.status}</span>
+                                </div>
+                                <div class="workspace-details">
+                                    <div class="workspace-branch">Branch: <code>${this.escapeHtml(ws.branch)}</code></div>
+                                    ${ws.purpose ? `<div class="workspace-purpose">${this.escapeHtml(ws.purpose)}</div>` : ''}
+                                    ${ws.last_activity_relative ? `<div class="workspace-activity">Last active: ${ws.last_activity_relative}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+
+                    body.innerHTML = html;
+                } catch (e) {
+                    console.error('Failed to load workspaces:', e);
+                    body.innerHTML = '<div class="workspaces-error">Failed to load workspaces</div>';
+                }
+            },
+
+            escapeHtml(unsafe) {
+                return unsafe
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+        };
+
+        async function openWorkspacesWindow() {
+            const win = document.getElementById('workspaces-window');
+            if (!win) return;
+            win.style.display = 'flex';
+
+            if (!workspacesManager.initialized) {
+                workspacesManager.initialized = true;
+                makeDraggable('workspaces-window', '.workspaces-drag-handle', 'workspacesWindowPosition');
+            }
+
+            // Load workspaces
+            await workspacesManager.loadWorkspaces();
+
+            // Re-init icons
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function closeWorkspacesWindow() {
+            const win = document.getElementById('workspaces-window');
+            if (win) win.style.display = 'none';
+        }
+
+        function toggleWorkspacesWindow() {
+            const win = document.getElementById('workspaces-window');
+            if (!win) return;
+            if (win.style.display === 'none' || !win.style.display) {
+                openWorkspacesWindow();
+            } else {
+                closeWorkspacesWindow();
+            }
         }
     </script>
 

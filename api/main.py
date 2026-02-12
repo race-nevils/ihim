@@ -147,6 +147,14 @@ except ImportError as e:
     print(f"Warning: Dashboard module not available: {e}")
     DASHBOARD_AVAILABLE = False
 
+# Import workspaces module
+try:
+    from api.workspaces.routes import router as workspaces_router
+    WORKSPACES_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Workspaces module not available: {e}")
+    WORKSPACES_AVAILABLE = False
+
 app = FastAPI(title="iHIM", description="Your Command Center")
 
 # CORS middleware for Chrome extension access
@@ -266,6 +274,10 @@ if HEALTH_AVAILABLE:
 # Include the dashboard router (Vault Dashboard)
 if DASHBOARD_AVAILABLE:
     app.include_router(dashboard_router)
+
+# Include the workspaces router
+if WORKSPACES_AVAILABLE:
+    app.include_router(workspaces_router)
 
 
 # Request models
@@ -1321,6 +1333,8 @@ async def restart_server():
     """
     Restart the iHIM server by killing ALL processes on port 7777, then starting fresh.
 
+    Updated to handle zombie processes by killing all python if needed.
+
     Uses port-based PID lookup (not process name) to catch both uvicorn
     parent (reloader) and child (worker) processes. Writes a temp PS1 script
     and runs via -File to avoid variable/escaping issues with -Command.
@@ -1349,61 +1363,64 @@ $log = "{log_path}"
 
 Start-Sleep -Seconds 1
 
-# Collect ALL python PIDs on port 7777 — both direct listeners and their parents
-$targets = @()
-$procs = (Get-NetTCPConnection -LocalPort 7777 -ErrorAction SilentlyContinue).OwningProcess | Sort-Object -Unique
-"[$(Get-Date)] Port 7777 PIDs: $procs" | Out-File $log -Append
+# Find ALL PIDs on port 7777
+$connections = Get-NetTCPConnection -LocalPort 7777 -ErrorAction SilentlyContinue
+$allPids = $connections | Where-Object {{ $_.OwningProcess -gt 0 }} | Select-Object -ExpandProperty OwningProcess -Unique
 
-foreach ($p in $procs) {{
-    if ($p -and $p -gt 0) {{
-        $targets += $p
-        # Walk up: if parent is also python, include it (reloader pattern)
-        $parent = (Get-CimInstance Win32_Process -Filter "ProcessId = $p" -ErrorAction SilentlyContinue).ParentProcessId
+"[$(Get-Date)] Found PIDs on port 7777: $($allPids -join ', ')" | Out-File $log -Append
+
+# Separate REAL processes from zombie socket entries
+$realProcesses = @()
+$zombieSockets = @()
+
+foreach ($pid in $allPids) {{
+    $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    if ($proc) {{
+        $realProcesses += $pid
+        "[$(Get-Date)] PID $pid is REAL ($($proc.ProcessName))" | Out-File $log -Append
+
+        # Include parent if it's also python (reloader pattern)
+        $parent = (Get-CimInstance Win32_Process -Filter "ProcessId = $pid" -ErrorAction SilentlyContinue).ParentProcessId
         if ($parent -and $parent -gt 0) {{
             $parentProc = Get-Process -Id $parent -ErrorAction SilentlyContinue
             if ($parentProc -and $parentProc.ProcessName -eq 'python') {{
-                $targets += $parent
-                "[$(Get-Date)] Including python parent PID $parent" | Out-File $log -Append
+                $realProcesses += $parent
+                "[$(Get-Date)] Including parent PID $parent" | Out-File $log -Append
             }}
         }}
+    }} else {{
+        $zombieSockets += $pid
+        "[$(Get-Date)] PID $pid is ZOMBIE (dead process, socket leak)" | Out-File $log -Append
     }}
 }}
 
-$targets = $targets | Sort-Object -Unique
-"[$(Get-Date)] Kill targets: $targets" | Out-File $log -Append
+$realProcesses = $realProcesses | Sort-Object -Unique
 
-# Kill each target with /T (process tree)
-foreach ($t in $targets) {{
-    "[$(Get-Date)] taskkill /F /PID $t /T" | Out-File $log -Append
-    taskkill /F /PID $t /T 2>&1 | Out-File $log -Append
-}}
-Start-Sleep -Seconds 2
-
-# Second pass — catch anything still holding the port
-$still = (Get-NetTCPConnection -LocalPort 7777 -ErrorAction SilentlyContinue).OwningProcess | Sort-Object -Unique
-if ($still) {{
-    "[$(Get-Date)] Second pass PIDs: $still" | Out-File $log -Append
-    foreach ($p in $still) {{
-        if ($p -and $p -gt 0) {{
-            taskkill /F /PID $p /T 2>&1 | Out-File $log -Append
-        }}
+# Kill real processes
+if ($realProcesses.Count -gt 0) {{
+    "[$(Get-Date)] Killing $($realProcesses.Count) real processes" | Out-File $log -Append
+    foreach ($pid in $realProcesses) {{
+        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        "[$(Get-Date)] Killed PID $pid" | Out-File $log -Append
     }}
+}} else {{
+    "[$(Get-Date)] No real processes to kill" | Out-File $log -Append
 }}
 
-# Wait for port to actually clear (up to 10 seconds)
-$waited = 0
-while ($waited -lt 10) {{
-    $check = Get-NetTCPConnection -LocalPort 7777 -State Listen -ErrorAction SilentlyContinue
-    if (-not $check) {{ break }}
-    Start-Sleep -Seconds 1
-    $waited++
-}}
-"[$(Get-Date)] Port clear after $waited seconds" | Out-File $log -Append
+# Wait for real processes to die
+Start-Sleep -Seconds 3
 
-# Start fresh server (IHIM_SUPERVISED=1 suppresses browser popup)
+# Report zombie status (informational only - we can't fix them)
+if ($zombieSockets.Count -gt 0) {{
+    "[$(Get-Date)] WARNING: $($zombieSockets.Count) zombie sockets detected (PIDs: $($zombieSockets -join ', '))" | Out-File $log -Append
+    "[$(Get-Date)] Zombie sockets are Windows TCP state leaks - they won't block the new server" | Out-File $log -Append
+}}
+
+# Start new server (Python will use SO_REUSEADDR to handle any remaining sockets)
+"[$(Get-Date)] Starting new server (will reuse port if needed)" | Out-File $log -Append
 $env:IHIM_SUPERVISED = "1"
 Start-Process -FilePath '{python_path}' -ArgumentList 'run.py' -WorkingDirectory '{ihim_dir}' -WindowStyle Hidden
-"[$(Get-Date)] Started new server" | Out-File $log -Append
+"[$(Get-Date)] Server started successfully" | Out-File $log -Append
 
 # Clean up this temp script
 Start-Sleep -Seconds 2

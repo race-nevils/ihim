@@ -20,7 +20,8 @@ CONFIDENCE_THRESHOLD = 0.8
 # Tasks = dated/calendar items, Projects = undated action items
 CLASSIFY_PROMPT = """Classify this note into exactly ONE category by following this decision tree IN ORDER:
 
-STEP 1: Is this about a PERSON (name mentioned, relationship, contact info, conversation)?
+STEP 1: Is this about a SPECIFIC NAMED PERSON (actual name like "Sarah", "Dr. Smith", relationship, contact info, conversation with someone)?
+  Note: Generic terms like "users", "customers", "clients", "people" are NOT specific people.
   → YES: Category = "People"
   → NO: Continue to Step 2
 
@@ -28,8 +29,11 @@ STEP 2: Does it have a SPECIFIC DATE or TIME for an action, appointment, or dead
   → YES: Category = "Tasks"
   → NO: Continue to Step 3
 
-STEP 3: Is there an ACTION to complete but NO specific date? (verb like: clean, call, buy, fix, build, send, check)
-  → YES: Category = "Projects"
+STEP 3: Is there an ACTION to complete but NO specific date? Look for:
+  - Action verbs: clean, call, buy, fix, build, send, check, update, add, remove, set up
+  - Complaint/bug patterns: "isn't working", "broken", "doesn't work", "not functioning", "failed"
+  - Intent/desire patterns: "I want", "I need", "should be", "needs to be", "we need to"
+  → YES to any: Category = "Projects"
   → NO: Continue to Step 4
 
 STEP 4: Is this a MULTI-STEP initiative or thing being built (no specific deadline)?
@@ -71,6 +75,7 @@ EXAMPLES:
 - "Tax documents due by Feb 16th" → Tasks, calendar: {{"is_event": true, "title": "Tax Documents Due", "date": "2026-02-16", "time": null, "all_day": true}}
 - "Need to clean oil from prop" → Projects, calendar: null (action but no date = Project)
 - "Build a waitlist signup feature" → Projects, calendar: null (multi-step, no deadline)
+- "The widget isn't working, I want it on the main dashboard" → Projects, calendar: null (complaint + intent = action item, no date)
 - "What if we used Redis?" → Ideas, calendar: null (no date, no action)
 - "Sarah's phone number is 555-1234" → People, calendar: null (no date)
 

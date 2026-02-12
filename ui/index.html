@@ -50,11 +50,6 @@
 
         <div class="bar-spacer"></div>
 
-        <!-- Vault Dashboard toggle -->
-        <div class="bar-widget" onclick="toggleVaultWindow()" style="cursor:pointer;" title="Vault Dashboard">
-            <span class="bar-label" style="color:var(--accent-gold);">Vault</span>
-        </div>
-
         <!-- Brain Chat toggle -->
         <div class="bar-widget" onclick="toggleChatWindow()" style="cursor:pointer;" title="Brain Chat">
             <span class="bar-label" style="color:var(--color-power);">Chat</span>
@@ -609,6 +604,7 @@
             'lightbulb': 'lightbulb',
             'calendar': 'calendar-days',
             'git-branch': 'git-branch',
+            'archive': 'archive',
             'default': 'zap'
         };
 
@@ -730,6 +726,10 @@
             }
             if (actionId === 'workspaces') {
                 toggleWorkspacesWindow();
+                return;
+            }
+            if (actionId === 'vault') {
+                toggleVaultWindow();
                 return;
             }
 
@@ -4779,6 +4779,25 @@
         async function openVaultWindow() {
             const win = document.getElementById('vault-window');
             if (!win) return;
+
+            // Restore saved position or center on screen
+            let posRestored = false;
+            try {
+                const saved = localStorage.getItem('vaultWindowPosition');
+                if (saved) {
+                    const { x, y } = JSON.parse(saved);
+                    if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
+                        win.style.left = x + 'px';
+                        win.style.top = y + 'px';
+                        posRestored = true;
+                    }
+                }
+            } catch (e) { console.warn('Failed to restore vault position:', e); }
+            if (!posRestored) {
+                win.style.left = Math.max(0, (window.innerWidth - 700) / 2) + 'px';
+                win.style.top = Math.max(0, (window.innerHeight - 600) / 2) + 'px';
+            }
+
             win.style.display = 'flex';
 
             if (!vaultManager.initialized) {
@@ -4858,14 +4877,16 @@
                     let html = '<div class="workspaces-list">';
                     data.workspaces.forEach(ws => {
                         const statusClass = ws.status === 'active' ? 'status-active' :
+                                          ws.status === 'branch-only' ? 'status-branch-only' :
                                           ws.status === 'merged' ? 'status-merged' :
                                           ws.status === 'stale' ? 'status-stale' : 'status-closed';
+                        const statusLabel = ws.status === 'branch-only' ? 'branch only' : ws.status;
 
                         html += `
                             <div class="workspace-item ${statusClass}">
                                 <div class="workspace-header">
                                     <span class="workspace-name">${this.escapeHtml(ws.name)}</span>
-                                    <span class="workspace-status-badge ${statusClass}">${ws.status}</span>
+                                    <span class="workspace-status-badge ${statusClass}">${statusLabel}</span>
                                 </div>
                                 <div class="workspace-details">
                                     <div class="workspace-branch">Branch: <code>${this.escapeHtml(ws.branch)}</code></div>
@@ -4897,6 +4918,25 @@
         async function openWorkspacesWindow() {
             const win = document.getElementById('workspaces-window');
             if (!win) return;
+
+            // Restore saved position or center on screen
+            let posRestored = false;
+            try {
+                const saved = localStorage.getItem('workspacesWindowPosition');
+                if (saved) {
+                    const { x, y } = JSON.parse(saved);
+                    if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
+                        win.style.left = x + 'px';
+                        win.style.top = y + 'px';
+                        posRestored = true;
+                    }
+                }
+            } catch (e) { console.warn('Failed to restore workspaces position:', e); }
+            if (!posRestored) {
+                win.style.left = Math.max(0, (window.innerWidth - 600) / 2) + 'px';
+                win.style.top = Math.max(0, (window.innerHeight - 500) / 2) + 'px';
+            }
+
             win.style.display = 'flex';
 
             if (!workspacesManager.initialized) {

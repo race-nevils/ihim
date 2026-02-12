@@ -82,6 +82,13 @@ ACTIONS = {
         "category": "tools",
         "has_modal": True,
     },
+    "vault": {
+        "name": "Vault",
+        "description": "Tasks, projects, and document browser",
+        "icon": "archive",
+        "category": "tools",
+        "has_modal": True,
+    },
     # Team actions (consolidated into Mission Control)
     "software_dev_team": {
         "name": "Feature Builder",
@@ -153,6 +160,10 @@ def run_action(action_id: str) -> dict:
     elif action_id == "workspaces":
         # Handled by UI (modal for Workspaces)
         return {"success": True, "message": "Opening Workspaces..."}
+
+    elif action_id == "vault":
+        # Handled by UI (modal for Vault)
+        return {"success": True, "message": "Opening Vault..."}
 
     elif action_id == "software_dev_team":
         # This action is handled by the UI (shows input modal)

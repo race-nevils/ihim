@@ -382,10 +382,18 @@ def update_with_reclassify(
         try:
             # Remove old file if category changed
             if category_changed:
-                old_obsidian = OBSIDIAN_MEMORY / old_category / f"{sanitize_title(old_title)}.md"
+                old_dir = OBSIDIAN_MEMORY / old_category
+                old_obsidian = old_dir / f"{sanitize_title(old_title)}.md"
                 if old_obsidian.exists():
                     old_obsidian.unlink()
                     logger.info(f"Removed old Obsidian file: {old_obsidian}")
+                elif old_dir.exists():
+                    # Fallback: glob for fuzzy match (catches collision suffixes, unicode mismatches)
+                    for f in old_dir.glob("*.md"):
+                        if old_title.lower() in f.stem.lower():
+                            f.unlink()
+                            logger.info(f"Removed old Obsidian file (fuzzy match): {f}")
+                            break
 
             # Write to new location
             target_dir = OBSIDIAN_MEMORY / new_category

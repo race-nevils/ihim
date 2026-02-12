@@ -1297,8 +1297,15 @@
                 if (data.status === 'healthy') {
                     dot.classList.add('active');
                     if (data.tracked_count > 0) {
-                        const s = data.settling_count > 0 ? `/${data.settling_count}s` : '';
-                        val.textContent = `${data.tracked_count}f${s}`;
+                        // Check if any file is actively being processed
+                        const processing = data.tracked_files &&
+                            data.tracked_files.some(f => f.state === 'PROCESSING');
+                        if (processing) {
+                            val.textContent = 'Processing...';
+                        } else {
+                            const s = data.settling_count > 0 ? `/${data.settling_count}s` : '';
+                            val.textContent = `${data.tracked_count}f${s}`;
+                        }
                     } else {
                         val.textContent = 'Idle';
                     }

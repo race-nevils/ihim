@@ -15,6 +15,7 @@ import json
 import os
 import re
 import hashlib
+import threading
 import traceback
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
@@ -57,6 +58,7 @@ class InboxWatcher:
         self._poll_count = 0
         self._recent_activity = deque(maxlen=10)
         self._heartbeat_path = Path(__file__).parent.parent.parent / "data" / "watcher_heartbeat.json"
+        self._ollama_warmed_at = 0.0  # Timestamp of last Ollama warm-up
 
         # Ensure directories exist
         for source in self.sources:
@@ -166,6 +168,7 @@ class InboxWatcher:
 
                 if state == FileState.SETTLING:
                     logger.debug(f"Settling: {file_path.name}")
+                    self._warm_ollama()
             except Exception as e:
                 logger.error(f"Failed to stat {file_path.name}: {e}")
 
@@ -176,6 +179,18 @@ class InboxWatcher:
             # Mark as PROCESSING immediately to prevent race condition
             # Other poll cycles will see PROCESSING and skip this file
             self.tracker.mark_processing(file_path)
+
+            # B2: Fresh heartbeat BEFORE the blocking LLM call.
+            # Even if Ollama cold-starts (30-50s), heartbeat timestamp
+            # is recent enough to keep dashboard showing "healthy".
+            self._write_heartbeat([])
+
+            # B3: Log file age for latency diagnostics
+            try:
+                file_age = time.time() - file_path.stat().st_mtime
+                logger.info(f"Processing {original_name} (file age: {file_age:.0f}s)")
+            except OSError:
+                logger.info(f"Processing {original_name}")
 
             try:
                 content = self.read_file_content(file_path)
@@ -294,6 +309,44 @@ class InboxWatcher:
     def stop(self):
         """Stop the watcher."""
         self._running = False
+
+    def _warm_ollama(self):
+        """Pre-load Ollama model into VRAM during settle period.
+
+        When Ollama idles for ~5 min, it unloads from VRAM. The first
+        classification call then blocks for 30-50s (cold start), causing
+        the heartbeat to go stale and dashboard to flash "Down".
+
+        Fix: When a file enters SETTLING, fire a tiny generate request in
+        a background thread. By the time the file is READY (10s later),
+        the model is loaded and classification is fast.
+        """
+        now = time.time()
+        if now - self._ollama_warmed_at < 60:
+            return  # Already warmed recently
+        self._ollama_warmed_at = now
+
+        def _ping():
+            try:
+                import httpx
+                base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+                with httpx.Client(timeout=60.0) as client:
+                    client.post(
+                        f"{base_url}/api/generate",
+                        json={
+                            "model": "qwen2.5:7b-fast",
+                            "prompt": "hi",
+                            "stream": False,
+                            "options": {"num_predict": 1}
+                        }
+                    )
+                logger.info("Ollama warm-up complete")
+            except Exception as e:
+                logger.debug(f"Ollama warm-up failed (non-fatal): {e}")
+
+        thread = threading.Thread(target=_ping, daemon=True)
+        thread.start()
+        logger.info("Ollama warm-up started (background)")
 
     def _write_heartbeat(self, last_results: list[dict]):
         """Write heartbeat JSON for the dashboard API to read."""

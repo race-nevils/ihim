@@ -6426,6 +6426,15 @@ main {
     color: #ef4444;
 }
 
+.workspace-item.status-branch-only {
+    border-left-color: #6366f1;
+}
+
+.workspace-status-badge.status-branch-only {
+    background: rgba(99, 102, 241, 0.2);
+    color: #818cf8;
+}
+
 .workspace-details {
     display: flex;
     flex-direction: column;

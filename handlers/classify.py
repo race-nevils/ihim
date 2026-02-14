@@ -56,9 +56,10 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
         logger.info(f"[entity-skip-llm] High-confidence entity detected: {entity['entity_type']}")
     else:
         # === EXISTING Layer 3: LLM Classification ===
-        # Pass CLEAN content (instructions stripped)
+        # Pass CLEAN content (instructions stripped) + title for context
+        title = extract_title(clean_content or content, source_filename)
         classification = adapter.generate_json(
-            get_classify_prompt(clean_content or content),
+            get_classify_prompt(clean_content or content, title),
             model=OllamaAdapter.FAST_MODEL
         )
 

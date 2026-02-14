@@ -20,7 +20,7 @@ CONFIDENCE_THRESHOLD = 0.8
 # Tasks = dated/calendar items, Projects = undated action items
 CLASSIFY_PROMPT = """Classify this note into exactly ONE category by following this decision tree IN ORDER:
 
-STEP 1: Is this about a SPECIFIC NAMED PERSON (actual name like "Sarah", "Dr. Smith", relationship, contact info, conversation with someone)?
+STEP 1: Is this about a SPECIFIC NAMED PERSON (check BOTH the title AND content - actual name like "Sarah", "Dr. Smith", relationship like "Mom", "Dad", contact info, conversation with someone)?
   Note: Generic terms like "users", "customers", "clients", "people" are NOT specific people.
   → YES: Category = "People"
   → NO: Continue to Step 2
@@ -89,11 +89,14 @@ Note: {content}
 JSON response:"""
 
 
-def get_classify_prompt(content: str) -> str:
-    """Format the classification prompt with today's date and day-of-week injected."""
+def get_classify_prompt(content: str, title: str = "") -> str:
+    """Format the classification prompt with today's date and title injected."""
     today = date.today()
     today_str = f"{today.isoformat()} ({today.strftime('%A')})"
-    return CLASSIFY_PROMPT.replace("{{today}}", today_str).format(content=content)
+    prompt = CLASSIFY_PROMPT.replace("{{today}}", today_str)
+    if title:
+        return prompt.format(content=f"Title: {title}\n\n{content}")
+    return prompt.format(content=content)
 
 
 def slugify(text: str) -> str:

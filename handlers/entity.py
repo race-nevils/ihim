@@ -62,6 +62,13 @@ def detect_entity_type(content: str, title: str = "") -> Optional[dict]:
     # Combine title and content for matching
     text = f"{title} {content}" if title else content
 
+    # Normalize apostrophe variants before regex matching
+    # Mobile keyboards produce smart quotes that break entity patterns
+    text = text.replace('\u2018', "'")  # left single quote
+    text = text.replace('\u2019', "'")  # right single quote
+    text = text.replace('\u02bc', "'")  # modifier letter apostrophe
+    text = text.replace('\uff07', "'")  # fullwidth apostrophe
+
     # Check each pattern
     for pattern_def in matcher.get_patterns():
         regex = pattern_def["pattern_regex"]

@@ -2,12 +2,14 @@
 import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from googleapiclient.errors import HttpError
 
 from api.calendar.google_auth import (
     get_credentials,
     start_auth_flow,
     is_authenticated,
     revoke_auth,
+    token_health,
     CREDS_FILE,
 )
 from api.calendar.models import CreateEventRequest, PushBrainEntryRequest, SyncRequest
@@ -46,6 +48,7 @@ async def calendar_status():
         "credentials_file_exists": CREDS_FILE.exists(),
         "last_sync": cache.get("cached_at"),
         "event_count": len(cache.get("events", [])),
+        "token_health": token_health(),
     }
 
 
@@ -119,6 +122,13 @@ async def sync_calendar(request: SyncRequest = SyncRequest()):
             "cached_at": cache.get("cached_at"),
             "count": len(cache.get("events", [])),
         }
+    except HttpError as e:
+        status = e.resp.status
+        if status == 401:
+            logger.error(f"Sync failed: auth expired")
+            raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
+        logger.error(f"Sync failed: Google API error {status}: {e}")
+        raise HTTPException(status_code=502, detail=f"Google API error: {e}")
     except Exception as e:
         logger.error(f"Sync failed: {e}")
         raise HTTPException(status_code=500, detail=f"Sync failed: {e}")
@@ -148,6 +158,13 @@ async def create_event(request: CreateEventRequest):
             "event": created,
             "message": f"Created: {request.summary}",
         }
+    except HttpError as e:
+        status = e.resp.status
+        if status == 401:
+            logger.error(f"Create event failed: auth expired")
+            raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
+        logger.error(f"Create event failed: Google API error {status}: {e}")
+        raise HTTPException(status_code=502, detail=f"Google API error: {e}")
     except Exception as e:
         logger.error(f"Create event failed: {e}")
         raise HTTPException(status_code=500, detail=f"Create event failed: {e}")
@@ -164,6 +181,13 @@ async def remove_event(event_id: str, calendar_id: str = "primary"):
         save_to_cache(events)
 
         return {"success": True, "message": f"Deleted event {event_id}"}
+    except HttpError as e:
+        status = e.resp.status
+        if status == 401:
+            logger.error(f"Delete event failed: auth expired")
+            raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
+        logger.error(f"Delete event failed: Google API error {status}: {e}")
+        raise HTTPException(status_code=502, detail=f"Google API error: {e}")
     except Exception as e:
         logger.error(f"Delete event failed: {e}")
         raise HTTPException(status_code=500, detail=f"Delete event failed: {e}")
@@ -214,6 +238,13 @@ async def push_brain_entry(request: PushBrainEntryRequest):
         }
     except HTTPException:
         raise
+    except HttpError as e:
+        status = e.resp.status
+        if status == 401:
+            logger.error(f"Push brain entry failed: auth expired")
+            raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
+        logger.error(f"Push brain entry failed: Google API error {status}: {e}")
+        raise HTTPException(status_code=502, detail=f"Google API error: {e}")
     except Exception as e:
         logger.error(f"Push brain entry failed: {e}")
         raise HTTPException(status_code=500, detail=f"Push failed: {e}")

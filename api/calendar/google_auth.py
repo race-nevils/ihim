@@ -6,6 +6,7 @@ from typing import Optional
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError, TransportError
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,14 @@ def get_credentials() -> Optional[Credentials]:
         try:
             creds.refresh(Request())
             TOKEN_FILE.write_text(creds.to_json(), encoding="utf-8")
+        except RefreshError as e:
+            logger.error(f"Token refresh permanently failed (re-auth needed): {e}")
+            return None
+        except TransportError as e:
+            logger.warning(f"Token refresh failed (network issue, transient): {e}")
+            return None
         except Exception as e:
-            logger.warning(f"Token refresh failed: {e}")
+            logger.warning(f"Token refresh failed (unexpected): {e}")
             return None
 
     if creds and creds.valid:
@@ -76,3 +83,41 @@ def revoke_auth() -> bool:
         logger.info("Google Calendar token revoked")
         return True
     return False
+
+
+def token_health() -> dict:
+    """Read token state without triggering a refresh. For /status endpoint.
+
+    Returns dict with token_exists, valid, expired, expiry, needs_auth.
+    """
+    if not TOKEN_FILE.exists():
+        return {
+            "token_exists": False,
+            "valid": False,
+            "expired": False,
+            "expiry": None,
+            "needs_auth": True,
+        }
+
+    try:
+        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+    except Exception:
+        return {
+            "token_exists": True,
+            "valid": False,
+            "expired": False,
+            "expiry": None,
+            "needs_auth": True,
+        }
+
+    expiry_str = creds.expiry.isoformat() if creds.expiry else None
+    has_refresh = bool(creds.refresh_token)
+
+    return {
+        "token_exists": True,
+        "valid": creds.valid,
+        "expired": bool(creds.expired),
+        "expiry": expiry_str,
+        "has_refresh_token": has_refresh,
+        "needs_auth": not creds.valid and (not has_refresh or not creds.expired),
+    }

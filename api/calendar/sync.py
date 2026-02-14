@@ -2,11 +2,13 @@
 import json
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from google.oauth2.credentials import Credentials
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,27 @@ DEFAULT_TIMEZONE = os.environ.get("IHIM_TIMEZONE", "America/Chicago")
 def _build_service(creds: Credentials):
     """Build the Google Calendar API service."""
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+
+def _execute_with_retry(request, max_retries: int = 2):
+    """Execute a Google API request with retry on transient errors.
+
+    Retries on 429 (rate limit), 500, 503 with exponential backoff.
+    401 (auth failure) bubbles up immediately — no retry.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            return request.execute()
+        except HttpError as e:
+            status = e.resp.status
+            if status == 401:
+                raise  # Auth failure — don't retry
+            if status in (429, 500, 503) and attempt < max_retries:
+                wait = (attempt + 1)  # 1s, 2s
+                logger.warning(f"Google API {status}, retrying in {wait}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait)
+                continue
+            raise  # Non-retryable or retries exhausted
 
 
 def pull_events(
@@ -57,7 +80,7 @@ def pull_events(
     page_token = None
 
     while True:
-        events_result = (
+        events_result = _execute_with_retry(
             service.events()
             .list(
                 calendarId=calendar_id,
@@ -68,7 +91,6 @@ def pull_events(
                 orderBy="startTime",
                 pageToken=page_token,
             )
-            .execute()
         )
         all_events.extend(events_result.get("items", []))
         page_token = events_result.get("nextPageToken")
@@ -94,10 +116,9 @@ def push_event(
         "start": {"dateTime": start, "timeZone": DEFAULT_TIMEZONE},
         "end": {"dateTime": end, "timeZone": DEFAULT_TIMEZONE},
     }
-    created = (
+    created = _execute_with_retry(
         service.events()
         .insert(calendarId=calendar_id, body=event_body)
-        .execute()
     )
     logger.info(f"Created GCal event: {created.get('id')} - {summary}")
     return created
@@ -132,10 +153,9 @@ def update_event(
         }
     if recurrence:
         event_body["recurrence"] = recurrence
-    updated = (
+    updated = _execute_with_retry(
         service.events()
         .patch(calendarId=calendar_id, eventId=event_id, body=event_body)
-        .execute()
     )
     logger.info(f"Updated GCal event: {updated.get('id')} - {summary}")
     return updated
@@ -148,7 +168,9 @@ def delete_event(
 ) -> bool:
     """Delete an event from Google Calendar."""
     service = _build_service(creds)
-    service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+    _execute_with_retry(
+        service.events().delete(calendarId=calendar_id, eventId=event_id)
+    )
     logger.info(f"Deleted GCal event: {event_id}")
     return True
 

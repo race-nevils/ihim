@@ -157,6 +157,25 @@ except ImportError as e:
 
 app = FastAPI(title="iHIM", description="Your Command Center")
 
+
+@app.on_event("startup")
+async def refresh_google_token():
+    """Attempt to refresh Google Calendar token at boot.
+
+    Catches stale tokens early before users hit them. One lightweight
+    HTTP call to Google's token endpoint. Non-fatal if it fails.
+    """
+    if CALENDAR_AVAILABLE:
+        try:
+            from api.calendar.google_auth import get_credentials
+            creds = get_credentials()
+            if creds:
+                print("Google Calendar: token valid")
+            else:
+                print("Google Calendar: no valid token (re-auth needed)")
+        except Exception as e:
+            print(f"Google Calendar: startup token check failed: {e}")
+
 # CORS middleware for Chrome extension access
 app.add_middleware(
     CORSMiddleware,

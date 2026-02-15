@@ -41,7 +41,7 @@ Raw Capture (mobile/desktop)
 |-------|------|
 | JSON-LD | `IHIM/data/local/brain/{slug}-{date}.jsonld` |
 | SQLite | `IHIM/data/brain.db` |
-| Obsidian | `Obsidian Vault/iHIM/iHIM Memory/{Category}/` |
+| Obsidian | `iHIM Vault/iHIM Memory/{Category}/` |
 
 **Vocabulary:** Schema.org (base) + Dublin Core + ActivityStreams + ihim: (custom)
 

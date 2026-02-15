@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Paths
 IHIM_ROOT = Path(__file__).parent.parent
 WORKSPACE_ROOT = IHIM_ROOT.parent
-OBSIDIAN_MEMORY = WORKSPACE_ROOT / "Obsidian Vault" / "iHIM" / "iHIM Memory"
+OBSIDIAN_MEMORY = WORKSPACE_ROOT / "iHIM Vault" / "iHIM Memory"
 LOGS_DIR = IHIM_ROOT / "data" / "local" / "brain" / "logs"
 
 

@@ -216,12 +216,14 @@ export function toggleChatMinimize() {
 // =====================
 
 export function openTeamModal() {
-    document.getElementById('team-modal').classList.add('active');
+    const dialog = document.getElementById('team-modal');
+    if (dialog && !dialog.open) dialog.showModal();
     document.getElementById('team-prompt').focus();
 }
 
 export function closeTeamModal() {
-    document.getElementById('team-modal').classList.remove('active');
+    const dialog = document.getElementById('team-modal');
+    if (dialog?.open) dialog.close();
     document.getElementById('team-prompt').value = '';
 }
 
@@ -271,13 +273,15 @@ const teamConfigs = {
 };
 
 export function openAgentTeamModal() {
-    document.getElementById('agent-team-modal').classList.add('active');
+    const dialog = document.getElementById('agent-team-modal');
+    if (dialog && !dialog.open) dialog.showModal();
     document.getElementById('agent-team-prompt').focus();
     updateAgentPreview();
 }
 
 export function closeAgentTeamModal() {
-    document.getElementById('agent-team-modal').classList.remove('active');
+    const dialog = document.getElementById('agent-team-modal');
+    if (dialog?.open) dialog.close();
     document.getElementById('agent-team-prompt').value = '';
     selectedTeamType = 'auto';
     document.getElementById('team-size-slider').value = 3;
@@ -379,14 +383,29 @@ export function initChatEvents() {
     // Send button
     document.getElementById('chat-send-btn')?.addEventListener('click', () => chatManager.send());
 
-    // Team modal outside-click
-    document.getElementById('team-modal')?.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal')) closeTeamModal();
+    // Team modal: backdrop click + ESC cleanup
+    const teamDialog = document.getElementById('team-modal');
+    teamDialog?.addEventListener('click', (e) => {
+        if (e.target === teamDialog) closeTeamModal();
+    });
+    teamDialog?.addEventListener('close', () => {
+        document.getElementById('team-prompt').value = '';
     });
 
-    // Agent team modal outside-click + Ctrl+Enter
-    document.getElementById('agent-team-modal')?.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal')) closeAgentTeamModal();
+    // Agent team modal: backdrop click + ESC cleanup
+    const agentDialog = document.getElementById('agent-team-modal');
+    agentDialog?.addEventListener('click', (e) => {
+        if (e.target === agentDialog) closeAgentTeamModal();
+    });
+    agentDialog?.addEventListener('close', () => {
+        document.getElementById('agent-team-prompt').value = '';
+        selectedTeamType = 'auto';
+        document.getElementById('team-size-slider').value = 3;
+        updateTeamSizeDisplay();
+        document.querySelectorAll('#agent-team-modal .team-type-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.type === 'auto') btn.classList.add('active');
+        });
     });
     document.getElementById('agent-team-prompt')?.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') spawnAgentTeam();

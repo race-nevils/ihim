@@ -38,7 +38,8 @@ async function loadSlashIdeas() {
 }
 
 export async function openSlashModal() {
-    document.getElementById('slash-modal').classList.add('active');
+    const dialog = document.getElementById('slash-modal');
+    if (dialog && !dialog.open) dialog.showModal();
     await Promise.all([loadSlashCommands(), loadSlashIdeas()]);
     renderSlashCommands();
     renderSlashIdeas();
@@ -47,7 +48,8 @@ export async function openSlashModal() {
 }
 
 export function closeSlashModal() {
-    document.getElementById('slash-modal').classList.remove('active');
+    const dialog = document.getElementById('slash-modal');
+    if (dialog?.open) dialog.close();
 }
 
 function getCategoryIcon(category) {
@@ -149,9 +151,10 @@ async function deleteSlashIdea(ideaId) {
 
 // Event initialization
 export function initSlashEvents() {
-    // Slash modal outside-click
-    document.getElementById('slash-modal')?.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal')) closeSlashModal();
+    // Slash modal: backdrop click to close (ESC handled natively by <dialog>)
+    const slashDialog = document.getElementById('slash-modal');
+    slashDialog?.addEventListener('click', (e) => {
+        if (e.target === slashDialog) closeSlashModal();
     });
 
     // Search input

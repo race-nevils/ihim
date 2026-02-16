@@ -60,32 +60,36 @@ class _NoOpContext:
 
 
 class _V3Context:
-    """Wrapper for Langfuse v3.x context API."""
+    """Wrapper for Langfuse v3.x context API using OpenTelemetry.
+
+    Langfuse v3 uses OTel under the hood — @observe creates OTel spans.
+    Child spans created via OTel's tracer are automatically parented and
+    captured by Langfuse's SpanProcessor. This replaces the broken
+    get_current_span() approach that silently returned None.
+    """
 
     @staticmethod
     def update_current_observation(**kwargs):
-        """Update current observation metadata using v3 API."""
+        """Update current span metadata via OTel attributes."""
         try:
-            from langfuse import get_current_span
-            span = get_current_span()
-            if span:
-                # v3.x uses update() method on span
-                span.update(**kwargs)
+            from opentelemetry import trace as otel_trace
+            current = otel_trace.get_current_span()
+            if current and current.is_recording():
+                for key, value in kwargs.get("metadata", kwargs).items():
+                    if value is not None:
+                        current.set_attribute(f"langfuse.{key}", str(value))
         except Exception:
-            pass  # Graceful degradation
+            pass
 
     @staticmethod
     @contextmanager
     def span(name: str):
-        """Create a tracing span using v3 API."""
+        """Create a nested tracing span via OTel tracer."""
         try:
-            from langfuse import get_current_span
-            parent = get_current_span()
-            if parent:
-                with parent.span(name=name) as child:
-                    yield child
-            else:
-                yield None
+            from opentelemetry import trace as otel_trace
+            tracer = otel_trace.get_tracer("ihim.handlers")
+            with tracer.start_as_current_span(name) as otel_span:
+                yield otel_span
         except Exception:
             yield None
 

@@ -116,7 +116,7 @@ DESKTOP_INBOX = InboxSource(
 )
 
 OBSIDIAN_INBOX = InboxSource(
-    path=WORKSPACE_ROOT / "Obsidian Vault" / "iHIM",
+    path=WORKSPACE_ROOT / "iHIM Vault",
     cleanup="move",  # Also archive (move deletes original)
     exclude_folders={".obsidian", "iHIM Memory", "processed"}
 )

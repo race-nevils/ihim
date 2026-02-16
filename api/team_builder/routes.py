@@ -3,18 +3,22 @@ Team Builder API Routes
 
 Endpoints for creating, managing, and spawning custom agent teams.
 
-Base path: /api/teams
+Routers:
+  - ``router``       → /api/teams  (template CRUD, structured spawn, instances)
+  - ``team_router``  → /api/team   (basic spawn/status/collapse/results/reset)
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
+import re
 import sys
 from pathlib import Path
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from team import route_prompt, spawn_agent_team, collapse_team
 from team.team_builder import (
     # Models
     AgentRole,
@@ -35,8 +39,8 @@ from team.team_builder import (
     route_to_team,
 )
 
-from team.spawner import spawn_agent_team
-from team.state import get_team_state
+from team.spawner import get_team_status, collect_results
+from team.state import get_team_state, reset_team_state
 
 router = APIRouter(prefix="/api/teams", tags=["Team Builder"])
 
@@ -485,3 +489,135 @@ async def get_quick_options():
             {"label": "Security audit", "template": "security-audit"},
         ]
     }
+
+
+# =============================================================================
+# BASIC TEAM ROUTES (legacy /api/team/ prefix — moved from main.py)
+# =============================================================================
+
+team_router = APIRouter(prefix="/api/team", tags=["Team"])
+
+
+class SpawnRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=5000, description="Task description")
+    project: str = Field(default="workspace", min_length=1, max_length=100)
+    agents: Optional[List[str]] = Field(None, min_items=1, max_items=20, description="Custom agent list")
+    team_name: Optional[str] = Field(None, min_length=1, max_length=100, description="Name for custom teams")
+
+    @classmethod
+    def validate_agent_names(cls, v):
+        if v is None:
+            return v
+        pattern = re.compile(r'^[a-zA-Z0-9_-]+$')
+        for agent in v:
+            if not pattern.match(agent):
+                raise ValueError(f"Invalid agent name '{agent}'. Only alphanumeric, dash, and underscore allowed.")
+            if len(agent) > 50:
+                raise ValueError(f"Agent name '{agent}' exceeds max length of 50 characters.")
+        return v
+
+
+class CustomSpawnRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=5000, description="Task description")
+    team_type: str = Field(default="auto", min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
+    team_size: int = Field(default=3, ge=1, le=20, description="Number of agents (1-20)")
+    project: str = Field(default="workspace", min_length=1, max_length=100)
+    options: Optional[dict] = None
+
+
+@team_router.post("/spawn")
+async def basic_spawn_team(request: SpawnRequest):
+    """Spawn an agent team (basic — one prompt, morphed per agent)."""
+    routed_prompts = route_prompt(
+        prompt=request.prompt,
+        project=request.project,
+        agents=request.agents
+    )
+
+    feature_desc = request.team_name or request.prompt[:50]
+    result = spawn_agent_team(routed_prompts, feature_description=feature_desc)
+
+    if result["success"]:
+        state = get_team_state()
+        state.spawn(
+            prompt=request.prompt,
+            project=request.project,
+            agents=list(routed_prompts.keys())
+        )
+
+    return result
+
+
+@team_router.post("/spawn-custom")
+async def spawn_custom_team(request: CustomSpawnRequest):
+    """Spawn a custom agent team based on team type and size."""
+    template_map = {
+        "auto": "software-dev",
+        "project": "project-management",
+        "research": "research",
+        "custom": "software-dev"
+    }
+
+    template_id = template_map.get(request.team_type, "software-dev")
+
+    try:
+        spawn_req = SpawnTeamRequest(
+            template_id=template_id,
+            task_description=request.prompt,
+            project=request.project
+        )
+        result = await spawn_team(spawn_req)
+        return result
+    except Exception:
+        pass
+
+    # Fallback: use basic route_prompt
+    routed_prompts = route_prompt(
+        prompt=request.prompt,
+        project=request.project
+    )
+
+    if len(routed_prompts) > request.team_size:
+        agents_to_keep = list(routed_prompts.keys())[:request.team_size]
+        routed_prompts = {k: v for k, v in routed_prompts.items() if k in agents_to_keep}
+
+    result = spawn_agent_team(routed_prompts, feature_description=request.prompt[:50])
+
+    if result["success"]:
+        state = get_team_state()
+        state.spawn(
+            prompt=request.prompt,
+            project=request.project,
+            agents=list(routed_prompts.keys())
+        )
+
+    return result
+
+
+@team_router.get("/status")
+async def team_status():
+    """Get current team status."""
+    return get_team_status()
+
+
+@team_router.post("/collapse")
+async def collapse_team_endpoint():
+    """Collapse the team — close all agent tabs."""
+    result = collapse_team()
+    if result["success"]:
+        state = get_team_state()
+        state.collapse()
+    return result
+
+
+@team_router.get("/results")
+async def team_results():
+    """Get all agent results."""
+    return collect_results()
+
+
+@team_router.post("/reset")
+async def reset_team():
+    """Reset team state and clear all files."""
+    reset_team_state()
+    return {"success": True, "message": "Team state reset"}

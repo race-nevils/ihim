@@ -83,8 +83,10 @@ export const desktopManager = {
         e.preventDefault();
         icon.setPointerCapture(e.pointerId);
         this.startPos = { x: e.clientX, y: e.clientY };
-        const rect = icon.getBoundingClientRect();
-        this.offset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        // Use style.left/top directly (not getBoundingClientRect which includes transforms)
+        const iconX = parseInt(icon.style.left) || 0;
+        const iconY = parseInt(icon.style.top) || 0;
+        this.offset = { x: e.clientX - iconX, y: e.clientY - iconY };
         this.pendingIcon = icon;
         this.pendingActionId = id;
         this.isDragging = false;

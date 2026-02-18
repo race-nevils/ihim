@@ -81,6 +81,8 @@ compliance_router, COMPLIANCE_AVAILABLE = _try_import(
     "Compliance", lambda: __import__("api.compliance.routes", fromlist=["router"]).router)
 privilege_router, PRIVILEGE_AVAILABLE = _try_import(
     "Privilege", lambda: __import__("api.privilege.routes", fromlist=["router"]).router)
+recorder_router, RECORDER_AVAILABLE = _try_import(
+    "Recorder", lambda: __import__("api.recorder.routes", fromlist=["router"]).router)
 
 # System topology & health (not yet a router — functions used inline below)
 try:
@@ -183,7 +185,7 @@ async def security_and_cache_headers(request: Request, call_next):
     response.headers["Content-Security-Policy-Report-Only"] = _CSP_POLICY
     response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Permissions-Policy"] = "camera=(), geolocation=()"
 
     # --- Cache-control (API + root only) ---
     if request.url.path.startswith("/api/") or request.url.path == "/":
@@ -215,6 +217,7 @@ _routers = [
     (flightpath_router, FLIGHTPATH_AVAILABLE),
     (compliance_router, COMPLIANCE_AVAILABLE),
     (privilege_router, PRIVILEGE_AVAILABLE),
+    (recorder_router, RECORDER_AVAILABLE),
 ]
 
 for rtr, available in _routers:

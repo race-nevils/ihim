@@ -3,6 +3,7 @@
  */
 import { API, escapeHtml, showStatus } from './app.js';
 import { makeDraggable } from './draggable.js';
+import { initAccessibleTabs } from './a11y.js';
 
 // =====================
 // Terminal Manager
@@ -230,7 +231,12 @@ let savedAgents = [];
 let editingAgentId = null;
 
 export function switchMCSection(section) {
-    document.querySelectorAll('.mc-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.section === section));
+    document.querySelectorAll('.mc-tab-btn').forEach(btn => {
+        const isTarget = btn.dataset.section === section;
+        btn.classList.toggle('active', isTarget);
+        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
+    });
     document.querySelectorAll('.mc-section-panel').forEach(panel => panel.classList.toggle('active', panel.id === `mc-section-${section}`));
 }
 
@@ -333,6 +339,14 @@ function showMCStatus(message, type) {
 export function initMCEvents() {
     const mcWindow = document.getElementById('mc-window');
     if (!mcWindow) return;
+
+    const tablist = document.getElementById('mc-tablist');
+    if (tablist) {
+        initAccessibleTabs(tablist, {
+            tabSelector: '[role="tab"]',
+            onActivate(tab) { switchMCSection(tab.dataset.section); }
+        });
+    }
 
     // Terminal tab and pane event delegation
     mcWindow.addEventListener('click', (e) => {

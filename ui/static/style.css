@@ -870,8 +870,8 @@ dialog.modal:not([open]) {
     height: 120px;
 }
 
-.modal-body textarea:focus,
-.modal-body input[type="text"]:focus {
+.modal-body textarea:focus-visible,
+.modal-body input[type="text"]:focus-visible {
     outline: none;
     border-color: var(--accent-red);
     box-shadow:
@@ -1112,10 +1112,11 @@ dialog.modal:not([open]) {
     transition: all 0.2s;
 }
 
-.standards-library-search input:focus {
+.standards-library-search input:focus-visible {
     outline: none;
-    border-color: var(--color-primary);
+    border-color: var(--accent-gold);
     background: var(--bg-secondary);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .standards-library-content {
@@ -2390,9 +2391,10 @@ dialog.modal:not([open]) {
     font-size: 0.95rem;
 }
 
-.slash-search-row input:focus {
+.slash-search-row input:focus-visible {
     outline: none;
-    border-color: #DAA520;
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .slash-search-row input::placeholder {
@@ -2558,9 +2560,10 @@ dialog.modal:not([open]) {
     min-height: 60px;
 }
 
-.brainstorm-input-row textarea:focus {
+.brainstorm-input-row textarea:focus-visible {
     outline: none;
-    border-color: #DAA520;
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .brainstorm-input-row textarea::placeholder {
@@ -2725,9 +2728,10 @@ dialog.modal:not([open]) {
     color: #888;
 }
 
-.team-type-btn:focus {
-    outline: 2px solid #DAA520;
+.team-type-btn:focus-visible {
+    outline: 2px solid var(--accent-gold);
     outline-offset: 2px;
+    box-shadow: 0 0 0 3px var(--accent-gold-30);
 }
 
 .team-input-section {
@@ -2757,9 +2761,10 @@ dialog.modal:not([open]) {
     min-height: 80px;
 }
 
-.team-input-section textarea:focus {
+.team-input-section textarea:focus-visible {
     outline: none;
-    border-color: #DAA520;
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .team-input-section textarea::placeholder {
@@ -2788,9 +2793,10 @@ dialog.modal:not([open]) {
     min-height: 80px;
 }
 
-.team-input-wrapper textarea:focus {
+.team-input-wrapper textarea:focus-visible {
     outline: none;
-    border-color: #DAA520;
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .team-input-wrapper textarea::placeholder {
@@ -3433,11 +3439,12 @@ dialog.modal:not([open]) {
     font-size: 0.85rem;
 }
 
-.mc-form-group input:focus,
-.mc-form-group select:focus,
-.mc-form-group textarea:focus {
+.mc-form-group input:focus-visible,
+.mc-form-group select:focus-visible,
+.mc-form-group textarea:focus-visible {
     outline: none;
-    border-color: #3d6f9a;
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .mc-form-group textarea {
@@ -4019,9 +4026,10 @@ dialog.modal:not([open]) {
     height: 60px;
 }
 
-.dispatch-input-row textarea:focus {
+.dispatch-input-row textarea:focus-visible {
     outline: none;
-    border-color: #DAA520;
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .dispatch-send-btn {
@@ -4692,12 +4700,14 @@ dialog.modal:not([open]) {
 .desktop-icon.dragging {
     cursor: move;
     z-index: 1000;
+    transform: scale(1.08);
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+    transition: transform 0.1s ease, filter 0.1s ease;
 }
 
 .desktop-icon.dragging .desktop-icon-image {
     border-color: var(--accent-red);
     box-shadow: var(--glow-red);
-    transform: scale(1.1);
 }
 
 /* ============================================ */
@@ -5274,8 +5284,9 @@ dialog.modal:not([open]) {
     box-sizing: border-box;
 }
 
-.cal-input:focus {
-    border-color: rgba(66, 133, 244, 0.5);
+.cal-input:focus-visible {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .cal-datetime-row {
@@ -5566,8 +5577,9 @@ dialog.modal:not([open]) {
     line-height: 1.4;
 }
 
-.chat-input-area textarea:focus {
-    border-color: rgba(139, 92, 246, 0.4);
+.chat-input-area textarea:focus-visible {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px var(--accent-gold-30);
 }
 
 .chat-input-area textarea::placeholder {
@@ -6540,5 +6552,120 @@ dialog.modal:not([open]) {
     .vault-doc-controls {
         flex-direction: column;
         gap: var(--space-2);
+    }
+}
+
+/* ============================================ */
+/* ACCESSIBILITY                                */
+/* ============================================ */
+
+/* Screen reader only — visually hidden but accessible */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Skip link — appears on Tab, hidden otherwise */
+.skip-link {
+    position: absolute;
+    top: -100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent-gold);
+    color: var(--bg-primary);
+    padding: 8px 16px;
+    border-radius: 0 0 8px 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    z-index: 10000;
+    text-decoration: none;
+    transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* Window header focus ring (for keyboard drag) */
+[aria-roledescription="draggable window"]:focus-visible {
+    outline: 2px solid var(--accent-gold);
+    outline-offset: -2px;
+    border-radius: 4px;
+}
+
+/* Desktop icon focus ring */
+.desktop-icon:focus-visible {
+    outline: none;
+}
+
+.desktop-icon:focus-visible .desktop-icon-image {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 3px var(--accent-gold-30);
+}
+
+/* Universal button focus ring for icon-only buttons */
+button:focus-visible {
+    outline: 2px solid var(--accent-gold);
+    outline-offset: 2px;
+}
+
+/* Tab active state (ARIA tabs) */
+[role="tab"][aria-selected="true"] {
+    border-bottom-color: var(--accent-gold);
+}
+
+[role="tab"]:focus-visible {
+    outline: 2px solid var(--accent-gold);
+    outline-offset: -2px;
+}
+
+/* Placeholder contrast fix — #555 → #888 */
+::placeholder {
+    color: var(--text-tertiary);
+}
+
+/* ============================================ */
+/* HIGH CONTRAST MODE                           */
+/* ============================================ */
+@media (prefers-contrast: more) {
+    :root {
+        --glass-border: rgba(255, 255, 255, 0.2);
+        --border-normal: #555555;
+        --border-bright: #777777;
+    }
+
+    button:focus-visible,
+    [role="tab"]:focus-visible,
+    .team-type-btn:focus-visible {
+        outline-width: 3px;
+    }
+
+    .action-btn:focus-visible {
+        box-shadow:
+            0 0 0 4px var(--accent-red-30),
+            var(--glow-red);
+    }
+
+    [aria-roledescription="draggable window"]:focus-visible {
+        outline-width: 3px;
+    }
+
+    .desktop-icon:focus-visible .desktop-icon-image {
+        box-shadow: 0 0 0 4px var(--accent-gold-50);
+    }
+
+    .mc-form-group input:focus-visible,
+    .mc-form-group select:focus-visible,
+    .mc-form-group textarea:focus-visible,
+    .cal-input:focus-visible,
+    .chat-input-area textarea:focus-visible {
+        box-shadow: 0 0 0 3px var(--accent-gold-50);
     }
 }

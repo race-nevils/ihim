@@ -3,6 +3,7 @@
  */
 import { API, escapeHtml } from './app.js';
 import { makeDraggable } from './draggable.js';
+import { initAccessibleTabs } from './a11y.js';
 
 let workoutsData = null;
 let nutritionData = null;
@@ -44,7 +45,10 @@ export function closeHealthWindow() {
 
 export function switchHealthTab(tab) {
     document.querySelectorAll('.health-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
+        const isTarget = btn.dataset.tab === tab;
+        btn.classList.toggle('active', isTarget);
+        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
     });
     document.querySelectorAll('.health-tab-content').forEach(content => {
         content.style.display = content.id === `health-tab-${tab}` ? 'block' : 'none';
@@ -179,6 +183,15 @@ function renderGlossary(data) {
 export function initHealthEvents() {
     const win = document.getElementById('health-window');
     if (!win) return;
+
+    const tablist = document.getElementById('health-tablist');
+    if (tablist) {
+        initAccessibleTabs(tablist, {
+            tabSelector: '[role="tab"]',
+            onActivate(tab) { switchHealthTab(tab.dataset.tab); }
+        });
+    }
+
     win.addEventListener('click', (e) => {
         const header = e.target.closest('[data-day-id]');
         if (header) toggleHealthDay(header.dataset.dayId);

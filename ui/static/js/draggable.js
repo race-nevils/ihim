@@ -1,6 +1,10 @@
 /**
  * draggable.js — Unified drag handler for all windows + Workspace State persistence
+ * Uses Pointer Events + setPointerCapture for reliable drag.
+ * Includes viewport clamping, keyboard movement, and resize re-clamping.
  */
+
+const allDraggables = new Set();
 
 // Unified drag handler for all windows
 export function makeDraggable(windowId, handleSelector, storageKey) {
@@ -10,20 +14,18 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
     if (!handle) return;
 
     handle.style.cursor = 'move';
-    let isDragging = false;
-    let currentHandlers = null;
+    handle.setAttribute('tabindex', '0');
+    handle.setAttribute('aria-roledescription', 'draggable window');
+    allDraggables.add(el);
 
-    handle.addEventListener('mousedown', (e) => {
+    let isDragging = false;
+
+    handle.addEventListener('pointerdown', (e) => {
         if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+        if (e.button !== 0) return;
         e.preventDefault();
 
-        if (currentHandlers) {
-            document.removeEventListener('mousemove', currentHandlers.move);
-            document.removeEventListener('mouseup', currentHandlers.up);
-            document.removeEventListener('mouseleave', currentHandlers.leave);
-            currentHandlers = null;
-        }
-
+        handle.setPointerCapture(e.pointerId);
         const rect = el.getBoundingClientRect();
         el.style.transform = 'none';
         el.style.right = 'auto';
@@ -31,15 +33,14 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
         el.style.left = rect.left + 'px';
         el.style.top = rect.top + 'px';
 
-        const mouseDownTime = Date.now();
         isDragging = false;
         const offsetX = e.clientX - rect.left;
         const offsetY = e.clientY - rect.top;
         const startX = e.clientX;
         const startY = e.clientY;
+        const mouseDownTime = Date.now();
 
-        const onMouseMove = (e) => {
-            e.preventDefault();
+        const onPointerMove = (e) => {
             const dx = Math.abs(e.clientX - startX);
             const dy = Math.abs(e.clientY - startY);
             if ((dx > 5 || dy > 5 || Date.now() - mouseDownTime > 150) && !isDragging) {
@@ -49,12 +50,20 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
                 document.body.style.userSelect = 'none';
             }
             if (isDragging) {
-                el.style.left = (e.clientX - offsetX) + 'px';
-                el.style.top = (e.clientY - offsetY) + 'px';
+                let x = e.clientX - offsetX;
+                let y = e.clientY - offsetY;
+                // Viewport clamp: title bar always visible (40px minimum)
+                const minVisible = 40;
+                x = Math.max(-el.offsetWidth + 100, Math.min(x, window.innerWidth - 100));
+                y = Math.max(0, Math.min(y, window.innerHeight - minVisible));
+                el.style.left = x + 'px';
+                el.style.top = y + 'px';
             }
         };
 
-        const cleanup = () => {
+        const onPointerUp = () => {
+            handle.removeEventListener('pointermove', onPointerMove);
+            handle.removeEventListener('pointerup', onPointerUp);
             if (isDragging && storageKey) {
                 localStorage.setItem(storageKey, JSON.stringify({
                     x: parseInt(el.style.left), y: parseInt(el.style.top)
@@ -64,23 +73,64 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
             el.style.opacity = '1';
             el.style.zIndex = '';
             document.body.style.userSelect = '';
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-            document.removeEventListener('mouseleave', onMouseLeave);
-            currentHandlers = null;
         };
 
-        const onMouseUp = () => cleanup();
-        const onMouseLeave = (e) => {
-            if (isDragging && e.target === document.documentElement) cleanup();
-        };
+        handle.addEventListener('pointermove', onPointerMove);
+        handle.addEventListener('pointerup', onPointerUp);
+    });
 
-        currentHandlers = { move: onMouseMove, up: onMouseUp, leave: onMouseLeave };
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        document.addEventListener('mouseleave', onMouseLeave);
+    // Keyboard movement: Ctrl+Arrow keys (20px per press)
+    handle.addEventListener('keydown', (e) => {
+        if (!e.ctrlKey) return;
+        const STEP = 20;
+        let x = parseInt(el.style.left) || 0;
+        let y = parseInt(el.style.top) || 0;
+
+        switch (e.key) {
+            case 'ArrowUp': y -= STEP; break;
+            case 'ArrowDown': y += STEP; break;
+            case 'ArrowLeft': x -= STEP; break;
+            case 'ArrowRight': x += STEP; break;
+            default: return;
+        }
+        e.preventDefault();
+
+        // Ensure CSS positioning mode
+        el.style.transform = 'none';
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
+
+        // Viewport clamp
+        const minVisible = 40;
+        x = Math.max(-el.offsetWidth + 100, Math.min(x, window.innerWidth - 100));
+        y = Math.max(0, Math.min(y, window.innerHeight - minVisible));
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+
+        if (storageKey) {
+            localStorage.setItem(storageKey, JSON.stringify({ x, y }));
+        }
     });
 }
+
+// Re-clamp all open windows on browser resize
+window.addEventListener('resize', () => {
+    for (const el of allDraggables) {
+        if (el.style.display === 'none') continue;
+        const x = parseInt(el.style.left);
+        const y = parseInt(el.style.top);
+        if (isNaN(x) || isNaN(y)) continue;
+
+        const minVisible = 40;
+        const clampedX = Math.max(-el.offsetWidth + 100, Math.min(x, window.innerWidth - 100));
+        const clampedY = Math.max(0, Math.min(y, window.innerHeight - minVisible));
+
+        if (clampedX !== x || clampedY !== y) {
+            el.style.left = clampedX + 'px';
+            el.style.top = clampedY + 'px';
+        }
+    }
+});
 
 // Widget resize persistence via ResizeObserver
 export function initializeWidgetResize() {

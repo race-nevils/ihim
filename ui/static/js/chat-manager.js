@@ -3,6 +3,7 @@
  */
 import { API, escapeHtml, showStatus } from './app.js';
 import { makeDraggable } from './draggable.js';
+import { openWithFocusRestore, closeWithFocusRestore } from './a11y.js';
 
 // =====================
 // Brain Chat Manager
@@ -217,14 +218,16 @@ export function toggleChatMinimize() {
 
 export function openTeamModal() {
     const dialog = document.getElementById('team-modal');
-    if (dialog && !dialog.open) dialog.showModal();
-    document.getElementById('team-prompt').focus();
+    if (!dialog) return;
+    openWithFocusRestore(dialog, document.activeElement);
+    setTimeout(() => document.getElementById('team-prompt')?.focus(), 100);
 }
 
 export function closeTeamModal() {
     const dialog = document.getElementById('team-modal');
-    if (dialog?.open) dialog.close();
+    if (!dialog) return;
     document.getElementById('team-prompt').value = '';
+    closeWithFocusRestore(dialog);
 }
 
 export async function spawnTeam() {
@@ -274,14 +277,15 @@ const teamConfigs = {
 
 export function openAgentTeamModal() {
     const dialog = document.getElementById('agent-team-modal');
-    if (dialog && !dialog.open) dialog.showModal();
-    document.getElementById('agent-team-prompt').focus();
+    if (!dialog) return;
+    openWithFocusRestore(dialog, document.activeElement);
+    setTimeout(() => document.getElementById('agent-team-prompt')?.focus(), 100);
     updateAgentPreview();
 }
 
 export function closeAgentTeamModal() {
     const dialog = document.getElementById('agent-team-modal');
-    if (dialog?.open) dialog.close();
+    if (!dialog) return;
     document.getElementById('agent-team-prompt').value = '';
     selectedTeamType = 'auto';
     document.getElementById('team-size-slider').value = 3;
@@ -290,6 +294,7 @@ export function closeAgentTeamModal() {
         btn.classList.remove('active');
         if (btn.dataset.type === 'auto') btn.classList.add('active');
     });
+    closeWithFocusRestore(dialog);
 }
 
 export function selectTeamType(type) {

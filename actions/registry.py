@@ -106,6 +106,13 @@ ACTIONS = {
         "has_modal": True,
         "hidden": True,  # Consolidated into Mission Control
     },
+    "meeting_recorder": {
+        "name": "Meeting Recorder",
+        "description": "Record meetings with dual-channel audio capture and transcription",
+        "icon": "mic",
+        "category": "tools",
+        "has_modal": True,
+    },
     # System actions
     "restart_server": {
         "name": "Restart Server",
@@ -173,6 +180,10 @@ def run_action(action_id: str) -> dict:
     elif action_id == "agent_team_builder":
         # Handled by UI (modal for designing custom agent teams)
         return {"success": True, "message": "Opening Team Builder..."}
+
+    elif action_id == "meeting_recorder":
+        # Handled by UI (modal for meeting recorder)
+        return {"success": True, "message": "Opening Meeting Recorder..."}
 
     elif action_id == "restart_server":
         # Handled by frontend - calls /api/server/restart directly

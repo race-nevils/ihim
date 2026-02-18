@@ -33,3 +33,9 @@ dateparser>=1.2.0
 # C2PA (optional)
 cryptography>=42.0.0
 # c2pa-python>=0.27.0  # Uncomment if C2PA signing needed
+
+# Meeting Recorder
+PyAudioWPatch>=0.2.12
+sounddevice>=0.5.0
+faster-whisper>=1.0.0
+numpy>=1.24.0

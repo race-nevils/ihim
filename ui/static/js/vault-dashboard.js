@@ -2,6 +2,7 @@
  * vault-dashboard.js — Vault (tasks, projects, documents) + Workspaces viewer
  */
 import { makeDraggable } from './draggable.js';
+import { initAccessibleTabs } from './a11y.js';
 
 // =====================
 // Vault Manager
@@ -255,7 +256,10 @@ export function toggleVaultWindow() {
 
 export function switchVaultTab(tab) {
     document.querySelectorAll('.vault-tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
+        const isTarget = btn.dataset.tab === tab;
+        btn.classList.toggle('active', isTarget);
+        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
     });
     document.querySelectorAll('.vault-tab-content').forEach(content => {
         content.style.display = content.id === `vault-tab-${tab}` ? 'block' : 'none';
@@ -305,6 +309,14 @@ export function toggleWorkspacesWindow() {
 
 // Event delegation for vault interactions
 export function initVaultEvents() {
+    const tablist = document.getElementById('vault-tablist');
+    if (tablist) {
+        initAccessibleTabs(tablist, {
+            tabSelector: '[role="tab"]',
+            onActivate(tab) { switchVaultTab(tab.dataset.tab); }
+        });
+    }
+
     const vaultWin = document.getElementById('vault-window');
     if (vaultWin) {
         vaultWin.addEventListener('click', (e) => {

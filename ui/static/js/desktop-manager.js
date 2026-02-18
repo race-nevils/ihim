@@ -1,20 +1,17 @@
 /**
  * desktop-manager.js — Desktop icon grid layout, drag-to-rearrange, and action dispatcher
+ * Uses Pointer Events + setPointerCapture for reliable drag at any speed.
  */
 import { escapeHtml, showStatus, getIcon, restartServer, API } from './app.js';
 
 export const desktopManager = {
     icons: {},
     STORAGE_KEY: 'ihim_desktop_layout',
-    GRID_SIZE: 120,
-    draggingIcon: null,
-    offset: { x: 0, y: 0 },
-    holdTimer: null,
     isDragging: false,
+    pendingIcon: null,
+    pendingActionId: null,
     startPos: { x: 0, y: 0 },
-    mouseDownTime: 0,
-    HOLD_DELAY: 300,
-    CLICK_THRESHOLD: 200,
+    offset: { x: 0, y: 0 },
     abortController: null,
 
     init(actions) {
@@ -32,20 +29,24 @@ export const desktopManager = {
         grid.innerHTML = '';
         grid.className = 'desktop-grid';
 
+        const GRID_SIZE = 120;
         let defaultX = 20;
         let defaultY = 20;
         let col = 0;
-        const maxCols = Math.floor((window.innerWidth - 40) / this.GRID_SIZE);
+        const maxCols = Math.floor((window.innerWidth - 40) / GRID_SIZE);
 
         for (const [id, action] of Object.entries(actions)) {
             if (id === 'stopwatch') continue;
             const icon = document.createElement('div');
             icon.className = 'desktop-icon';
             icon.dataset.actionId = id;
+            icon.setAttribute('role', 'button');
+            icon.setAttribute('tabindex', '0');
+            icon.setAttribute('aria-label', action.name);
 
             const saved = this.icons[id];
-            const x = saved ? saved.x : defaultX + (col * this.GRID_SIZE);
-            const y = saved ? saved.y : defaultY + (Math.floor(col / maxCols) * this.GRID_SIZE);
+            const x = saved ? saved.x : defaultX + (col * GRID_SIZE);
+            const y = saved ? saved.y : defaultY + (Math.floor(col / maxCols) * GRID_SIZE);
             icon.style.left = x + 'px';
             icon.style.top = y + 'px';
 
@@ -54,93 +55,83 @@ export const desktopManager = {
                 <div class="desktop-icon-label">${escapeHtml(action.name)}</div>
             `;
 
-            icon.addEventListener('mousedown', (e) => this.handleMouseDown(e, id, icon), { signal });
-            icon.addEventListener('mousemove', (e) => this.handleMouseMove(e), { signal });
-            icon.addEventListener('mouseup', (e) => this.handleMouseUp(e, id), { signal });
-            icon.addEventListener('mouseleave', (e) => this.handleMouseUp(e, id), { signal });
+            // Pointer Events for drag (captures all events to the element)
+            icon.addEventListener('pointerdown', (e) => this._onPointerDown(e, id, icon), { signal });
+            icon.addEventListener('pointermove', (e) => this._onPointerMove(e, icon), { signal });
+            icon.addEventListener('pointerup', (e) => this._onPointerUp(e, id, icon), { signal });
+            icon.addEventListener('pointercancel', (e) => this._onPointerUp(e, id, icon), { signal });
+
+            // Keyboard activation
+            icon.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); runAction(id); }
+            }, { signal });
+
+            // Prevent default drag ghost
+            icon.addEventListener('dragstart', (e) => e.preventDefault(), { signal });
 
             grid.appendChild(icon);
             if (!saved) this.icons[id] = { x, y };
             col++;
         }
 
-        document.addEventListener('mousemove', (e) => {
-            if (this.isDragging && this.draggingIcon) this.handleDrag(e);
-        }, { signal });
-
         requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
         this.saveLayout();
     },
 
-    handleMouseDown(e, id, icon) {
+    _onPointerDown(e, id, icon) {
+        if (e.button !== 0) return; // Left button only
         e.preventDefault();
-        this.mouseDownTime = Date.now();
+        icon.setPointerCapture(e.pointerId);
         this.startPos = { x: e.clientX, y: e.clientY };
         const rect = icon.getBoundingClientRect();
-        this.offset.x = e.clientX - rect.left;
-        this.offset.y = e.clientY - rect.top;
-        this.holdTimer = setTimeout(() => {
+        this.offset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        this.pendingIcon = icon;
+        this.pendingActionId = id;
+        this.isDragging = false;
+    },
+
+    _onPointerMove(e, icon) {
+        if (!icon.hasPointerCapture(e.pointerId)) return;
+        if (!this.pendingIcon) return;
+
+        const dx = Math.abs(e.clientX - this.startPos.x);
+        const dy = Math.abs(e.clientY - this.startPos.y);
+
+        // Start drag after 5px movement threshold
+        if (!this.isDragging && (dx > 5 || dy > 5)) {
             this.isDragging = true;
-            this.draggingIcon = icon;
-            icon.style.opacity = '0.7';
-            icon.style.zIndex = '1000';
             icon.classList.add('dragging');
-        }, this.HOLD_DELAY);
-    },
-
-    handleMouseMove(e) {
-        if (this.holdTimer && !this.isDragging) {
-            const dx = Math.abs(e.clientX - this.startPos.x);
-            const dy = Math.abs(e.clientY - this.startPos.y);
-            if (dx > 5 || dy > 5) {
-                clearTimeout(this.holdTimer);
-                this.isDragging = true;
-                this.draggingIcon = e.currentTarget;
-                this.draggingIcon.style.opacity = '0.7';
-                this.draggingIcon.style.zIndex = '1000';
-                this.draggingIcon.classList.add('dragging');
-            }
         }
-    },
 
-    handleDrag(e) {
-        if (!this.draggingIcon) return;
-        const FOOTER_HEIGHT = 36;
-        let x = e.clientX - this.offset.x;
-        let y = e.clientY - this.offset.y;
-        x = Math.max(0, Math.min(x, window.innerWidth - 100));
-        y = Math.max(0, Math.min(y, window.innerHeight - FOOTER_HEIGHT - 100));
-        this.draggingIcon.style.left = x + 'px';
-        this.draggingIcon.style.top = y + 'px';
-    },
-
-    handleMouseUp(e, id) {
-        clearTimeout(this.holdTimer);
-        const duration = Date.now() - this.mouseDownTime;
-
-        if (this.isDragging && this.draggingIcon) {
+        if (this.isDragging) {
             const FOOTER_HEIGHT = 36;
             let x = e.clientX - this.offset.x;
             let y = e.clientY - this.offset.y;
-            x = Math.round(x / this.GRID_SIZE) * this.GRID_SIZE;
-            y = Math.round(y / this.GRID_SIZE) * this.GRID_SIZE;
+            // Viewport clamp — icon stays fully on screen
             x = Math.max(0, Math.min(x, window.innerWidth - 100));
             y = Math.max(0, Math.min(y, window.innerHeight - FOOTER_HEIGHT - 100));
-            this.draggingIcon.style.left = x + 'px';
-            this.draggingIcon.style.top = y + 'px';
-            this.draggingIcon.style.opacity = '1';
-            this.draggingIcon.style.zIndex = '';
-            this.draggingIcon.classList.remove('dragging');
-            const actionId = this.draggingIcon.dataset.actionId;
-            this.icons[actionId] = { x, y };
+            icon.style.left = x + 'px';
+            icon.style.top = y + 'px';
+        }
+    },
+
+    _onPointerUp(e, id, icon) {
+        icon.releasePointerCapture(e.pointerId);
+
+        if (this.isDragging && this.pendingIcon) {
+            // Drop — save position (free-form, no grid snap)
+            icon.classList.remove('dragging');
+            const actionId = icon.dataset.actionId;
+            this.icons[actionId] = { x: parseInt(icon.style.left), y: parseInt(icon.style.top) };
             this.saveLayout();
-            this.draggingIcon = null;
-            this.isDragging = false;
-        } else if (duration < this.CLICK_THRESHOLD) {
+        } else if (this.pendingIcon) {
+            // Click — fire action
             runAction(id);
         }
-        this.holdTimer = null;
-        this.mouseDownTime = 0;
+
+        this.isDragging = false;
+        this.pendingIcon = null;
+        this.pendingActionId = null;
     },
 
     saveLayout() { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.icons)); },

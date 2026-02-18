@@ -7,13 +7,14 @@ import { makeDraggable, initializeWidgetResize, WorkspaceState } from './draggab
 import { desktopManager } from './desktop-manager.js';
 import { stopwatchManager } from './stopwatch.js';
 import { flightPath } from './flight-path.js';
-import { chatManager, initChatEvents, toggleChatWindow } from './chat-manager.js';
+import { chatManager, initChatEvents, toggleChatWindow, closeChatWindow } from './chat-manager.js';
 import { initSlashEvents } from './slash-commands.js';
-import { initStandardsLibraryEvents } from './standards-library.js';
-import { initHealthEvents } from './health-dashboard.js';
-import { initVaultEvents } from './vault-dashboard.js';
-import { initMCEvents } from './terminal-manager.js';
+import { initStandardsLibraryEvents, closeStandardsLibraryWindow } from './standards-library.js';
+import { initHealthEvents, closeHealthWindow } from './health-dashboard.js';
+import { initVaultEvents, closeVaultWindow, closeWorkspacesWindow } from './vault-dashboard.js';
+import { initMCEvents, closeMCWindow } from './terminal-manager.js';
 import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent, closeCalendarWindow } from './calendar.js';
+import { initWindowEscapeClose, initGlobalEscapeHandler } from './a11y.js';
 
 // =====================
 // Global Cleanup
@@ -62,6 +63,19 @@ function initializeApp() {
     initHealthEvents();
     initVaultEvents();
     initMCEvents();
+
+    // Register windows for Escape-key closing
+    initWindowEscapeClose(document.getElementById('standards-library-window'), closeStandardsLibraryWindow);
+    initWindowEscapeClose(document.getElementById('health-window'), closeHealthWindow);
+    initWindowEscapeClose(document.getElementById('vault-window'), closeVaultWindow);
+    initWindowEscapeClose(document.getElementById('workspaces-window'), closeWorkspacesWindow);
+    initWindowEscapeClose(document.getElementById('mc-window'), closeMCWindow);
+    initWindowEscapeClose(document.getElementById('calendar-window'), closeCalendarWindow);
+    initWindowEscapeClose(document.getElementById('chat-window'), closeChatWindow);
+    initWindowEscapeClose(document.getElementById('flightpath-window'), () => {
+        import('./flight-path.js').then(m => m.closeFlightPathWindow());
+    });
+    initGlobalEscapeHandler();
 
     // Bottom bar: Chat toggle
     document.querySelector('#bottom-bar [title="Brain Chat"]')

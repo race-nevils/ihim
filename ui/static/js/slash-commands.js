@@ -2,6 +2,7 @@
  * slash-commands.js — Slash Command Center (API-backed)
  */
 import { API, escapeHtml, showStatus, formatTimestamp } from './app.js';
+import { openWithFocusRestore, closeWithFocusRestore } from './a11y.js';
 
 let slashCommands = [];
 let slashIdeas = [];
@@ -39,17 +40,19 @@ async function loadSlashIdeas() {
 
 export async function openSlashModal() {
     const dialog = document.getElementById('slash-modal');
-    if (dialog && !dialog.open) dialog.showModal();
+    if (!dialog) return;
+    openWithFocusRestore(dialog, document.activeElement);
     await Promise.all([loadSlashCommands(), loadSlashIdeas()]);
     renderSlashCommands();
     renderSlashIdeas();
     document.getElementById('slash-search').value = '';
-    setTimeout(() => document.getElementById('slash-search').focus(), 100);
+    setTimeout(() => document.getElementById('slash-search')?.focus(), 100);
 }
 
 export function closeSlashModal() {
     const dialog = document.getElementById('slash-modal');
-    if (dialog?.open) dialog.close();
+    if (!dialog) return;
+    closeWithFocusRestore(dialog);
 }
 
 function getCategoryIcon(category) {

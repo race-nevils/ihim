@@ -3,6 +3,7 @@
  */
 import { API, escapeHtml, showStatus } from './app.js';
 import { makeDraggable } from './draggable.js';
+import { initAccessibleTabs } from './a11y.js';
 
 let standardsLibraryModules = [];
 let selectedModuleId = null;
@@ -175,9 +176,13 @@ function updateStandardsLibraryCount() {
 }
 
 export function switchStandardsLibraryTab(tab) {
-    document.querySelectorAll('.sl-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.sl-tab-btn').forEach(btn => {
+        const isTarget = btn.dataset.tab === tab;
+        btn.classList.toggle('active', isTarget);
+        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
+    });
     document.querySelectorAll('.sl-tab-panel').forEach(panel => panel.style.display = 'none');
-    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
     document.getElementById(`sl-${tab}-panel`).style.display = 'block';
     if (tab === 'references' && !referencesData) loadStandardsReferences();
 }
@@ -229,6 +234,15 @@ function toggleReferenceExpand(stdId) {
 export function initStandardsLibraryEvents() {
     const win = document.getElementById('standards-library-window');
     if (!win) return;
+
+    // Accessible tabs — keyboard nav + ARIA state sync
+    const tablist = document.getElementById('sl-tablist');
+    if (tablist) {
+        initAccessibleTabs(tablist, {
+            tabSelector: '[role="tab"]',
+            onActivate(tab) { switchStandardsLibraryTab(tab.dataset.tab); }
+        });
+    }
 
     win.addEventListener('click', (e) => {
         // Module selection

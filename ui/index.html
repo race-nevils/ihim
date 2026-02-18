@@ -11,6 +11,8 @@
 </head>
 
 <body>
+    <a href="#actions-grid" class="skip-link">Skip to content</a>
+
     <!-- HUD Corner Decorations -->
     <div class="hud-corners">
         <div class="hud-corner hud-corner-tl"></div>
@@ -21,7 +23,7 @@
 
     <!-- Stopwatch Widget Container -->
     <div class="stopwatch-container" id="stopwatch-container">
-        <button class="stopwatch-spawn-btn" title="Add Stopwatch">
+        <button class="stopwatch-spawn-btn" title="Add Stopwatch" aria-label="Add Stopwatch">
             <i data-lucide="timer" class="stopwatch-icon"></i>
             <i data-lucide="plus" class="stopwatch-plus"></i>
         </button>
@@ -31,7 +33,7 @@
     </div>
 
     <!-- Bottom Status Bar -->
-    <div id="bottom-bar" class="bottom-bar">
+    <nav id="bottom-bar" class="bottom-bar" aria-label="System Status">
         <!-- System Monitor -->
         <div class="bar-widget" id="system-monitor">
             <span class="bar-label">CPU</span>
@@ -54,7 +56,7 @@
         <div class="bar-widget" style="cursor:pointer;" title="Brain Chat">
             <span class="bar-label" style="color:var(--color-power);">Chat</span>
         </div>
-    </div>
+    </nav>
 
     <div class="container">
         <header>
@@ -66,20 +68,21 @@
             <!-- Actions loaded dynamically -->
         </main>
 
-        <div id="status" class="status"></div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
     </div>
 
     <!-- Team Modal -->
-    <dialog id="team-modal" class="modal">
+    <dialog id="team-modal" class="modal" aria-labelledby="team-modal-title">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Feature Builder</h2>
-                <button class="close-btn">&times;</button>
+                <h2 id="team-modal-title">Feature Builder</h2>
+                <button class="close-btn" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="modal-desc">Enter your task. It will be morphed into 5 tailored prompts for each specialist.
+                <p class="modal-desc" id="team-modal-desc">Enter your task. It will be morphed into 5 tailored prompts for each specialist.
                 </p>
-                <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow"></textarea>
+                <label for="team-prompt" class="sr-only">Task description</label>
+                <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow" aria-describedby="team-modal-desc"></textarea>
                 <div class="team-agents">
                     <span class="agent-badge">Frontend</span>
                     <span class="agent-badge">Backend</span>
@@ -99,18 +102,19 @@
     <div id="standards-library-window" class="standards-library-window" style="display: none;">
         <div class="standards-library-header standards-library-drag-handle">
             <span class="standards-library-label">🛡️ Standards Library</span>
-            <button class="standards-library-close">&times;</button>
+            <button class="standards-library-close" aria-label="Close Standards Library">&times;</button>
         </div>
         <div class="standards-library-body">
             <!-- Tabs -->
-            <div class="standards-library-tabs">
-                <button class="sl-tab-btn active" data-tab="modules">Modules</button>
-                <button class="sl-tab-btn" data-tab="references">References</button>
+            <div class="standards-library-tabs" id="sl-tablist" role="tablist" aria-label="Standards Library">
+                <button class="sl-tab-btn active" data-tab="modules" role="tab" id="sl-tab-modules" aria-selected="true" aria-controls="sl-modules-panel" tabindex="0">Modules</button>
+                <button class="sl-tab-btn" data-tab="references" role="tab" id="sl-tab-references" aria-selected="false" aria-controls="sl-references-panel" tabindex="-1">References</button>
             </div>
 
             <!-- Modules Panel -->
-            <div class="sl-tab-panel active" id="sl-modules-panel">
+            <div class="sl-tab-panel active" id="sl-modules-panel" role="tabpanel" aria-labelledby="sl-tab-modules">
                 <div class="standards-library-search">
+                    <label for="standards-library-search-input" class="sr-only">Search modules</label>
                     <input type="text" id="standards-library-search-input" placeholder="Search modules...">
                 </div>
                 <div class="standards-library-content">
@@ -130,7 +134,7 @@
             </div>
 
             <!-- References Panel -->
-            <div class="sl-tab-panel" id="sl-references-panel" style="display: none;">
+            <div class="sl-tab-panel" id="sl-references-panel" role="tabpanel" aria-labelledby="sl-tab-references" style="display: none;">
                 <div id="standards-references-list" class="standards-references-list">
                     <!-- Loaded dynamically -->
                 </div>
@@ -146,9 +150,9 @@
         <div class="flightpath-header flightpath-drag-handle">
             <span class="flightpath-label">Flight Path</span>
             <div class="flightpath-controls">
-                <button class="fp-control-btn" title="Refresh">↻</button>
+                <button class="fp-control-btn" title="Refresh" aria-label="Refresh Flight Path">↻</button>
             </div>
-            <button class="flightpath-close">&times;</button>
+            <button class="flightpath-close" aria-label="Close Flight Path">&times;</button>
         </div>
         <div class="flightpath-body">
             <!-- Traffic Light Overview -->
@@ -191,14 +195,14 @@
     </div>
 
     <!-- Agent Team Builder Modal -->
-    <dialog id="agent-team-modal" class="modal">
+    <dialog id="agent-team-modal" class="modal" aria-labelledby="agent-team-modal-title">
         <div class="modal-content agent-team-modal-content">
             <div class="modal-header">
-                <h2>Agent Team Builder</h2>
-                <button class="close-btn">&times;</button>
+                <h2 id="agent-team-modal-title">Agent Team Builder</h2>
+                <button class="close-btn" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="modal-desc">Describe your goal. We'll spawn a specialized agent team (3-5 agents) to
+                <p class="modal-desc" id="agent-team-modal-desc">Describe your goal. We'll spawn a specialized agent team (3-5 agents) to
                     accomplish it.</p>
 
                 <!-- Team Type Selector -->
@@ -223,16 +227,16 @@
 
                 <!-- Task Description -->
                 <div class="team-input-section">
-                    <label class="team-input-label">What do you want to accomplish?</label>
+                    <label class="team-input-label" for="agent-team-prompt">What do you want to accomplish?</label>
                     <textarea id="agent-team-prompt"
-                        placeholder="e.g., Create a compliance monitoring dashboard for RIA clients&#10;e.g., Research best practices for document automation in financial advisory"></textarea>
+                        placeholder="e.g., Create a compliance monitoring dashboard for RIA clients&#10;e.g., Research best practices for document automation in financial advisory" aria-describedby="agent-team-modal-desc"></textarea>
                 </div>
 
                 <!-- Complexity Slider -->
                 <div class="complexity-section">
-                    <label class="team-input-label">Team Size</label>
+                    <label class="team-input-label" for="team-size-slider">Team Size</label>
                     <div class="complexity-slider-row">
-                        <input type="range" id="team-size-slider" min="3" max="5" value="3">
+                        <input type="range" id="team-size-slider" min="3" max="5" value="3" aria-describedby="team-size-display">
                         <span id="team-size-display" class="team-size-value">3 agents</span>
                     </div>
                     <div class="complexity-hints">
@@ -268,13 +272,13 @@
                     <summary class="agent-config-summary">Advanced Options</summary>
                     <div class="agent-config-content">
                         <div class="config-row">
-                            <label>
+                            <label for="config-feedback">
                                 <input type="checkbox" id="config-feedback" checked>
                                 Enable feedback loop
                             </label>
                         </div>
                         <div class="config-row">
-                            <label>
+                            <label for="config-parallel">
                                 <input type="checkbox" id="config-parallel">
                                 Allow parallel execution
                             </label>
@@ -293,16 +297,17 @@
     </dialog>
 
     <!-- Slash Command Center Modal -->
-    <dialog id="slash-modal" class="modal">
+    <dialog id="slash-modal" class="modal" aria-labelledby="slash-modal-title">
         <div class="modal-content slash-modal-content">
             <div class="modal-header">
-                <h2>/ Command Center</h2>
-                <button class="close-btn">&times;</button>
+                <h2 id="slash-modal-title">/ Command Center</h2>
+                <button class="close-btn" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body slash-body">
                 <p class="slash-intro">the agent harness commands for workspace. Click to copy, then paste in the agent harness.</p>
 
                 <div class="slash-search-row">
+                    <label for="slash-search" class="sr-only">Search commands</label>
                     <input type="text" id="slash-search" placeholder="Search commands...">
                 </div>
 
@@ -313,6 +318,7 @@
                 <div class="slash-brainstorm">
                     <h3>Brainstorm New Commands</h3>
                     <div class="brainstorm-input-row">
+                        <label for="brainstorm-input" class="sr-only">Brainstorm a new command idea</label>
                         <textarea id="brainstorm-input"
                             placeholder="Describe a commands idea...&#10;e.g., '/standup - Generate a daily standup summary from git commits and task list'"></textarea>
                         <button class="save-idea-btn">Save Idea</button>
@@ -335,10 +341,10 @@
         <div class="calendar-header calendar-drag-handle">
             <span class="calendar-label"><i data-lucide="calendar-days" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Google Calendar</span>
             <div class="calendar-header-actions">
-                <button class="calendar-refresh-btn" title="Refresh from Google">
+                <button class="calendar-refresh-btn" title="Refresh from Google" aria-label="Refresh from Google Calendar">
                     <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
                 </button>
-                <button class="calendar-close">&times;</button>
+                <button class="calendar-close" aria-label="Close Calendar">&times;</button>
             </div>
         </div>
         <div class="calendar-status" id="calendar-status"></div>
@@ -350,12 +356,16 @@
             <span id="calendar-sync-time" class="calendar-sync-info"></span>
         </div>
         <div id="calendar-add-form" class="calendar-add-form" style="display: none;">
+            <label for="cal-new-summary" class="sr-only">Event title</label>
             <input type="text" id="cal-new-summary" placeholder="Event title..." class="cal-input">
             <div class="cal-datetime-row">
+                <label for="cal-new-start" class="sr-only">Start date and time</label>
                 <input type="datetime-local" id="cal-new-start" class="cal-input">
-                <span class="cal-arrow">→</span>
+                <span class="cal-arrow" aria-hidden="true">→</span>
+                <label for="cal-new-end" class="sr-only">End date and time</label>
                 <input type="datetime-local" id="cal-new-end" class="cal-input">
             </div>
+            <label for="cal-new-description" class="sr-only">Description</label>
             <input type="text" id="cal-new-description" placeholder="Description (optional)" class="cal-input">
             <div class="calendar-form-actions">
                 <button class="cal-create-btn">Create on GCal</button>
@@ -368,32 +378,32 @@
     <div id="health-window" class="health-window" style="display: none;">
         <div class="health-header health-drag-handle">
             <span class="health-label"><i data-lucide="heart-pulse" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Health Dashboard</span>
-            <button class="health-close">&times;</button>
+            <button class="health-close" aria-label="Close Health Dashboard">&times;</button>
         </div>
 
         <!-- Tabs -->
-        <div class="health-tabs">
-            <button class="health-tab-btn active" data-tab="workouts">Workouts</button>
-            <button class="health-tab-btn" data-tab="nutrition">Nutrition</button>
-            <button class="health-tab-btn" data-tab="glossary">Glossary</button>
+        <div class="health-tabs" id="health-tablist" role="tablist" aria-label="Health Dashboard">
+            <button class="health-tab-btn active" data-tab="workouts" role="tab" id="health-tab-workouts-btn" aria-selected="true" aria-controls="health-tab-workouts" tabindex="0">Workouts</button>
+            <button class="health-tab-btn" data-tab="nutrition" role="tab" id="health-tab-nutrition-btn" aria-selected="false" aria-controls="health-tab-nutrition" tabindex="-1">Nutrition</button>
+            <button class="health-tab-btn" data-tab="glossary" role="tab" id="health-tab-glossary-btn" aria-selected="false" aria-controls="health-tab-glossary" tabindex="-1">Glossary</button>
         </div>
 
         <!-- Workouts Tab -->
-        <div id="health-tab-workouts" class="health-tab-content active">
+        <div id="health-tab-workouts" class="health-tab-content active" role="tabpanel" aria-labelledby="health-tab-workouts-btn">
             <div class="health-body" id="workouts-body">
                 <div class="health-loading">Loading workouts...</div>
             </div>
         </div>
 
         <!-- Nutrition Tab -->
-        <div id="health-tab-nutrition" class="health-tab-content" style="display: none;">
+        <div id="health-tab-nutrition" class="health-tab-content" role="tabpanel" aria-labelledby="health-tab-nutrition-btn" style="display: none;">
             <div class="health-body" id="nutrition-body">
                 <div class="health-loading">Loading nutrition plan...</div>
             </div>
         </div>
 
         <!-- Glossary Tab -->
-        <div id="health-tab-glossary" class="health-tab-content" style="display: none;">
+        <div id="health-tab-glossary" class="health-tab-content" role="tabpanel" aria-labelledby="health-tab-glossary-btn" style="display: none;">
             <div class="health-body" id="glossary-body">
                 <div class="health-loading">Loading glossary...</div>
             </div>
@@ -405,21 +415,21 @@
     <div id="mc-window" class="mc-window" style="display: none;">
         <div class="mc-header mc-drag-handle">
             <span class="mc-label">Mission Control</span>
-            <button class="mc-close">&times;</button>
+            <button class="mc-close" aria-label="Close Mission Control">&times;</button>
         </div>
 
         <div class="mc-body">
             <!-- LEFT PANEL: Form/Data Entry -->
             <div class="mc-left-panel">
                 <!-- Section Tabs -->
-                <div class="mc-workshop-tabs">
-                    <button class="mc-tab-btn active" data-section="agents">Agents</button>
-                    <button class="mc-tab-btn" data-section="teams">Teams</button>
-                    <button class="mc-tab-btn" data-section="workflows">Workflows</button>
+                <div class="mc-workshop-tabs" id="mc-tablist" role="tablist" aria-label="Mission Control Sections">
+                    <button class="mc-tab-btn active" data-section="agents" role="tab" id="mc-tab-agents" aria-selected="true" aria-controls="mc-section-agents" tabindex="0">Agents</button>
+                    <button class="mc-tab-btn" data-section="teams" role="tab" id="mc-tab-teams" aria-selected="false" aria-controls="mc-section-teams" tabindex="-1">Teams</button>
+                    <button class="mc-tab-btn" data-section="workflows" role="tab" id="mc-tab-workflows" aria-selected="false" aria-controls="mc-section-workflows" tabindex="-1">Workflows</button>
                 </div>
 
                 <!-- Agents Section -->
-                <div class="mc-section-panel active" id="mc-section-agents">
+                <div class="mc-section-panel active" id="mc-section-agents" role="tabpanel" aria-labelledby="mc-tab-agents">
                     <div class="mc-section-header">
                         <span class="mc-section-title">Agent Builder</span>
                         <div class="mc-section-actions">
@@ -431,11 +441,11 @@
                         <!-- Name + Tier Row (Inline) -->
                         <div class="mc-form-row">
                             <div class="mc-form-group mc-form-group-flex">
-                                <label>Name</label>
+                                <label for="agent-name">Name</label>
                                 <input type="text" id="agent-name" placeholder="e.g., API Scout">
                             </div>
                             <div class="mc-form-group mc-form-group-compact">
-                                <label>Tier</label>
+                                <label for="agent-tier">Tier</label>
                                 <select id="agent-tier">
                                     <option value="haiku">the agent</option>
                                     <option value="sonnet">the agent</option>
@@ -452,13 +462,13 @@
                         </div>
 
                         <div class="mc-form-group">
-                            <label>Description / Prompt</label>
+                            <label for="agent-description">Description / Prompt</label>
                             <textarea id="agent-description"
                                 placeholder="What does this agent do? This becomes the agent's system context..."></textarea>
                         </div>
 
                         <div class="mc-form-group">
-                            <label>Skills</label>
+                            <label for="agent-skills">Skills</label>
                             <input type="text" id="agent-skills" placeholder="e.g., security-audit, code-review">
                             <div class="skill-preview-container" id="skill-preview">
                                 <!-- Skill pills populated dynamically -->
@@ -473,7 +483,7 @@
                 </div>
 
                 <!-- Teams Section -->
-                <div class="mc-section-panel" id="mc-section-teams">
+                <div class="mc-section-panel" id="mc-section-teams" role="tabpanel" aria-labelledby="mc-tab-teams">
                     <div class="mc-section-header">
                         <span class="mc-section-title">Team Composer</span>
                         <div class="mc-section-actions">
@@ -487,7 +497,7 @@
                 </div>
 
                 <!-- Workflows Section -->
-                <div class="mc-section-panel" id="mc-section-workflows">
+                <div class="mc-section-panel" id="mc-section-workflows" role="tabpanel" aria-labelledby="mc-tab-workflows">
                     <div class="mc-section-header">
                         <span class="mc-section-title">Workflow Planner</span>
                         <div class="mc-section-actions">
@@ -512,7 +522,7 @@
                         <div class="terminal-tabs" id="terminal-tabs">
                             <!-- Populated by JS -->
                         </div>
-                        <button class="mc-new-tab-btn" id="mc-new-tab-btn" title="New Terminal">+</button>
+                        <button class="mc-new-tab-btn" id="mc-new-tab-btn" title="New Terminal" aria-label="New Terminal">+</button>
                         <div class="terminal-connection-status" id="terminal-connection-status">
                             <span class="status-dot"></span>
                             <span class="status-text">--</span>
@@ -551,36 +561,38 @@
     <div id="vault-window" class="vault-window" style="display: none;">
         <div class="vault-header vault-drag-handle">
             <span class="vault-label"><i data-lucide="archive" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Vault</span>
-            <button class="vault-close">&times;</button>
+            <button class="vault-close" aria-label="Close Vault">&times;</button>
         </div>
 
         <!-- Tabs -->
-        <div class="vault-tabs">
-            <button class="vault-tab-btn active" data-tab="tasks">Tasks</button>
-            <button class="vault-tab-btn" data-tab="projects">Projects</button>
-            <button class="vault-tab-btn" data-tab="documents">Documents</button>
+        <div class="vault-tabs" id="vault-tablist" role="tablist" aria-label="Vault">
+            <button class="vault-tab-btn active" data-tab="tasks" role="tab" id="vault-tab-tasks-btn" aria-selected="true" aria-controls="vault-tab-tasks" tabindex="0">Tasks</button>
+            <button class="vault-tab-btn" data-tab="projects" role="tab" id="vault-tab-projects-btn" aria-selected="false" aria-controls="vault-tab-projects" tabindex="-1">Projects</button>
+            <button class="vault-tab-btn" data-tab="documents" role="tab" id="vault-tab-documents-btn" aria-selected="false" aria-controls="vault-tab-documents" tabindex="-1">Documents</button>
         </div>
 
         <!-- Tasks Tab -->
-        <div id="vault-tab-tasks" class="vault-tab-content active">
+        <div id="vault-tab-tasks" class="vault-tab-content active" role="tabpanel" aria-labelledby="vault-tab-tasks-btn">
             <div class="vault-body" id="vault-tasks-body">
                 <div class="vault-loading">Loading tasks...</div>
             </div>
         </div>
 
         <!-- Projects Tab -->
-        <div id="vault-tab-projects" class="vault-tab-content" style="display: none;">
+        <div id="vault-tab-projects" class="vault-tab-content" role="tabpanel" aria-labelledby="vault-tab-projects-btn" style="display: none;">
             <div class="vault-body" id="vault-projects-body">
                 <div class="vault-loading">Loading projects...</div>
             </div>
         </div>
 
         <!-- Documents Tab -->
-        <div id="vault-tab-documents" class="vault-tab-content" style="display: none;">
+        <div id="vault-tab-documents" class="vault-tab-content" role="tabpanel" aria-labelledby="vault-tab-documents-btn" style="display: none;">
             <div class="vault-doc-controls">
+                <label for="vault-doc-category" class="sr-only">Filter by category</label>
                 <select id="vault-doc-category">
                     <option value="">All Categories</option>
                 </select>
+                <label for="vault-doc-sort" class="sr-only">Sort order</label>
                 <select id="vault-doc-sort">
                     <option value="created_at">Newest</option>
                     <option value="updated_at">Recently Updated</option>
@@ -597,7 +609,7 @@
     <div id="workspaces-window" class="workspaces-window" style="display: none;">
         <div class="workspaces-header workspaces-drag-handle">
             <span class="workspaces-label"><i data-lucide="git-branch" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Workspaces</span>
-            <button class="workspaces-close">&times;</button>
+            <button class="workspaces-close" aria-label="Close Workspaces">&times;</button>
         </div>
 
         <div class="workspaces-body" id="workspaces-body">
@@ -613,12 +625,12 @@
                 <span class="chat-header-label">Brain Chat</span>
             </div>
             <div class="chat-header-actions">
-                <button title="Clear history">&#8634;</button>
-                <button title="Minimize">&#8722;</button>
-                <button title="Close">&times;</button>
+                <button title="Clear history" aria-label="Clear chat history">&#8634;</button>
+                <button title="Minimize" aria-label="Minimize chat">&#8722;</button>
+                <button title="Close" aria-label="Close chat">&times;</button>
             </div>
         </div>
-        <div class="chat-messages" id="chat-messages">
+        <div class="chat-messages" id="chat-messages" aria-live="polite" aria-relevant="additions">
             <div class="chat-welcome">
                 <strong>Brain Chat</strong>
                 Ask questions about your Second Brain.<br>
@@ -630,6 +642,7 @@
             <span>Searching brain...</span>
         </div>
         <div class="chat-input-area">
+            <label for="chat-input" class="sr-only">Chat message</label>
             <textarea id="chat-input" placeholder="Ask your brain..." rows="1"></textarea>
             <button class="chat-send-btn" id="chat-send-btn">Send</button>
         </div>

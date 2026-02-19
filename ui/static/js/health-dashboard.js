@@ -2,7 +2,6 @@
  * health-dashboard.js — Health & wellness dashboard (workouts, nutrition, glossary)
  */
 import { API, escapeHtml } from './app.js';
-import { makeDraggable } from './draggable.js';
 import { initAccessibleTabs } from './a11y.js';
 
 let workoutsData = null;
@@ -12,27 +11,7 @@ let glossaryData = null;
 export async function openHealthWindow() {
     const win = document.getElementById('health-window');
     if (!win) return;
-
-    let posRestored = false;
-    try {
-        const saved = localStorage.getItem('healthWindowPosition');
-        if (saved) {
-            const { x, y } = JSON.parse(saved);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                win.style.left = x + 'px'; win.style.top = y + 'px'; posRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore health position:', e); }
-    if (!posRestored) {
-        win.style.left = Math.max(0, (window.innerWidth - 700) / 2) + 'px';
-        win.style.top = Math.max(0, (window.innerHeight - 600) / 2) + 'px';
-    }
-
-    win.style.display = 'flex';
-    if (!win.dataset.dragInitialized) {
-        makeDraggable('health-window', '.health-drag-handle', 'healthWindowPosition');
-        win.dataset.dragInitialized = 'true';
-    }
+    win.open();
     if (typeof lucide !== 'undefined') lucide.createIcons();
     if (!workoutsData) await loadWorkouts();
     if (!nutritionData) await loadNutrition();
@@ -40,7 +19,7 @@ export async function openHealthWindow() {
 
 export function closeHealthWindow() {
     const win = document.getElementById('health-window');
-    if (win) win.style.display = 'none';
+    if (win) win.close();
 }
 
 export function switchHealthTab(tab) {

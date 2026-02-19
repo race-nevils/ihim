@@ -99,12 +99,13 @@
 
 
 <!-- Standards Library Window (Draggable) -->
-    <div id="standards-library-window" class="standards-library-window" style="display: none;">
-        <div class="standards-library-header standards-library-drag-handle">
+    <ihim-panel id="standards-library-window" class="standards-library-window" persist-key="standardsLibraryWindowPosition">
+        <div class="standards-library-header standards-library-drag-handle" data-drag-handle>
             <span class="standards-library-label">🛡️ Standards Library</span>
-            <button class="standards-library-close" aria-label="Close Standards Library">&times;</button>
+            <button class="standards-library-close" data-close-btn aria-label="Close Standards Library">&times;</button>
         </div>
         <div class="standards-library-body">
+            <ihim-tabs>
             <!-- Tabs -->
             <div class="standards-library-tabs" id="sl-tablist" role="tablist" aria-label="Standards Library">
                 <button class="sl-tab-btn active" data-tab="modules" role="tab" id="sl-tab-modules" aria-selected="true" aria-controls="sl-modules-panel" tabindex="0">Modules</button>
@@ -139,20 +140,21 @@
                     <!-- Loaded dynamically -->
                 </div>
             </div>
+            </ihim-tabs>
         </div>
         <div class="standards-library-footer">
             <span id="standards-library-count">0 modules</span>
         </div>
-    </div>
+    </ihim-panel>
 
     <!-- Flight Path Window (Draggable) -->
-    <div id="flightpath-window" class="flightpath-window" style="display: none;">
-        <div class="flightpath-header flightpath-drag-handle">
+    <ihim-panel id="flightpath-window" class="flightpath-window" persist-key="flightpathWindowPosition">
+        <div class="flightpath-header flightpath-drag-handle" data-drag-handle>
             <span class="flightpath-label">Flight Path</span>
             <div class="flightpath-controls">
                 <button class="fp-control-btn" title="Refresh" aria-label="Refresh Flight Path">↻</button>
             </div>
-            <button class="flightpath-close" aria-label="Close Flight Path">&times;</button>
+            <button class="flightpath-close" data-close-btn aria-label="Close Flight Path">&times;</button>
         </div>
         <div class="flightpath-body">
             <!-- Traffic Light Overview -->
@@ -192,7 +194,7 @@
         <div class="flightpath-footer">
             <span id="fp-status">Click system for details • Auto-refresh every 5s</span>
         </div>
-    </div>
+    </ihim-panel>
 
     <!-- Agent Team Builder Modal -->
     <dialog id="agent-team-modal" class="modal" aria-labelledby="agent-team-modal-title">
@@ -337,14 +339,14 @@
 
 
 <!-- Google Calendar Window (Draggable) -->
-    <div id="calendar-window" class="calendar-window" style="display: none;">
-        <div class="calendar-header calendar-drag-handle">
+    <ihim-panel id="calendar-window" class="calendar-window" persist-key="calendarWindowPosition">
+        <div class="calendar-header calendar-drag-handle" data-drag-handle>
             <span class="calendar-label"><i data-lucide="calendar-days" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Google Calendar</span>
             <div class="calendar-header-actions">
                 <button class="calendar-refresh-btn" title="Refresh from Google" aria-label="Refresh from Google Calendar">
                     <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
                 </button>
-                <button class="calendar-close" aria-label="Close Calendar">&times;</button>
+                <button class="calendar-close" data-close-btn aria-label="Close Calendar">&times;</button>
             </div>
         </div>
         <div class="calendar-status" id="calendar-status"></div>
@@ -372,15 +374,16 @@
                 <button class="cal-cancel-btn">Cancel</button>
             </div>
         </div>
-    </div>
+    </ihim-panel>
 
 <!-- Health Window (Draggable) -->
-    <div id="health-window" class="health-window" style="display: none;">
-        <div class="health-header health-drag-handle">
+    <ihim-panel id="health-window" class="health-window" persist-key="healthWindowPosition">
+        <div class="health-header health-drag-handle" data-drag-handle>
             <span class="health-label"><i data-lucide="heart-pulse" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Health Dashboard</span>
-            <button class="health-close" aria-label="Close Health Dashboard">&times;</button>
+            <button class="health-close" data-close-btn aria-label="Close Health Dashboard">&times;</button>
         </div>
 
+        <ihim-tabs>
         <!-- Tabs -->
         <div class="health-tabs" id="health-tablist" role="tablist" aria-label="Health Dashboard">
             <button class="health-tab-btn active" data-tab="workouts" role="tab" id="health-tab-workouts-btn" aria-selected="true" aria-controls="health-tab-workouts" tabindex="0">Workouts</button>
@@ -408,19 +411,21 @@
                 <div class="health-loading">Loading glossary...</div>
             </div>
         </div>
-    </div>
+        </ihim-tabs>
+    </ihim-panel>
 
 
 <!-- Mission Control Window (Draggable) -->
-    <div id="mc-window" class="mc-window" style="display: none;">
-        <div class="mc-header mc-drag-handle">
+    <ihim-panel id="mc-window" class="mc-window" persist-key="mcWindowPosition">
+        <div class="mc-header mc-drag-handle" data-drag-handle>
             <span class="mc-label">Mission Control</span>
-            <button class="mc-close" aria-label="Close Mission Control">&times;</button>
+            <button class="mc-close" data-close-btn aria-label="Close Mission Control">&times;</button>
         </div>
 
         <div class="mc-body">
             <!-- LEFT PANEL: Form/Data Entry -->
             <div class="mc-left-panel">
+                <ihim-tabs>
                 <!-- Section Tabs -->
                 <div class="mc-workshop-tabs" id="mc-tablist" role="tablist" aria-label="Mission Control Sections">
                     <button class="mc-tab-btn active" data-section="agents" role="tab" id="mc-tab-agents" aria-selected="true" aria-controls="mc-section-agents" tabindex="0">Agents</button>
@@ -509,6 +514,7 @@
                         <p class="mc-hint">Map out automation sequences before building them.</p>
                     </div>
                 </div>
+                </ihim-tabs>
 
                 <!-- Status -->
                 <div id="mc-status" class="mc-status" style="display: none;"></div>
@@ -555,15 +561,16 @@
                 <button class="mc-footer-btn" title="Reconnect">Reconnect</button>
             </div>
         </div>
-    </div>
+    </ihim-panel>
 
 <!-- Vault Dashboard Window (Draggable) -->
-    <div id="vault-window" class="vault-window" style="display: none;">
-        <div class="vault-header vault-drag-handle">
+    <ihim-panel id="vault-window" class="vault-window" persist-key="vaultWindowPosition">
+        <div class="vault-header vault-drag-handle" data-drag-handle>
             <span class="vault-label"><i data-lucide="archive" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Vault</span>
-            <button class="vault-close" aria-label="Close Vault">&times;</button>
+            <button class="vault-close" data-close-btn aria-label="Close Vault">&times;</button>
         </div>
 
+        <ihim-tabs>
         <!-- Tabs -->
         <div class="vault-tabs" id="vault-tablist" role="tablist" aria-label="Vault">
             <button class="vault-tab-btn active" data-tab="tasks" role="tab" id="vault-tab-tasks-btn" aria-selected="true" aria-controls="vault-tab-tasks" tabindex="0">Tasks</button>
@@ -603,23 +610,24 @@
                 <div class="vault-loading">Loading documents...</div>
             </div>
         </div>
-    </div>
+        </ihim-tabs>
+    </ihim-panel>
 
 <!-- Workspaces Window (Draggable) -->
-    <div id="workspaces-window" class="workspaces-window" style="display: none;">
-        <div class="workspaces-header workspaces-drag-handle">
+    <ihim-panel id="workspaces-window" class="workspaces-window" persist-key="workspacesWindowPosition">
+        <div class="workspaces-header workspaces-drag-handle" data-drag-handle>
             <span class="workspaces-label"><i data-lucide="git-branch" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Workspaces</span>
-            <button class="workspaces-close" aria-label="Close Workspaces">&times;</button>
+            <button class="workspaces-close" data-close-btn aria-label="Close Workspaces">&times;</button>
         </div>
 
         <div class="workspaces-body" id="workspaces-body">
             <div class="workspaces-loading">Loading workspaces...</div>
         </div>
-    </div>
+    </ihim-panel>
 
 <!-- Brain Chat Window (Draggable) -->
-    <div id="chat-window" class="chat-window" style="display: none;">
-        <div class="chat-header chat-drag-handle">
+    <ihim-panel id="chat-window" class="chat-window" persist-key="chatWindowPosition">
+        <div class="chat-header chat-drag-handle" data-drag-handle>
             <div class="chat-header-left">
                 <span class="chat-status-dot" id="chat-status-dot"></span>
                 <span class="chat-header-label">Brain Chat</span>
@@ -627,7 +635,7 @@
             <div class="chat-header-actions">
                 <button title="Clear history" aria-label="Clear chat history">&#8634;</button>
                 <button title="Minimize" aria-label="Minimize chat">&#8722;</button>
-                <button title="Close" aria-label="Close chat">&times;</button>
+                <button title="Close" data-close-btn aria-label="Close chat">&times;</button>
             </div>
         </div>
         <div class="chat-messages" id="chat-messages" aria-live="polite" aria-relevant="additions">
@@ -646,7 +654,7 @@
             <textarea id="chat-input" placeholder="Ask your brain..." rows="1"></textarea>
             <button class="chat-send-btn" id="chat-send-btn">Send</button>
         </div>
-    </div>
+    </ihim-panel>
 
     <!-- xterm.js from CDN -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">

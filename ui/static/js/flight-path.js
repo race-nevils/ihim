@@ -2,7 +2,6 @@
  * flight-path.js — System topology / health viewer
  */
 import { API, escapeHtml } from './app.js';
-import { makeDraggable } from './draggable.js';
 
 export const flightPath = {
     components: [],
@@ -241,32 +240,12 @@ export const flightPath = {
 
 export function openFlightPathWindow() {
     const fpWindow = document.getElementById('flightpath-window');
-    let posRestored = false;
-    try {
-        const savedPosition = localStorage.getItem('flightpathWindowPosition');
-        if (savedPosition) {
-            const { x, y } = JSON.parse(savedPosition);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                fpWindow.style.left = x + 'px';
-                fpWindow.style.top = y + 'px';
-                posRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore flightpath position:', e); }
-    if (!posRestored) {
-        fpWindow.style.left = ((window.innerWidth - 900) / 2) + 'px';
-        fpWindow.style.top = ((window.innerHeight - 600) / 2) + 'px';
-    }
-    fpWindow.style.display = 'flex';
-    if (!fpWindow.dataset.dragInitialized) {
-        makeDraggable('flightpath-window', '.flightpath-drag-handle', 'flightpathWindowPosition');
-        fpWindow.dataset.dragInitialized = 'true';
-    }
+    fpWindow.open();
     setTimeout(() => flightPath.init(), 50);
 }
 
 export function closeFlightPathWindow() {
-    document.getElementById('flightpath-window').style.display = 'none';
+    document.getElementById('flightpath-window').close();
     flightPath.stopHealthPolling();
     flightPath.cleanupEventListeners();
 }

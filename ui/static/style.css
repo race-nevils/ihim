@@ -6556,6 +6556,18 @@ dialog.modal:not([open]) {
 }
 
 /* ============================================ */
+/* WEB COMPONENTS (Phase 4)                     */
+/* ============================================ */
+
+/* Draggable window component — visibility via [open] attribute */
+ihim-panel { position: fixed; z-index: 100; }
+ihim-panel:not([open]) { display: none; }
+ihim-panel[open] { display: flex; flex-direction: column; }
+
+/* Tab system component — transparent wrapper, invisible to layout + AT */
+ihim-tabs { display: contents; }
+
+/* ============================================ */
 /* ACCESSIBILITY                                */
 /* ============================================ */
 

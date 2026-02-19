@@ -2,45 +2,20 @@
  * calendar.js — Google Calendar integration module
  */
 import { API, showStatus } from './app.js';
-import { makeDraggable } from './draggable.js';
 
 let calendarCache = null;
 
 export async function openCalendarWindow() {
     const win = document.getElementById('calendar-window');
     if (!win) return;
-
-    let posRestored = false;
-    try {
-        const saved = localStorage.getItem('calendarWindowPosition');
-        if (saved) {
-            const { x, y } = JSON.parse(saved);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                win.style.left = x + 'px';
-                win.style.top = y + 'px';
-                posRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore calendar position:', e); }
-    if (!posRestored) {
-        win.style.left = Math.max(0, (window.innerWidth - 420) / 2) + 'px';
-        win.style.top = Math.max(0, (window.innerHeight - 520) / 2) + 'px';
-    }
-
-    win.style.display = 'flex';
-
-    if (!win.dataset.dragInitialized) {
-        makeDraggable('calendar-window', '.calendar-drag-handle', 'calendarWindowPosition');
-        win.dataset.dragInitialized = 'true';
-    }
-
+    win.open();
     if (typeof lucide !== 'undefined') lucide.createIcons();
     await loadCalendarEvents();
 }
 
 export function closeCalendarWindow() {
     const win = document.getElementById('calendar-window');
-    if (win) win.style.display = 'none';
+    if (win) win.close();
 }
 
 async function loadCalendarEvents() {

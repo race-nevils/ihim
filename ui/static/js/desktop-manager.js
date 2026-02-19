@@ -106,12 +106,8 @@ export const desktopManager = {
         }
 
         if (this.isDragging) {
-            const FOOTER_HEIGHT = 36;
-            let x = e.clientX - this.offset.x;
-            let y = e.clientY - this.offset.y;
-            // Viewport clamp — icon stays fully on screen
-            x = Math.max(0, Math.min(x, window.innerWidth - 100));
-            y = Math.max(0, Math.min(y, window.innerHeight - FOOTER_HEIGHT - 100));
+            const x = e.clientX - this.offset.x;
+            const y = e.clientY - this.offset.y;
             icon.style.left = x + 'px';
             icon.style.top = y + 'px';
         }

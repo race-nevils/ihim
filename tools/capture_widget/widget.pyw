@@ -39,8 +39,9 @@ from PIL import Image, ImageDraw
 from pynput import keyboard as pynput_keyboard
 from pynput import mouse as pynput_mouse
 
-# TCP trigger port for external hotkey activation
-TRIGGER_PORT = 7778
+# Internal TCP trigger port — iHIM API bridges external triggers here.
+# NOT in the iHIM port range (7777-7780) to avoid conflicts with test servers.
+TRIGGER_PORT = 47778
 
 
 # Load config
@@ -98,6 +99,7 @@ class CaptureWidget:
         # Debounce state
         self._is_visible = False
         self._last_show_time = 0
+        self._last_key_time = 0
 
         # Tkinter root (hidden)
         self.root = tk.Tk()
@@ -358,20 +360,24 @@ class CaptureWidget:
 
     def _register_hotkey(self):
         """Register global hotkey using pynput."""
-        # Define the hotkey combination: Alt + Space
-        # pynput uses a different approach - we listen for key combinations
 
         def on_press(key):
             try:
+                now = time.time()
+                # Stale key guard: clear if no activity for 2s or set is suspiciously large.
+                # Windows drops on_release events during alt-tab, screen lock, focus changes,
+                # leaving phantom keys that cause false Alt+Space triggers over time.
+                if (now - self._last_key_time > 2.0) or len(self.current_keys) > 4:
+                    self.current_keys.clear()
+                self._last_key_time = now
+
                 self.current_keys.add(key)
                 # Check for Alt + Space
                 if (pynput_keyboard.Key.alt in self.current_keys or
                     pynput_keyboard.Key.alt_l in self.current_keys or
                     pynput_keyboard.Key.alt_r in self.current_keys):
                     if pynput_keyboard.Key.space in self.current_keys:
-                        # Trigger on main thread
                         self.root.after(0, self.show)
-                        # Clear to prevent repeat triggers
                         self.current_keys.clear()
             except Exception as e:
                 logger.debug(f"Hotkey on_press error: {e}")

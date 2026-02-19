@@ -83,6 +83,8 @@ privilege_router, PRIVILEGE_AVAILABLE = _try_import(
     "Privilege", lambda: __import__("api.privilege.routes", fromlist=["router"]).router)
 recorder_router, RECORDER_AVAILABLE = _try_import(
     "Recorder", lambda: __import__("api.recorder.routes", fromlist=["router"]).router)
+capture_router, CAPTURE_AVAILABLE = _try_import(
+    "Capture", lambda: __import__("api.capture.routes", fromlist=["router"]).router)
 
 # System topology & health (not yet a router — functions used inline below)
 try:
@@ -218,6 +220,7 @@ _routers = [
     (compliance_router, COMPLIANCE_AVAILABLE),
     (privilege_router, PRIVILEGE_AVAILABLE),
     (recorder_router, RECORDER_AVAILABLE),
+    (capture_router, CAPTURE_AVAILABLE),
 ]
 
 for rtr, available in _routers:

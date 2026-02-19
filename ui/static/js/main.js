@@ -13,6 +13,7 @@ import { initStandardsLibraryEvents, closeStandardsLibraryWindow } from './stand
 import { initHealthEvents, closeHealthWindow } from './health-dashboard.js';
 import { initVaultEvents, closeVaultWindow, closeWorkspacesWindow } from './vault-dashboard.js';
 import { initMCEvents, closeMCWindow } from './terminal-manager.js';
+import { initRecorderEvents, closeRecorderWindow } from './recorder.js';
 import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent, closeCalendarWindow } from './calendar.js';
 import { initWindowEscapeClose, initGlobalEscapeHandler } from './a11y.js';
 
@@ -63,6 +64,7 @@ function initializeApp() {
     initHealthEvents();
     initVaultEvents();
     initMCEvents();
+    initRecorderEvents();
 
     // Register windows for Escape-key closing
     initWindowEscapeClose(document.getElementById('standards-library-window'), closeStandardsLibraryWindow);
@@ -70,6 +72,7 @@ function initializeApp() {
     initWindowEscapeClose(document.getElementById('vault-window'), closeVaultWindow);
     initWindowEscapeClose(document.getElementById('workspaces-window'), closeWorkspacesWindow);
     initWindowEscapeClose(document.getElementById('mc-window'), closeMCWindow);
+    initWindowEscapeClose(document.getElementById('recorder-window'), closeRecorderWindow);
     initWindowEscapeClose(document.getElementById('calendar-window'), closeCalendarWindow);
     initWindowEscapeClose(document.getElementById('chat-window'), closeChatWindow);
     initWindowEscapeClose(document.getElementById('flightpath-window'), () => {
@@ -158,6 +161,19 @@ function initializeApp() {
         vaultWin.querySelectorAll('.vault-tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 import('./vault-dashboard.js').then(m => m.switchVaultTab(btn.dataset.tab));
+            });
+        });
+    }
+
+    // Recorder window buttons
+    const recWin = document.getElementById('recorder-window');
+    if (recWin) {
+        recWin.querySelector('.recorder-close')?.addEventListener('click', () => {
+            import('./recorder.js').then(m => m.closeRecorderWindow());
+        });
+        recWin.querySelectorAll('.recorder-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                import('./recorder.js').then(m => m.switchRecorderTab(btn.dataset.tab));
             });
         });
     }

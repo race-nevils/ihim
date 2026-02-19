@@ -12,11 +12,9 @@ Updated: 2025-12-28
 |--------|------|-------------|------------------|
 | **the agent harness Foundation** | `claude_code_foundation.md` | API rate limits, context windows, agent spawning constraints | `/api/health/rate-limits`, `/api/health/context` |
 | **Memory System** | `memory_system.md` | MEMORY.md, NOTES.md, archive management | `/api/system/memory/health` |
-| **Blackboard System** | `blackboard_system.md` | Agent coordination, message passing, file locking | `/api/blackboard/health` |
 | **Guardrails System** | `guardrails_system.md` | Autonomous operation boundaries, enforcement flow | `/api/system/guardrails/health` |
 | **Team/Agent System** | `team_agent_system.md` | Agent spawning, tiering, wave execution | `/api/metrics/spawn`, `/api/team/status` |
 | **iHIM API System** | `ihim_api_system.md` | FastAPI backend, dashboard, port 7777 | `/api/system/health`, `/api/system/topology` |
-| **Syncthing System** | `syncthing_system.md` | File sync, versioning, conflict resolution | `/api/health/syncthing` |
 
 ---
 
@@ -32,15 +30,11 @@ the agent harness Foundation (substrate)
     │   └── GUARDRAILS.md
     │
     ├── Team/Agent System (agent coordination)
-    │   ├── spawner.py, templates.py
-    │   └── Blackboard System (message bus)
-    │       └── blackboard.py, blackboard.json
+    │   └── spawner.py, templates.py
     │
     ├── iHIM API System (dashboard backend)
     │   └── main.py, run.py
     │
-    └── Syncthing System (file sync)
-        └── .stignore, .stversions
 ```
 
 ---

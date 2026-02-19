@@ -2,7 +2,6 @@
  * standards-library.js — Compliance standards library viewer
  */
 import { API, escapeHtml, showStatus } from './app.js';
-import { makeDraggable } from './draggable.js';
 import { initAccessibleTabs } from './a11y.js';
 
 let standardsLibraryModules = [];
@@ -11,31 +10,12 @@ let referencesData = null;
 
 export async function openStandardsLibraryWindow() {
     const win = document.getElementById('standards-library-window');
-    let posRestored = false;
-    try {
-        const saved = localStorage.getItem('standardsLibraryWindowPosition');
-        if (saved) {
-            const { x, y } = JSON.parse(saved);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                win.style.left = x + 'px'; win.style.top = y + 'px'; posRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore standards library position:', e); }
-    if (!posRestored) {
-        const rect = win.getBoundingClientRect();
-        win.style.left = (window.innerWidth - rect.width) / 2 + 'px';
-        win.style.top = (window.innerHeight - rect.height) / 2 + 'px';
-    }
-    win.style.display = 'block';
+    win.open();
     await loadStandardsLibraryModules();
-    if (!win.dataset.dragInitialized) {
-        makeDraggable('standards-library-window', '.standards-library-drag-handle', 'standardsLibraryWindowPosition');
-        win.dataset.dragInitialized = 'true';
-    }
 }
 
 export function closeStandardsLibraryWindow() {
-    document.getElementById('standards-library-window').style.display = 'none';
+    document.getElementById('standards-library-window').close();
 }
 
 async function loadStandardsLibraryModules() {

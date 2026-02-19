@@ -1,7 +1,6 @@
 /**
  * vault-dashboard.js — Vault (tasks, projects, documents) + Workspaces viewer
  */
-import { makeDraggable } from './draggable.js';
 import { initAccessibleTabs } from './a11y.js';
 
 // =====================
@@ -218,25 +217,8 @@ export const workspacesManager = {
 export async function openVaultWindow() {
     const win = document.getElementById('vault-window');
     if (!win) return;
-    let posRestored = false;
-    try {
-        const saved = localStorage.getItem('vaultWindowPosition');
-        if (saved) {
-            const { x, y } = JSON.parse(saved);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                win.style.left = x + 'px'; win.style.top = y + 'px'; posRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore vault position:', e); }
-    if (!posRestored) {
-        win.style.left = Math.max(0, (window.innerWidth - 700) / 2) + 'px';
-        win.style.top = Math.max(0, (window.innerHeight - 600) / 2) + 'px';
-    }
-    win.style.display = 'flex';
-    if (!vaultManager.initialized) {
-        vaultManager.initialized = true;
-        makeDraggable('vault-window', '.vault-drag-handle', 'vaultWindowPosition');
-    }
+    win.open();
+    if (!vaultManager.initialized) vaultManager.initialized = true;
     vaultManager.loadTasks();
     vaultManager.loadCategories();
     if (window.lucide) lucide.createIcons();
@@ -244,14 +226,14 @@ export async function openVaultWindow() {
 
 export function closeVaultWindow() {
     const win = document.getElementById('vault-window');
-    if (win) win.style.display = 'none';
+    if (win) win.close();
 }
 
 export function toggleVaultWindow() {
     const win = document.getElementById('vault-window');
     if (!win) return;
-    if (win.style.display === 'none' || !win.style.display) openVaultWindow();
-    else closeVaultWindow();
+    if (win.hasAttribute('open')) closeVaultWindow();
+    else openVaultWindow();
 }
 
 export function switchVaultTab(tab) {
@@ -272,39 +254,22 @@ export function switchVaultTab(tab) {
 export async function openWorkspacesWindow() {
     const win = document.getElementById('workspaces-window');
     if (!win) return;
-    let posRestored = false;
-    try {
-        const saved = localStorage.getItem('workspacesWindowPosition');
-        if (saved) {
-            const { x, y } = JSON.parse(saved);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                win.style.left = x + 'px'; win.style.top = y + 'px'; posRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore workspaces position:', e); }
-    if (!posRestored) {
-        win.style.left = Math.max(0, (window.innerWidth - 600) / 2) + 'px';
-        win.style.top = Math.max(0, (window.innerHeight - 500) / 2) + 'px';
-    }
-    win.style.display = 'flex';
-    if (!workspacesManager.initialized) {
-        workspacesManager.initialized = true;
-        makeDraggable('workspaces-window', '.workspaces-drag-handle', 'workspacesWindowPosition');
-    }
+    win.open();
+    if (!workspacesManager.initialized) workspacesManager.initialized = true;
     await workspacesManager.loadWorkspaces();
     if (window.lucide) lucide.createIcons();
 }
 
 export function closeWorkspacesWindow() {
     const win = document.getElementById('workspaces-window');
-    if (win) win.style.display = 'none';
+    if (win) win.close();
 }
 
 export function toggleWorkspacesWindow() {
     const win = document.getElementById('workspaces-window');
     if (!win) return;
-    if (win.style.display === 'none' || !win.style.display) openWorkspacesWindow();
-    else closeWorkspacesWindow();
+    if (win.hasAttribute('open')) closeWorkspacesWindow();
+    else openWorkspacesWindow();
 }
 
 // Event delegation for vault interactions

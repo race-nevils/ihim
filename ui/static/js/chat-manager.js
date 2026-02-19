@@ -2,7 +2,6 @@
  * chat-manager.js — Brain Chat (WebSocket RAG), Team Modal, and Agent Team Builder Modal
  */
 import { API, escapeHtml, showStatus } from './app.js';
-import { makeDraggable } from './draggable.js';
 import { openWithFocusRestore, closeWithFocusRestore } from './a11y.js';
 
 // =====================
@@ -170,41 +169,21 @@ export const chatManager = {
 export function openChatWindow() {
     const win = document.getElementById('chat-window');
     if (!win) return;
-    let positionRestored = false;
-    try {
-        const saved = localStorage.getItem('chatWindowPosition');
-        if (saved) {
-            const { x, y } = JSON.parse(saved);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                win.style.left = x + 'px'; win.style.top = y + 'px';
-                win.style.right = 'auto'; win.style.bottom = 'auto';
-                positionRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore chat position:', e); }
-    if (!positionRestored) {
-        win.style.right = '20px'; win.style.bottom = '44px'; win.style.left = ''; win.style.top = '';
-    }
-    win.style.display = 'flex';
-    win.classList.remove('minimized');
-    if (!win.dataset.dragInitialized) {
-        makeDraggable('chat-window', '.chat-drag-handle', 'chatWindowPosition');
-        win.dataset.dragInitialized = 'true';
-    }
+    win.open();
     if (!chatManager.ws || chatManager.ws.readyState !== WebSocket.OPEN) chatManager.init();
     document.getElementById('chat-input').focus();
 }
 
 export function closeChatWindow() {
     const win = document.getElementById('chat-window');
-    if (win) win.style.display = 'none';
+    if (win) win.close();
 }
 
 export function toggleChatWindow() {
     const win = document.getElementById('chat-window');
     if (!win) return;
-    if (win.style.display === 'none' || !win.style.display) openChatWindow();
-    else closeChatWindow();
+    if (win.hasAttribute('open')) closeChatWindow();
+    else openChatWindow();
 }
 
 export function toggleChatMinimize() {

@@ -3,18 +3,20 @@
  * Imports all modules, initializes the app, and wires up event listeners.
  */
 import { API, showStatus, updateSystemMonitor, startSystemMonitor, stopSystemMonitor, updateWatcherStatus } from './app.js';
-import { makeDraggable, initializeWidgetResize, WorkspaceState } from './draggable.js';
+import { initializeWidgetResize, WorkspaceState } from './draggable.js';
 import { desktopManager } from './desktop-manager.js';
 import { stopwatchManager } from './stopwatch.js';
 import { flightPath } from './flight-path.js';
-import { chatManager, initChatEvents, toggleChatWindow, closeChatWindow } from './chat-manager.js';
+import { initChatEvents, toggleChatWindow } from './chat-manager.js';
 import { initSlashEvents } from './slash-commands.js';
-import { initStandardsLibraryEvents, closeStandardsLibraryWindow } from './standards-library.js';
-import { initHealthEvents, closeHealthWindow } from './health-dashboard.js';
-import { initVaultEvents, closeVaultWindow, closeWorkspacesWindow } from './vault-dashboard.js';
-import { initMCEvents, closeMCWindow } from './terminal-manager.js';
-import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent, closeCalendarWindow } from './calendar.js';
-import { initWindowEscapeClose, initGlobalEscapeHandler } from './a11y.js';
+import { initStandardsLibraryEvents } from './standards-library.js';
+import { initHealthEvents } from './health-dashboard.js';
+import { initVaultEvents } from './vault-dashboard.js';
+import { initMCEvents } from './terminal-manager.js';
+import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent } from './calendar.js';
+import { initGlobalEscapeHandler } from './a11y.js';
+import './components/ihim-panel.js';
+import './components/ihim-tabs.js';
 
 // =====================
 // Global Cleanup
@@ -64,17 +66,7 @@ function initializeApp() {
     initVaultEvents();
     initMCEvents();
 
-    // Register windows for Escape-key closing
-    initWindowEscapeClose(document.getElementById('standards-library-window'), closeStandardsLibraryWindow);
-    initWindowEscapeClose(document.getElementById('health-window'), closeHealthWindow);
-    initWindowEscapeClose(document.getElementById('vault-window'), closeVaultWindow);
-    initWindowEscapeClose(document.getElementById('workspaces-window'), closeWorkspacesWindow);
-    initWindowEscapeClose(document.getElementById('mc-window'), closeMCWindow);
-    initWindowEscapeClose(document.getElementById('calendar-window'), closeCalendarWindow);
-    initWindowEscapeClose(document.getElementById('chat-window'), closeChatWindow);
-    initWindowEscapeClose(document.getElementById('flightpath-window'), () => {
-        import('./flight-path.js').then(m => m.closeFlightPathWindow());
-    });
+    // Global Escape handler (individual windows self-register via <ihim-panel>)
     initGlobalEscapeHandler();
 
     // Bottom bar: Chat toggle
@@ -90,7 +82,6 @@ function initializeApp() {
     const calWin = document.getElementById('calendar-window');
     if (calWin) {
         calWin.querySelector('.calendar-refresh-btn')?.addEventListener('click', syncCalendar);
-        calWin.querySelector('.calendar-close')?.addEventListener('click', closeCalendarWindow);
         calWin.querySelector('.calendar-add-btn')?.addEventListener('click', toggleCalendarAddForm);
         calWin.querySelector('.cal-create-btn')?.addEventListener('click', pushNewCalendarEvent);
         calWin.querySelector('.cal-cancel-btn')?.addEventListener('click', toggleCalendarAddForm);
@@ -99,9 +90,6 @@ function initializeApp() {
     // Flight path window buttons
     const fpWin = document.getElementById('flightpath-window');
     if (fpWin) {
-        fpWin.querySelector('.flightpath-close')?.addEventListener('click', () => {
-            import('./flight-path.js').then(m => m.closeFlightPathWindow());
-        });
         fpWin.querySelector('.fp-control-btn')?.addEventListener('click', () => flightPath.refresh());
 
         // Event delegation for flight path list interactions
@@ -118,59 +106,13 @@ function initializeApp() {
         });
     }
 
-    // Standards library window buttons
+    // Standards library search
     const slWin = document.getElementById('standards-library-window');
     if (slWin) {
-        slWin.querySelector('.standards-library-close')?.addEventListener('click', () => {
-            import('./standards-library.js').then(m => m.closeStandardsLibraryWindow());
-        });
-        // Tab buttons
-        slWin.querySelectorAll('.sl-tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                import('./standards-library.js').then(m => m.switchStandardsLibraryTab(btn.dataset.tab));
-            });
-        });
-        // Search input
         slWin.querySelector('#standards-library-search-input')?.addEventListener('input', () => {
             import('./standards-library.js').then(m => m.filterStandardsLibraryModules());
         });
     }
-
-    // Health window buttons
-    const healthWin = document.getElementById('health-window');
-    if (healthWin) {
-        healthWin.querySelector('.health-close')?.addEventListener('click', () => {
-            import('./health-dashboard.js').then(m => m.closeHealthWindow());
-        });
-        healthWin.querySelectorAll('.health-tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                import('./health-dashboard.js').then(m => m.switchHealthTab(btn.dataset.tab));
-            });
-        });
-    }
-
-    // Vault window buttons
-    const vaultWin = document.getElementById('vault-window');
-    if (vaultWin) {
-        vaultWin.querySelector('.vault-close')?.addEventListener('click', () => {
-            import('./vault-dashboard.js').then(m => m.closeVaultWindow());
-        });
-        vaultWin.querySelectorAll('.vault-tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                import('./vault-dashboard.js').then(m => m.switchVaultTab(btn.dataset.tab));
-            });
-        });
-    }
-
-    // Workspaces window close
-    document.querySelector('.workspaces-close')?.addEventListener('click', () => {
-        import('./vault-dashboard.js').then(m => m.closeWorkspacesWindow());
-    });
-
-    // MC window close
-    document.querySelector('.mc-close')?.addEventListener('click', () => {
-        import('./terminal-manager.js').then(m => m.closeMCWindow());
-    });
 
     // Team modal close + spawn
     document.querySelector('#team-modal .close-btn')?.addEventListener('click', () => {

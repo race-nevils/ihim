@@ -2,7 +2,6 @@
  * terminal-manager.js — Mission Control: xterm.js terminals + Agent Workshop
  */
 import { API, escapeHtml, showStatus } from './app.js';
-import { makeDraggable } from './draggable.js';
 import { initAccessibleTabs } from './a11y.js';
 
 // =====================
@@ -194,34 +193,17 @@ export const terminalManager = {
 
 export function openMCWindow() {
     const mcWindow = document.getElementById('mc-window');
-    mcWindow.style.display = 'flex';
-    let posRestored = false;
-    try {
-        const savedPos = localStorage.getItem('mcWindowPosition');
-        if (savedPos) {
-            const { x, y } = JSON.parse(savedPos);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                mcWindow.style.left = x + 'px'; mcWindow.style.top = y + 'px'; posRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore MC position:', e); }
-    if (!posRestored) {
-        const rect = mcWindow.getBoundingClientRect();
-        mcWindow.style.left = Math.max(20, (window.innerWidth - rect.width) / 2) + 'px';
-        mcWindow.style.top = Math.max(20, (window.innerHeight - rect.height) / 2) + 'px';
-    }
-    if (!mcWindow.dataset.dragInitialized) {
-        makeDraggable('mc-window', '.mc-drag-handle', 'mcWindowPosition');
-        mcWindow.dataset.dragInitialized = 'true';
-    }
-    if (terminalManager.tabs.length === 0) { terminalManager.init(); terminalManager.createTab(); }
-    else {
+    mcWindow.open();
+    if (terminalManager.tabs.length === 0) {
+        terminalManager.init();
+        terminalManager.createTab();
+    } else {
         const activeTab = terminalManager.tabs.find(t => t.id === terminalManager.activeTabId);
         if (activeTab?.fitAddon) setTimeout(() => { activeTab.fitAddon.fit(); activeTab.terminal.focus(); }, 50);
     }
 }
 
-export function closeMCWindow() { document.getElementById('mc-window').style.display = 'none'; }
+export function closeMCWindow() { document.getElementById('mc-window').close(); }
 
 // =====================
 // Agent Workshop

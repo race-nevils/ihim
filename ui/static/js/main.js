@@ -13,6 +13,7 @@ import { initStandardsLibraryEvents } from './standards-library.js';
 import { initHealthEvents } from './health-dashboard.js';
 import { initVaultEvents } from './vault-dashboard.js';
 import { initMCEvents } from './terminal-manager.js';
+import { initRecorderEvents } from './recorder.js';
 import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent } from './calendar.js';
 import { initGlobalEscapeHandler } from './a11y.js';
 import './components/ihim-panel.js';
@@ -65,6 +66,7 @@ function initializeApp() {
     initHealthEvents();
     initVaultEvents();
     initMCEvents();
+    initRecorderEvents();
 
     // Global Escape handler (individual windows self-register via <ihim-panel>)
     initGlobalEscapeHandler();

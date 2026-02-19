@@ -9,10 +9,20 @@
     }
 }
 
+@layer base {
+    /* Force dark dropdown popups — color-scheme alone doesn't override
+       explicit background/color on <select> elements in Chromium */
+    select option {
+        background-color: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+}
+
 /* ============================================ */
 /* DESIGN TOKENS - Iron Man HUD Theme           */
 /* ============================================ */
 :root {
+    color-scheme: dark;
     /* === Core Backgrounds === */
     --bg-void: #050508;
     --bg-primary: #0a0a0a;
@@ -6679,5 +6689,415 @@ button:focus-visible {
     .cal-input:focus-visible,
     .chat-input-area textarea:focus-visible {
         box-shadow: 0 0 0 3px var(--accent-gold-50);
+    }
+}
+
+/* =====================================================
+   Meeting Recorder Window
+   ===================================================== */
+
+.recorder-window {
+    position: fixed;
+    width: 680px;
+    max-height: 80vh;
+    min-width: 380px;
+    min-height: 300px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg), 0 2px 6px rgba(220, 20, 60, 0.15);
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-3);
+    overflow: hidden;
+    resize: both;
+    z-index: 100;
+}
+
+.recorder-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--glass-border);
+    cursor: move;
+    user-select: none;
+}
+
+.recorder-label {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.recorder-status-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+.recorder-status-badge.status-idle {
+    background: rgba(128, 128, 128, 0.15);
+    color: var(--text-secondary);
+}
+.recorder-status-badge.status-recording {
+    background: rgba(220, 20, 60, 0.2);
+    color: #dc143c;
+    animation: recorder-pulse 1.5s ease-in-out infinite;
+}
+.recorder-status-badge.status-transcribing {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+.recorder-status-badge.status-error {
+    background: rgba(220, 38, 38, 0.2);
+    color: #dc2626;
+}
+
+@keyframes recorder-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.recorder-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+    margin-left: auto;
+}
+.recorder-close:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Tabs */
+.recorder-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: var(--space-3);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.recorder-tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.recorder-tab-btn:hover {
+    background: rgba(220, 20, 60, 0.1);
+    color: #dc143c;
+}
+.recorder-tab-btn.active {
+    background: rgba(220, 20, 60, 0.15);
+    color: #dc143c;
+    font-weight: 600;
+}
+
+.recorder-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 200px;
+}
+
+.recorder-body {
+    padding: var(--space-2) 0;
+}
+
+/* Record tab — device rows */
+.recorder-device-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: var(--space-2);
+}
+.recorder-device-row label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    min-width: 100px;
+    flex-shrink: 0;
+}
+.recorder-device-row select,
+.recorder-device-row input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+.recorder-device-row select:focus,
+.recorder-device-row input:focus {
+    outline: none;
+    border-color: rgba(220, 20, 60, 0.5);
+    box-shadow: 0 0 0 2px rgba(220, 20, 60, 0.15);
+}
+
+/* Live status display */
+.recorder-live-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin: var(--space-3) 0;
+    padding: var(--space-3);
+    background: rgba(220, 20, 60, 0.05);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(220, 20, 60, 0.15);
+}
+.recorder-elapsed {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #dc143c;
+    letter-spacing: 0.05em;
+}
+.recorder-live-devices {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Controls */
+.recorder-controls {
+    display: flex;
+    gap: 10px;
+    margin-top: var(--space-2);
+}
+
+.recorder-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.recorder-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+}
+.recorder-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.recorder-start-btn {
+    background: rgba(220, 20, 60, 0.15);
+    border-color: rgba(220, 20, 60, 0.3);
+    color: #dc143c;
+    font-weight: 600;
+}
+.recorder-start-btn:hover:not(:disabled) {
+    background: rgba(220, 20, 60, 0.25);
+}
+
+.recorder-stop-btn {
+    min-width: 80px;
+}
+
+.recorder-reset-btn {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+}
+
+/* Error display */
+.recorder-error {
+    margin-top: var(--space-2);
+    padding: 8px 12px;
+    background: rgba(220, 38, 38, 0.1);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    border-radius: 6px;
+    color: #f87171;
+    font-size: 0.85rem;
+}
+.recorder-error-inline {
+    padding: 12px;
+    color: #f87171;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+/* Recordings list */
+.recorder-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--glass-border);
+    margin-bottom: var(--space-2);
+}
+.recorder-list-count {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.recorder-list-body {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.recorder-list-item {
+    padding: 10px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border: 1px solid transparent;
+    margin-bottom: 4px;
+}
+.recorder-list-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--glass-border);
+}
+.recorder-list-item-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.recorder-list-item-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+.recorder-list-item-duration {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.recorder-list-item-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+/* Transcript toolbar */
+.recorder-transcript-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--glass-border);
+    margin-bottom: var(--space-2);
+}
+.recorder-transcript-meta {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.recorder-back-btn {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+}
+.recorder-delete-btn {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    color: #f87171;
+    border-color: rgba(220, 38, 38, 0.3);
+}
+.recorder-delete-btn:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.15);
+}
+
+/* Transcript body */
+.recorder-transcript-body {
+    max-height: 55vh;
+    overflow-y: auto;
+}
+
+.recorder-segment {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.recorder-segment:last-child {
+    border-bottom: none;
+}
+.recorder-segment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+.recorder-speaker {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.recorder-speaker.speaker-mic {
+    color: var(--accent-red, #dc143c);
+}
+.recorder-speaker.speaker-other {
+    color: var(--arc-reactor, #22d3ee);
+}
+.recorder-speaker.speaker-default {
+    color: var(--text-secondary);
+}
+.recorder-segment-time {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+.recorder-segment-text {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+/* Placeholder + loading */
+.recorder-placeholder {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.recorder-loading {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.recorder-refresh-btn {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+}
+
+/* Mobile — bottom sheet */
+@media (max-width: 500px) {
+    .recorder-window {
+        position: fixed !important;
+        left: 0 !important;
+        right: 0;
+        bottom: 0 !important;
+        top: auto !important;
+        width: 100% !important;
+        max-height: 85vh;
+        border-radius: 12px 12px 0 0;
+        resize: none;
     }
 }

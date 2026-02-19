@@ -7,7 +7,7 @@
     <title>iHIM</title>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2.2">
 </head>
 
 <body>
@@ -624,6 +624,76 @@
             <div class="workspaces-loading">Loading workspaces...</div>
         </div>
     </ihim-panel>
+
+<!-- Meeting Recorder Window (Draggable) -->
+    <div id="recorder-window" class="recorder-window" style="display: none;">
+        <div class="recorder-header recorder-drag-handle">
+            <span class="recorder-label"><i data-lucide="mic" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Meeting Recorder</span>
+            <span class="recorder-status-badge" id="recorder-status-badge">IDLE</span>
+            <button class="recorder-close" aria-label="Close Meeting Recorder">&times;</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="recorder-tabs" id="recorder-tablist" role="tablist" aria-label="Meeting Recorder">
+            <button class="recorder-tab-btn active" data-tab="record" role="tab" id="recorder-tab-record-btn" aria-selected="true" aria-controls="recorder-tab-record" tabindex="0">Record</button>
+            <button class="recorder-tab-btn" data-tab="recordings" role="tab" id="recorder-tab-recordings-btn" aria-selected="false" aria-controls="recorder-tab-recordings" tabindex="-1">Recordings</button>
+            <button class="recorder-tab-btn" data-tab="transcript" role="tab" id="recorder-tab-transcript-btn" aria-selected="false" aria-controls="recorder-tab-transcript" tabindex="-1">Transcript</button>
+        </div>
+
+        <!-- Record Tab -->
+        <div id="recorder-tab-record" class="recorder-tab-content active" role="tabpanel" aria-labelledby="recorder-tab-record-btn">
+            <div class="recorder-body" id="recorder-record-body">
+                <div class="recorder-device-row">
+                    <label for="recorder-mic-select">Microphone</label>
+                    <select id="recorder-mic-select"><option value="">Loading devices...</option></select>
+                </div>
+                <div class="recorder-device-row">
+                    <label for="recorder-sys-select">System Audio</label>
+                    <select id="recorder-sys-select"><option value="">Loading devices...</option></select>
+                </div>
+                <div class="recorder-device-row">
+                    <label for="recorder-label-input">Label</label>
+                    <input type="text" id="recorder-label-input" placeholder="e.g. Weekly standup" maxlength="120" />
+                </div>
+
+                <div class="recorder-live-status" id="recorder-live-status" style="display: none;">
+                    <div class="recorder-elapsed" id="recorder-elapsed">00:00</div>
+                    <div class="recorder-live-devices" id="recorder-live-devices"></div>
+                </div>
+
+                <div class="recorder-controls">
+                    <button class="recorder-btn recorder-start-btn" id="recorder-start-btn">Start Recording</button>
+                    <button class="recorder-btn recorder-stop-btn" id="recorder-stop-btn" disabled>Stop</button>
+                    <button class="recorder-btn recorder-reset-btn" id="recorder-reset-btn" style="display: none;">Reset</button>
+                </div>
+
+                <div class="recorder-error" id="recorder-error" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Recordings Tab -->
+        <div id="recorder-tab-recordings" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-recordings-btn" style="display: none;">
+            <div class="recorder-list-header">
+                <span class="recorder-list-count" id="recorder-list-count">0 recordings</span>
+                <button class="recorder-btn recorder-refresh-btn" id="recorder-refresh-btn">Refresh</button>
+            </div>
+            <div class="recorder-body recorder-list-body" id="recorder-recordings-body">
+                <div class="recorder-loading">Loading recordings...</div>
+            </div>
+        </div>
+
+        <!-- Transcript Tab -->
+        <div id="recorder-tab-transcript" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-transcript-btn" style="display: none;">
+            <div class="recorder-transcript-toolbar" id="recorder-transcript-toolbar" style="display: none;">
+                <button class="recorder-btn recorder-back-btn" id="recorder-back-btn">&larr; Back</button>
+                <span class="recorder-transcript-meta" id="recorder-transcript-meta"></span>
+                <button class="recorder-btn recorder-delete-btn" id="recorder-delete-btn">Delete</button>
+            </div>
+            <div class="recorder-body recorder-transcript-body" id="recorder-transcript-body">
+                <div class="recorder-placeholder">Select a recording to view its transcript.</div>
+            </div>
+        </div>
+    </div>
 
 <!-- Brain Chat Window (Draggable) -->
     <ihim-panel id="chat-window" class="chat-window" persist-key="chatWindowPosition">

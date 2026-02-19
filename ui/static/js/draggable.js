@@ -134,7 +134,7 @@ window.addEventListener('resize', () => {
 
 // Widget resize persistence via ResizeObserver
 export function initializeWidgetResize() {
-    const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'health-window', 'chat-window', 'vault-window', 'workspaces-window'];
+    const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'health-window', 'chat-window', 'vault-window', 'workspaces-window', 'recorder-window'];
 
     widgetIds.forEach(widgetId => {
         const savedSize = localStorage.getItem(`${widgetId}-size`);

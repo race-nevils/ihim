@@ -196,6 +196,10 @@ export async function runAction(actionId, btn = null) {
         const { toggleVaultWindow } = await import('./vault-dashboard.js');
         toggleVaultWindow(); return;
     }
+    if (actionId === 'meeting_recorder') {
+        const { openRecorderWindow } = await import('./recorder.js');
+        openRecorderWindow(); return;
+    }
 
     if (btn) btn.classList.add('loading');
     showStatus('Running...', 'pending');

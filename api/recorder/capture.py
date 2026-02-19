@@ -50,12 +50,16 @@ def list_audio_devices() -> dict:
     mic_devices = []
     system_devices = []
 
-    # Mic devices via sounddevice
+    # Mic devices via sounddevice (WASAPI only — avoids duplicates from MME/DirectSound/WDM-KS)
     try:
         sd = _get_sounddevice()
         devices = sd.query_devices()
+        hostapis = sd.query_hostapis()
+        wasapi_idx = next((i for i, h in enumerate(hostapis) if "WASAPI" in h["name"]), None)
         for i, dev in enumerate(devices):
-            if dev["max_input_channels"] > 0 and "loopback" not in dev["name"].lower():
+            if (dev["max_input_channels"] > 0
+                    and "loopback" not in dev["name"].lower()
+                    and (wasapi_idx is None or dev["hostapi"] == wasapi_idx)):
                 mic_devices.append({
                     "index": i,
                     "name": dev["name"],

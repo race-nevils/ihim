@@ -85,6 +85,8 @@ recorder_router, RECORDER_AVAILABLE = _try_import(
     "Recorder", lambda: __import__("api.recorder.routes", fromlist=["router"]).router)
 capture_router, CAPTURE_AVAILABLE = _try_import(
     "Capture", lambda: __import__("api.capture.routes", fromlist=["router"]).router)
+preferences_router, PREFERENCES_AVAILABLE = _try_import(
+    "Preferences", lambda: __import__("api.preferences", fromlist=["router"]).router)
 
 # System topology & health (not yet a router — functions used inline below)
 try:
@@ -189,8 +191,8 @@ async def security_and_cache_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), geolocation=()"
 
-    # --- Cache-control (API + root only) ---
-    if request.url.path.startswith("/api/") or request.url.path == "/":
+    # --- Cache-control (API + root + static assets during dev) ---
+    if request.url.path.startswith(("/api/", "/static/")) or request.url.path == "/":
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -221,6 +223,7 @@ _routers = [
     (privilege_router, PRIVILEGE_AVAILABLE),
     (recorder_router, RECORDER_AVAILABLE),
     (capture_router, CAPTURE_AVAILABLE),
+    (preferences_router, PREFERENCES_AVAILABLE),
 ]
 
 for rtr, available in _routers:

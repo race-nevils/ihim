@@ -182,8 +182,7 @@ CRITICAL: ███████████████████ (100% severi
 ├── harness/skills/*
 ├── harness/commands/*
 ├── *_SCHEMA.md templates
-├── Syncthing config (.stignore, .stfolder)
-└── .stversions (version history)
+└── *_SCHEMA.md templates
 ```
 
 **Health Indicator**: Boot system integrity checks
@@ -333,11 +332,9 @@ Systems that enable recovery from mistakes. Never modify without explicit ask.
 └── CLAUDE.md, GUARDRAILS.md
 ```
 
-#### Backup/Sync (3 rules)
+#### Backup (1 rule)
 ```
-├── .stignore, .stfolder, .stversions
-├── Any backup configuration
-└── Sync conflict files (resolve manually)
+└── Any backup configuration
 ```
 
 #### Project Configuration (2 rules)

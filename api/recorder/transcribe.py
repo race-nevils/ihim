@@ -62,7 +62,7 @@ def transcribe_channel(
             "start": round(seg.start, 2),
             "end": round(seg.end, 2),
             "text": text,
-            "confidence": round(seg.avg_log_prob, 4),
+            "confidence": round(1.0 - seg.no_speech_prob, 4),
         })
 
     return results

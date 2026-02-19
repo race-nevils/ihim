@@ -88,10 +88,63 @@ async function loadDevices() {
         sysSelect.innerHTML = data.system_devices.map(d =>
             `<option value="${d.index}">${escapeHtml(d.name)}</option>`
         ).join('') || '<option value="">No system audio found</option>';
+
+        // Restore saved device preferences (server-side, survives cache clear)
+        await restoreDevicePreferences(data);
+
+        // Persist on change
+        micSelect.addEventListener('change', saveDevicePreferences);
+        sysSelect.addEventListener('change', saveDevicePreferences);
     } catch (e) {
         micSelect.innerHTML = '<option value="">Failed to load</option>';
         sysSelect.innerHTML = '<option value="">Failed to load</option>';
         showRecorderError(`Failed to load devices: ${e.message}`);
+    }
+}
+
+async function restoreDevicePreferences(devices) {
+    try {
+        const res = await fetch(`${API}/api/preferences`);
+        if (!res.ok) return;
+        const prefs = await res.json();
+        const saved = prefs.recorder || {};
+
+        if (saved.mic_device) {
+            const match = devices.mic_devices.find(d => d.name === saved.mic_device);
+            if (match) document.getElementById('recorder-mic-select').value = String(match.index);
+        }
+        if (saved.sys_device) {
+            const match = devices.system_devices.find(d => d.name === saved.sys_device);
+            if (match) document.getElementById('recorder-sys-select').value = String(match.index);
+        }
+    } catch (e) {
+        console.warn('Failed to restore device preferences:', e);
+    }
+}
+
+async function saveDevicePreferences() {
+    if (!devicesData) return;
+    const micSelect = document.getElementById('recorder-mic-select');
+    const sysSelect = document.getElementById('recorder-sys-select');
+    const micIdx = parseInt(micSelect.value, 10);
+    const sysIdx = parseInt(sysSelect.value, 10);
+
+    const micDev = devicesData.mic_devices.find(d => d.index === micIdx);
+    const sysDev = devicesData.system_devices.find(d => d.index === sysIdx);
+
+    try {
+        await fetch(`${API}/api/preferences`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                recorder: {
+                    mic_device: micDev ? micDev.name : null,
+                    sys_device: sysDev ? sysDev.name : null
+                }
+            })
+        });
+    } catch (e) {
+        console.warn('Failed to save device preferences:', e);
     }
 }
 

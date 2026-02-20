@@ -24,6 +24,7 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from .file_tracker import FileTracker, FileState
+from data.database import get_entry_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +61,14 @@ class InboxWatcher:
         self._heartbeat_path = Path(__file__).parent.parent.parent / "data" / "watcher_heartbeat.json"
         self._ollama_warmed_at = 0.0  # Timestamp of last Ollama warm-up
 
+        self.failed_path = self.processed_path.parent / "failed"
+        self._warm_up_event = threading.Event()
+
         # Ensure directories exist
         for source in self.sources:
             source.path.mkdir(parents=True, exist_ok=True)
         self.processed_path.mkdir(parents=True, exist_ok=True)
+        self.failed_path.mkdir(parents=True, exist_ok=True)
 
     def read_file_content(self, file_path: Path) -> str:
         """Read file content, stripping any frontmatter."""
@@ -93,6 +98,59 @@ class InboxWatcher:
             if parent == source.path:
                 break
         return False
+
+    def _recover_failed_files(self):
+        """Move files from failed/ back to inbox for fresh retry attempts.
+
+        On restart, any previously failed files get another chance.
+        Zero tolerance for data loss — ideas always eventually get processed.
+        """
+        if not self.failed_path.exists():
+            return
+        recovered = 0
+        for f in self.failed_path.glob(self.file_pattern):
+            if not f.is_file() or f.name.endswith("_error.txt"):
+                continue
+            # Strip timestamp prefix (YYYYMMDD-HHMMSS_) to get original name
+            original_name = f.name
+            if len(original_name) > 16 and original_name[15] == '_':
+                original_name = original_name[16:]
+            dest = self.sources[0].path / original_name
+            if dest.exists():
+                # Original still in inbox — skip (don't overwrite)
+                continue
+            try:
+                f.rename(dest)
+                recovered += 1
+                logger.info(f"Recovered failed file for retry: {original_name}")
+            except Exception as e:
+                logger.error(f"Failed to recover {f.name}: {e}")
+        # Clean up orphaned error sidecars
+        if recovered > 0:
+            for sidecar in self.failed_path.glob("*_error.txt"):
+                try:
+                    sidecar.unlink()
+                except Exception:
+                    pass
+            logger.info(f"Recovered {recovered} file(s) from failed/ for retry")
+
+    def _move_to_failed(self, file_path: Path, error_msg: str):
+        """Move file to failed/ directory with error sidecar."""
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        new_name = f"{timestamp}_{file_path.name}"
+        dest = self.failed_path / new_name
+        file_path.rename(dest)
+
+        sidecar = self.failed_path / f"{timestamp}_{file_path.stem}_error.txt"
+        sidecar.write_text(
+            f"File: {file_path.name}\n"
+            f"Failed at: {datetime.now(timezone.utc).isoformat()}\n"
+            f"Retries: {FileTracker.MAX_RETRIES}\n"
+            f"Error: {error_msg}\n",
+            encoding="utf-8"
+        )
+        self.tracker.remove(file_path)
+        logger.warning(f"Moved to failed/ after {FileTracker.MAX_RETRIES} retries: {file_path.name}")
 
     def scan_sources(self) -> list[tuple[Path, InboxSource]]:
         """Scan all inbox sources for files."""
@@ -196,11 +254,10 @@ class InboxWatcher:
                 content = self.read_file_content(file_path)
 
                 if not content:
-                    # Empty file - skip processing but DON'T move
-                    # File stays in inbox until STALE (1hr idle), then archives
-                    # This prevents premature removal while user is still typing
-                    logger.debug(f"Empty content, skipping: {original_name}")
-                    self.tracker.mark_processed(file_path, "empty")
+                    logger.info(f"Empty file, archiving immediately: {original_name}")
+                    self.move_to_processed(file_path)
+                    self.tracker.remove(file_path)
+                    results.append({"file": original_name, "action_type": "skipped", "result": {"action": "skipped"}})
                     continue
 
                 # Process the file - brain handler does deduplication via database
@@ -214,14 +271,32 @@ class InboxWatcher:
                 if action == "error":
                     error_msg = result.get("error", result.get("result", {}).get("error", "unknown"))
                     logger.warning(f"Processor returned error for {original_name}: {error_msg}")
-                    # Revert to READY so file gets retried on next poll
-                    if file_path in self.tracker.files:
+                    retry_count = self.tracker.increment_retry(file_path)
+                    if retry_count >= FileTracker.MAX_RETRIES:
+                        self._move_to_failed(file_path, f"processor_error: {error_msg}")
+                    elif file_path in self.tracker.files:
                         self.tracker.files[file_path].state = FileState.READY
-                    results.append({
-                        "file": original_name,
-                        "error": f"processor_error: {error_msg}",
-                    })
+                        logger.info(f"Will retry {original_name} in {FileTracker.RETRY_DELAYS[min(retry_count-1, len(FileTracker.RETRY_DELAYS)-1)]}s (attempt {retry_count}/{FileTracker.MAX_RETRIES})")
+                    results.append({"file": original_name, "error": f"processor_error: {error_msg}"})
                     continue
+
+                # Verify brain write actually landed in database
+                processed_id = result.get("result", {}).get("processed_id")
+                if processed_id:
+                    try:
+                        entry = get_entry_by_id(processed_id)
+                        if entry is None:
+                            logger.warning(f"DB verification failed for {original_name}: entry {processed_id} not found")
+                            retry_count = self.tracker.increment_retry(file_path)
+                            if retry_count >= FileTracker.MAX_RETRIES:
+                                self._move_to_failed(file_path, f"DB verification failed: {processed_id} not in database")
+                            elif file_path in self.tracker.files:
+                                self.tracker.files[file_path].state = FileState.READY
+                            results.append({"file": original_name, "error": f"db_verify_failed: {processed_id}"})
+                            continue
+                    except Exception as db_err:
+                        # DB hiccup (locked, etc.) — don't penalize the file, skip verification
+                        logger.debug(f"DB verification skipped for {original_name}: {db_err}")
 
                 # Mark as processed (stays in inbox for potential re-editing)
                 content_hash = self._get_content_hash(file_path)
@@ -236,20 +311,19 @@ class InboxWatcher:
             except Exception as e:
                 error_tb = traceback.format_exc()
                 logger.error(f"Failed to process {original_name}: {e}\n{error_tb}")
-                # Revert to READY so it can be retried on next poll
-                # (mark_processing set it to PROCESSING, but processing failed)
-                if file_path in self.tracker.files:
+                retry_count = self.tracker.increment_retry(file_path)
+                if retry_count >= FileTracker.MAX_RETRIES:
+                    self._move_to_failed(file_path, str(e))
+                elif file_path in self.tracker.files:
                     self.tracker.files[file_path].state = FileState.READY
-                results.append({
-                    "file": original_name,
-                    "error": str(e),
-                    "traceback": error_tb
-                })
+                    logger.info(f"Will retry {original_name} in {FileTracker.RETRY_DELAYS[min(retry_count-1, len(FileTracker.RETRY_DELAYS)-1)]}s (attempt {retry_count}/{FileTracker.MAX_RETRIES})")
+                results.append({"file": original_name, "error": str(e), "traceback": error_tb})
 
         return results
 
     def watch(self, processor: Callable, on_process: Optional[Callable] = None):
         """Start watching the inbox continuously."""
+        self._recover_failed_files()
         self._running = True
         print("Watching sources:")
         for source in self.sources:
@@ -352,12 +426,18 @@ class InboxWatcher:
                         }
                     )
                     logger.info("Ollama warm-up: embedding model ready")
+                    self._warm_up_event.set()
             except Exception as e:
                 logger.debug(f"Ollama warm-up failed (non-fatal): {e}")
+                self._warm_up_event.set()  # Unblock waiters even on failure
 
         thread = threading.Thread(target=_ping, daemon=True)
         thread.start()
         logger.info("Ollama warm-up started (background)")
+
+    def wait_for_warmup(self, timeout: float = 30.0) -> bool:
+        """Block until Ollama warm-up completes or timeout."""
+        return self._warm_up_event.wait(timeout=timeout)
 
     def _write_heartbeat(self, last_results: list[dict]):
         """Write heartbeat JSON for the dashboard API to read."""
@@ -377,6 +457,7 @@ class InboxWatcher:
                 tracked.append({
                     "name": fpath.name,
                     "state": info.state.name,
+                    "retry_count": info.retry_count,
                 })
 
             settling = sum(1 for t in tracked if t["state"] == "SETTLING")

@@ -32,6 +32,8 @@ class TrackedFile:
     last_mtime: float
     content_hash: str | None = None
     processing_since: float | None = None  # Timestamp when PROCESSING started
+    retry_count: int = 0       # Consecutive processing failures
+    retry_after: float = 0.0   # Don't retry before this timestamp
 
 
 class FileTracker:
@@ -61,6 +63,8 @@ class FileTracker:
     SETTLE_SECONDS = 10      # Wait 10s after last edit before processing
     STALE_SECONDS = 3600     # Archive after 1 hour of no edits
     PROCESSING_TIMEOUT = 300  # 5 min max in PROCESSING before auto-revert
+    MAX_RETRIES = 3
+    RETRY_DELAYS = [30, 60, 120]  # Seconds — exponential backoff
 
     def __init__(self):
         self.files: dict[Path, TrackedFile] = {}
@@ -119,20 +123,34 @@ class FileTracker:
             self.files[path].state = FileState.PROCESSING
             self.files[path].processing_since = time.time()
 
+    def increment_retry(self, path: Path) -> int:
+        """Increment retry count, set backoff delay, return new count."""
+        if path in self.files:
+            tracked = self.files[path]
+            tracked.retry_count += 1
+            delay_idx = min(tracked.retry_count - 1, len(self.RETRY_DELAYS) - 1)
+            tracked.retry_after = time.time() + self.RETRY_DELAYS[delay_idx]
+            return tracked.retry_count
+        return 0
+
     def mark_processed(self, path: Path, content_hash: str):
         """Mark file as processed with its content hash."""
         if path in self.files:
             self.files[path].state = FileState.PROCESSED
             self.files[path].content_hash = content_hash
             self.files[path].processing_since = None
+            self.files[path].retry_count = 0
+            self.files[path].retry_after = 0.0
 
     def remove(self, path: Path):
         """Remove file from tracking (after archive/delete)."""
         self.files.pop(path, None)
 
     def get_ready(self) -> list[Path]:
-        """Get files ready for processing (settled 10s+)."""
-        return [f.path for f in self.files.values() if f.state == FileState.READY]
+        """Get files ready for processing (settled 10s+, backoff elapsed)."""
+        now = time.time()
+        return [f.path for f in self.files.values()
+                if f.state == FileState.READY and now >= f.retry_after]
 
     def get_stale(self) -> list[Path]:
         """Get files ready for archiving (idle 1hr+)."""

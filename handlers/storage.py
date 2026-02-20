@@ -4,6 +4,11 @@ Architecture: JSON-LD (source) → SQLite (index) → Obsidian (view)
 
 Single responsibility: write brain entries to all three layers.
 All storage operations are traced via Langfuse.
+
+Write ordering guarantees:
+- JSON-LD fails → StorageError (nothing persisted)
+- SQLite fails after JSON-LD → PartialWriteError (SSOT safe, invisible to queries)
+- Obsidian/Embedding fail → warning only (derived, rebuildable)
 """
 import json
 import logging
@@ -12,6 +17,13 @@ from pathlib import Path
 from typing import Optional
 
 from handlers.tracing import observe, langfuse_context, TracingSpan
+from handlers.models import (
+    BrainEntry,
+    ClassificationResult,
+    CalendarEvent,
+    StorageError,
+    PartialWriteError,
+)
 
 from adapters.ollama import OllamaAdapter
 from adapters.embeddings import EmbeddingAdapter
@@ -38,6 +50,29 @@ OBSIDIAN_MEMORY = WORKSPACE_ROOT / "iHIM Vault" / "iHIM Memory"
 LOGS_DIR = IHIM_ROOT / "data" / "local" / "brain" / "logs"
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _extract_calendar_fields(calendar: Optional[CalendarEvent]) -> Optional[dict]:
+    """Convert CalendarEvent model to SQLite update dict."""
+    if calendar is None or not calendar.is_event:
+        return None
+    fields = {
+        "event_date": calendar.date,
+        "event_start_time": calendar.time,
+        "event_end_time": calendar.end_time,
+        "event_all_day": 1 if calendar.all_day else 0,
+    }
+    if calendar.rrule:
+        fields["event_rrule"] = calendar.rrule
+    return fields
+
+
+# ---------------------------------------------------------------------------
+# store_new — Create a new brain entry (triple-write)
+# ---------------------------------------------------------------------------
+
 @observe(name="store_new")
 def store_new(
     content: str,
@@ -62,20 +97,36 @@ def store_new(
 
     Returns:
         Tuple of (Obsidian path, note_id)
+
+    Raises:
+        ValidationError: If content or classification fields are invalid
+        StorageError: If JSON-LD write fails (nothing persisted)
+        PartialWriteError: If SQLite fails after JSON-LD success
     """
-    # Extract classification fields
-    category = classification.get("category", "Ideas")
-    title = classification.get("title", "untitled")
-    summary = classification.get("summary", "")
-    confidence = float(classification.get("confidence", 0.0))
+    # === VALIDATE INPUTS ===
+    entry = BrainEntry(
+        content=content,
+        source_file=source_file,
+        source_filename=source_filename,
+    )
+    cls = ClassificationResult(**classification)
 
-    # Validate category
-    if category not in CATEGORIES:
-        category = "Ideas"
+    # Route category — model already coerced invalid → Misc
+    original_category = cls.category
+    category = cls.category
+    reroute_reason = None
 
-    # Low confidence → route to Misc
-    if confidence < CONFIDENCE_THRESHOLD:
+    if cls.category == "Misc" and classification.get("category") not in (None, "Misc"):
+        reroute_reason = "invalid_category"
+
+    if cls.confidence < CONFIDENCE_THRESHOLD:
         category = "Misc"
+        if reroute_reason is None:
+            reroute_reason = "low_confidence"
+
+    title = cls.title
+    summary = cls.summary
+    confidence = cls.confidence
 
     # Generate identifiers
     timestamp = datetime.now(timezone.utc)
@@ -86,7 +137,6 @@ def store_new(
     content_hash = compute_content_hash(content)
 
     # === WRITE 1: JSON-LD (Source of Truth) ===
-    jsonld_path = None
     with TracingSpan("write_jsonld"):
         try:
             jsonld_doc = create_brain_entry_jsonld(
@@ -102,13 +152,13 @@ def store_new(
                 date_str=date_str
             )
             # Store original suggested category if routed to Misc
-            if category == "Misc" and classification.get("category") != "Misc":
-                jsonld_doc["ihim:suggestedCategory"] = classification.get("category")
+            if category == "Misc" and original_category != "Misc":
+                jsonld_doc["ihim:suggestedCategory"] = original_category
 
             jsonld_path = write_jsonld(jsonld_doc, category, slug, date_str)
             logger.info(f"Written to JSON-LD: {jsonld_path}")
         except Exception as e:
-            logger.error(f"Failed to write JSON-LD: {e}")
+            raise StorageError(f"JSON-LD write failed for '{title}': {e}") from e
 
     # === WRITE 2: SQLite Database (Query Index) ===
     with TracingSpan("write_sqlite"):
@@ -124,14 +174,17 @@ def store_new(
                 "classifier": OllamaAdapter.FAST_MODEL,
                 "source_filename": source_filename,
                 "content_hash": content_hash,
-                "jsonld_path": str(jsonld_path) if jsonld_path else None,
+                "jsonld_path": str(jsonld_path),
                 "first_seen_at": timestamp.isoformat()
             })
             logger.info(f"Written to SQLite: {note_id}")
         except Exception as e:
-            logger.error(f"Failed to write to SQLite: {e}")
+            raise PartialWriteError(
+                f"SQLite write failed for '{title}' (JSON-LD safe at {jsonld_path}): {e}",
+                jsonld_path=str(jsonld_path),
+            ) from e
 
-    # === WRITE 3: Obsidian Memory (Human View) ===
+    # === WRITE 3: Obsidian Memory (Human View) — non-fatal ===
     obsidian_path = None
     with TracingSpan("write_obsidian"):
         try:
@@ -152,9 +205,9 @@ def store_new(
             obsidian_path.write_text(content, encoding="utf-8")
             logger.info(f"Written to Obsidian: {obsidian_path}")
         except Exception as e:
-            logger.error(f"Failed to write to Obsidian: {e}")
+            logger.warning(f"Obsidian write failed (non-blocking, rebuild regenerates): {e}")
 
-    # === WRITE 4: Embedding (Derived Vector Index) ===
+    # === WRITE 4: Embedding (Derived Vector Index) — non-fatal ===
     with TracingSpan("generate_embedding"):
         try:
             embed_text = f"{title}\n{content}"
@@ -168,37 +221,34 @@ def store_new(
         except Exception as e:
             logger.warning(f"Embedding step failed (non-blocking): {e}")
 
-    # === WRITE 5: Calendar event fields in SQLite ===
-    calendar = classification.get("calendar")
-    if isinstance(calendar, list):
-        calendar = next((c for c in calendar if isinstance(c, dict) and c.get("is_event")), None)
-    if isinstance(calendar, dict) and calendar.get("is_event"):
+    # === WRITE 5: Calendar event fields in SQLite — non-fatal ===
+    cal_fields = _extract_calendar_fields(cls.calendar)
+    if cal_fields:
         try:
-            cal_fields = {
-                "event_date": calendar.get("date"),
-                "event_start_time": calendar.get("time"),
-                "event_end_time": calendar.get("end_time"),
-                "event_all_day": 1 if calendar.get("all_day") else 0,
-            }
-            if calendar.get("rrule"):
-                cal_fields["event_rrule"] = calendar["rrule"]
             update_entry(note_id, cal_fields)
             logger.info(f"Stored calendar fields for: {note_id}")
         except Exception as e:
             logger.warning(f"Failed to store calendar fields (non-blocking): {e}")
 
-    # Log metadata to Langfuse
+    # Log metadata to Langfuse (enriched with rerouting details)
     langfuse_context.update_current_observation(
         metadata={
             "note_id": note_id,
             "category": category,
+            "original_category": original_category,
             "confidence": confidence,
-            "routed_to_misc": category == "Misc" and classification.get("category") != "Misc"
+            "confidence_threshold": CONFIDENCE_THRESHOLD,
+            "rerouted": category != original_category,
+            "reroute_reason": reroute_reason,
         }
     )
 
     return obsidian_path, note_id
 
+
+# ---------------------------------------------------------------------------
+# update_existing — Update content only (no reclassification)
+# ---------------------------------------------------------------------------
 
 @observe(name="update_existing")
 def update_existing(
@@ -222,7 +272,14 @@ def update_existing(
 
     Returns:
         Tuple of (Obsidian path, note_id)
+
+    Raises:
+        StorageError: If JSON-LD update fails
+        PartialWriteError: If SQLite fails after JSON-LD success
     """
+    if not content or not content.strip():
+        raise StorageError("Cannot update entry with empty content")
+
     entry_id = existing["id"]
     category = existing.get("category", "Ideas")
     title = existing.get("title", "untitled")
@@ -235,7 +292,9 @@ def update_existing(
                 update_jsonld_content(Path(jsonld_path), content)
                 logger.info(f"Updated JSON-LD: {jsonld_path}")
             except Exception as e:
-                logger.error(f"Failed to update JSON-LD: {e}")
+                raise StorageError(
+                    f"JSON-LD update failed for '{entry_id}': {e}"
+                ) from e
 
     # === UPDATE 2: SQLite Database ===
     with TracingSpan("update_sqlite"):
@@ -246,9 +305,12 @@ def update_existing(
             })
             logger.info(f"Updated database entry: {entry_id}")
         except Exception as e:
-            logger.error(f"Failed to update SQLite: {e}")
+            raise PartialWriteError(
+                f"SQLite update failed for '{entry_id}' (JSON-LD safe at {jsonld_path}): {e}",
+                jsonld_path=str(jsonld_path) if jsonld_path else "unknown",
+            ) from e
 
-    # === UPDATE 3: Obsidian Memory (Regenerate) ===
+    # === UPDATE 3: Obsidian Memory (Regenerate) — non-fatal ===
     obsidian_path = None
     with TracingSpan("update_obsidian"):
         try:
@@ -257,9 +319,9 @@ def update_existing(
             obsidian_path.write_text(content, encoding="utf-8")
             logger.info(f"Updated Obsidian: {obsidian_path}")
         except Exception as e:
-            logger.error(f"Failed to update Obsidian: {e}")
+            logger.warning(f"Obsidian update failed (non-blocking): {e}")
 
-    # === UPDATE 4: Re-embed with new content ===
+    # === UPDATE 4: Re-embed with new content — non-fatal ===
     with TracingSpan("update_embedding"):
         try:
             embed_text = f"{title}\n{content}"
@@ -284,6 +346,10 @@ def update_existing(
     return obsidian_path, entry_id
 
 
+# ---------------------------------------------------------------------------
+# update_with_reclassify — Update content AND reclassify
+# ---------------------------------------------------------------------------
+
 @observe(name="update_with_reclassify")
 def update_with_reclassify(
     existing: dict,
@@ -304,21 +370,36 @@ def update_with_reclassify(
 
     Returns:
         Tuple of (Obsidian path, note_id)
+
+    Raises:
+        ValidationError: If classification fields are invalid
+        StorageError: If JSON-LD update fails
+        PartialWriteError: If SQLite fails after JSON-LD success
     """
+    # === VALIDATE ===
+    cls = ClassificationResult(**classification)
+
     entry_id = existing["id"]
     old_category = existing.get("category", "Ideas")
     old_title = existing.get("title", "untitled")
     jsonld_path = existing.get("jsonld_path")
 
-    # New classification
-    new_category = classification.get("category", "Ideas")
-    new_title = classification.get("title", old_title)
-    new_summary = classification.get("summary", "")
-    new_confidence = float(classification.get("confidence", 0.0))
+    # Route category
+    original_category = cls.category
+    new_category = cls.category
+    reroute_reason = None
 
-    # Apply confidence threshold
-    if new_confidence < CONFIDENCE_THRESHOLD:
+    if cls.category == "Misc" and classification.get("category") not in (None, "Misc"):
+        reroute_reason = "invalid_category"
+
+    if cls.confidence < CONFIDENCE_THRESHOLD:
         new_category = "Misc"
+        if reroute_reason is None:
+            reroute_reason = "low_confidence"
+
+    new_title = cls.title
+    new_summary = cls.summary
+    new_confidence = cls.confidence
 
     category_changed = new_category != old_category
 
@@ -340,7 +421,9 @@ def update_with_reclassify(
                     update_jsonld_content(old_jsonld, content)
                 logger.info(f"Updated JSON-LD: {jsonld_path}")
             except Exception as e:
-                logger.error(f"Failed to update JSON-LD: {e}")
+                raise StorageError(
+                    f"JSON-LD update failed for '{entry_id}': {e}"
+                ) from e
 
     # === UPDATE 2: SQLite Database ===
     with TracingSpan("update_sqlite_reclassify"):
@@ -355,28 +438,21 @@ def update_with_reclassify(
             })
             logger.info(f"Updated database entry with reclassification: {entry_id}")
         except Exception as e:
-            logger.error(f"Failed to update SQLite: {e}")
+            raise PartialWriteError(
+                f"SQLite update failed for '{entry_id}' (JSON-LD safe at {jsonld_path}): {e}",
+                jsonld_path=str(jsonld_path) if jsonld_path else "unknown",
+            ) from e
 
-    # === UPDATE 2b: Calendar event fields in SQLite ===
-    calendar = classification.get("calendar")
-    if isinstance(calendar, list):
-        calendar = next((c for c in calendar if isinstance(c, dict) and c.get("is_event")), None)
-    if isinstance(calendar, dict) and calendar.get("is_event"):
+    # === UPDATE 2b: Calendar event fields — non-fatal ===
+    cal_fields = _extract_calendar_fields(cls.calendar)
+    if cal_fields:
         try:
-            cal_fields = {
-                "event_date": calendar.get("date"),
-                "event_start_time": calendar.get("time"),
-                "event_end_time": calendar.get("end_time"),
-                "event_all_day": 1 if calendar.get("all_day") else 0,
-            }
-            if calendar.get("rrule"):
-                cal_fields["event_rrule"] = calendar["rrule"]
             update_entry(entry_id, cal_fields)
             logger.info(f"Updated calendar fields for: {entry_id}")
         except Exception as e:
             logger.warning(f"Failed to update calendar fields (non-blocking): {e}")
 
-    # === UPDATE 3: Obsidian Memory ===
+    # === UPDATE 3: Obsidian Memory — non-fatal ===
     obsidian_path = None
     with TracingSpan("update_obsidian_reclassify"):
         try:
@@ -402,9 +478,9 @@ def update_with_reclassify(
             obsidian_path.write_text(content, encoding="utf-8")
             logger.info(f"Written to Obsidian: {obsidian_path}")
         except Exception as e:
-            logger.error(f"Failed to update Obsidian: {e}")
+            logger.warning(f"Obsidian update failed (non-blocking): {e}")
 
-    # === UPDATE 4: Re-embed with reclassified content ===
+    # === UPDATE 4: Re-embed with reclassified content — non-fatal ===
     with TracingSpan("reclassify_embedding"):
         try:
             embed_text = f"{new_title}\n{content}"
@@ -423,13 +499,22 @@ def update_with_reclassify(
             "note_id": entry_id,
             "old_category": old_category,
             "new_category": new_category,
+            "original_category": original_category,
             "category_changed": category_changed,
+            "confidence": new_confidence,
+            "confidence_threshold": CONFIDENCE_THRESHOLD,
+            "rerouted": new_category != original_category,
+            "reroute_reason": reroute_reason,
             "action": "reclassify"
         }
     )
 
     return obsidian_path, entry_id
 
+
+# ---------------------------------------------------------------------------
+# log_receipt — Audit trail
+# ---------------------------------------------------------------------------
 
 def log_receipt(
     source_file: Optional[str],

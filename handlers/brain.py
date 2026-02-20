@@ -57,17 +57,8 @@ def _push_single_event(event_data: dict, classification: dict, content: str, cre
                 logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
                 # Fall through to insert
 
-        from googleapiclient.discovery import build
-        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-        event_body = {
-            "summary": title,
-            "description": description,
-            "start": {"date": date_str},
-            "end": {"date": date_str},
-        }
-        if recurrence:
-            event_body["recurrence"] = recurrence
-        result = service.events().insert(calendarId="primary", body=event_body).execute()
+        result = push_event(creds, summary=title, start=date_str, end=date_str,
+                            description=description, all_day=True, recurrence=recurrence)
     else:
         start_dt = f"{date_str}T{time_str}:00"
         end_time = event_data.get("end_time")
@@ -98,11 +89,15 @@ def _push_single_event(event_data: dict, classification: dict, content: str, cre
 
 
 def _push_to_calendar(classification: dict, content: str = "",
-                      existing_gcal_id: str | None = None) -> str | None:
+                      existing_gcal_id: str | None = None,
+                      note_id: str | None = None) -> str | None:
     """Auto-push to Google Calendar if classification contains calendar event(s).
 
     Handles both single events (dict) and multi-event notes (list).
     Fails silently - calendar push is best-effort, never blocks the pipeline.
+
+    When note_id is provided, gcal_event_id is persisted to the DB atomically
+    after each successful push — the caller does not need a separate update_entry.
 
     Returns the GCal event ID of the first successfully pushed event, or None.
     """
@@ -143,6 +138,11 @@ def _push_to_calendar(classification: dict, content: str = "",
                     existing_gcal_id=existing_gcal_id if pushed == 0 else None
                 )
                 if gcal_id:
+                    if note_id:
+                        try:
+                            update_entry(note_id, {"gcal_event_id": gcal_id})
+                        except Exception as db_err:
+                            logger.error(f"DB write failed for gcal_event_id={gcal_id} on note={note_id}: {db_err}")
                     pushed += 1
                     if first_gcal_id is None:
                         first_gcal_id = gcal_id
@@ -150,8 +150,11 @@ def _push_to_calendar(classification: dict, content: str = "",
                 logger.error(f"Calendar push failed for event '{event_data.get('title', '?')}': {e}")
 
         if pushed:
-            events_list = pull_events(creds)
-            save_to_cache(events_list)
+            try:
+                events_list = pull_events(creds)
+                save_to_cache(events_list)
+            except Exception as e:
+                logger.warning(f"Post-push cache refresh failed (non-blocking): {e}")
             logger.info(f"Pushed {pushed}/{len(events)} calendar event(s)")
 
         return first_gcal_id
@@ -215,12 +218,10 @@ def handle(state: OrchestratorState) -> OrchestratorState:
                     existing, content, content_hash, classification
                 )
 
-                # Calendar push on update (THE FIX: was missing before)
+                # Calendar push on update (atomic — DB write inside _push_to_calendar)
                 existing_gcal_id = existing.get("gcal_event_id")
-                gcal_event_id = _push_to_calendar(classification, content,
-                                                  existing_gcal_id=existing_gcal_id)
-                if gcal_event_id:
-                    update_entry(note_id, {"gcal_event_id": gcal_event_id})
+                _push_to_calendar(classification, content,
+                                  existing_gcal_id=existing_gcal_id, note_id=note_id)
 
                 action = "updated_reclassified" if new_category != old_category else "updated"
                 log_receipt(source_file, classification, action, obsidian_path)
@@ -259,10 +260,8 @@ def handle(state: OrchestratorState) -> OrchestratorState:
             content, classification, source_file, source_filename
         )
 
-        # Auto-push to Google Calendar if event detected
-        gcal_event_id = _push_to_calendar(classification, content)
-        if gcal_event_id:
-            update_entry(note_id, {"gcal_event_id": gcal_event_id})
+        # Auto-push to Google Calendar if event detected (atomic — DB write inside)
+        _push_to_calendar(classification, content, note_id=note_id)
 
         action = "misc" if classification.get("confidence", 0) < 0.7 else "classified"
         log_receipt(source_file, classification, action, obsidian_path)

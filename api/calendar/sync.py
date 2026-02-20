@@ -55,6 +55,25 @@ def _execute_with_retry(request, max_retries: int = 2):
             raise  # Non-retryable or retries exhausted
 
 
+def _with_auth_refresh(creds: Credentials, operation):
+    """Execute operation; on 401, refresh credentials and retry once.
+
+    Handles the case where credentials expire mid-session. The operation
+    receives creds and should build its own service from them.
+    """
+    try:
+        return operation(creds)
+    except HttpError as e:
+        if e.resp.status != 401:
+            raise
+        from api.calendar.google_auth import get_credentials
+        fresh = get_credentials()
+        if not fresh:
+            raise  # Refresh failed — can't recover
+        logger.info("Refreshed credentials after 401, retrying once")
+        return operation(fresh)
+
+
 def pull_events(
     creds: Credentials,
     days_ahead: int = 365,
@@ -71,33 +90,35 @@ def pull_events(
 
     Returns list of event dicts in GCal API format.
     """
-    service = _build_service(creds)
-    now = datetime.now(timezone.utc)
-    time_min = (now - timedelta(days=days_behind)).isoformat()
-    time_max = (now + timedelta(days=days_ahead)).isoformat()
+    def _do(c):
+        service = _build_service(c)
+        now = datetime.now(timezone.utc)
+        time_min = (now - timedelta(days=days_behind)).isoformat()
+        time_max = (now + timedelta(days=days_ahead)).isoformat()
 
-    all_events = []
-    page_token = None
+        all_events = []
+        page_token = None
 
-    while True:
-        events_result = _execute_with_retry(
-            service.events()
-            .list(
-                calendarId=calendar_id,
-                timeMin=time_min,
-                timeMax=time_max,
-                maxResults=250,
-                singleEvents=True,
-                orderBy="startTime",
-                pageToken=page_token,
+        while True:
+            events_result = _execute_with_retry(
+                service.events()
+                .list(
+                    calendarId=calendar_id,
+                    timeMin=time_min,
+                    timeMax=time_max,
+                    maxResults=250,
+                    singleEvents=True,
+                    orderBy="startTime",
+                    pageToken=page_token,
+                )
             )
-        )
-        all_events.extend(events_result.get("items", []))
-        page_token = events_result.get("nextPageToken")
-        if not page_token:
-            break
+            all_events.extend(events_result.get("items", []))
+            page_token = events_result.get("nextPageToken")
+            if not page_token:
+                break
 
-    return all_events
+        return all_events
+    return _with_auth_refresh(creds, _do)
 
 
 def push_event(
@@ -106,22 +127,36 @@ def push_event(
     start: str,
     end: str,
     description: str = "",
+    all_day: bool = False,
+    recurrence: list[str] | None = None,
     calendar_id: str = "primary",
 ) -> dict:
     """Create an event on Google Calendar. Returns the created event."""
-    service = _build_service(creds)
-    event_body = {
-        "summary": summary,
-        "description": description,
-        "start": {"dateTime": start, "timeZone": DEFAULT_TIMEZONE},
-        "end": {"dateTime": end, "timeZone": DEFAULT_TIMEZONE},
-    }
-    created = _execute_with_retry(
-        service.events()
-        .insert(calendarId=calendar_id, body=event_body)
-    )
-    logger.info(f"Created GCal event: {created.get('id')} - {summary}")
-    return created
+    def _do(c):
+        service = _build_service(c)
+        if all_day:
+            event_body = {
+                "summary": summary,
+                "description": description,
+                "start": {"date": start},
+                "end": {"date": end},
+            }
+        else:
+            event_body = {
+                "summary": summary,
+                "description": description,
+                "start": {"dateTime": start, "timeZone": DEFAULT_TIMEZONE},
+                "end": {"dateTime": end, "timeZone": DEFAULT_TIMEZONE},
+            }
+        if recurrence:
+            event_body["recurrence"] = recurrence
+        created = _execute_with_retry(
+            service.events()
+            .insert(calendarId=calendar_id, body=event_body)
+        )
+        logger.info(f"Created GCal event: {created.get('id')} - {summary}")
+        return created
+    return _with_auth_refresh(creds, _do)
 
 
 def update_event(
@@ -136,29 +171,31 @@ def update_event(
     calendar_id: str = "primary",
 ) -> dict:
     """Update an existing event on Google Calendar. Returns the updated event."""
-    service = _build_service(creds)
-    if all_day:
-        event_body = {
-            "summary": summary,
-            "description": description,
-            "start": {"date": start},
-            "end": {"date": end},
-        }
-    else:
-        event_body = {
-            "summary": summary,
-            "description": description,
-            "start": {"dateTime": start, "timeZone": DEFAULT_TIMEZONE},
-            "end": {"dateTime": end, "timeZone": DEFAULT_TIMEZONE},
-        }
-    if recurrence:
-        event_body["recurrence"] = recurrence
-    updated = _execute_with_retry(
-        service.events()
-        .patch(calendarId=calendar_id, eventId=event_id, body=event_body)
-    )
-    logger.info(f"Updated GCal event: {updated.get('id')} - {summary}")
-    return updated
+    def _do(c):
+        service = _build_service(c)
+        if all_day:
+            event_body = {
+                "summary": summary,
+                "description": description,
+                "start": {"date": start},
+                "end": {"date": end},
+            }
+        else:
+            event_body = {
+                "summary": summary,
+                "description": description,
+                "start": {"dateTime": start, "timeZone": DEFAULT_TIMEZONE},
+                "end": {"dateTime": end, "timeZone": DEFAULT_TIMEZONE},
+            }
+        if recurrence:
+            event_body["recurrence"] = recurrence
+        updated = _execute_with_retry(
+            service.events()
+            .patch(calendarId=calendar_id, eventId=event_id, body=event_body)
+        )
+        logger.info(f"Updated GCal event: {updated.get('id')} - {summary}")
+        return updated
+    return _with_auth_refresh(creds, _do)
 
 
 def delete_event(
@@ -167,12 +204,14 @@ def delete_event(
     calendar_id: str = "primary",
 ) -> bool:
     """Delete an event from Google Calendar."""
-    service = _build_service(creds)
-    _execute_with_retry(
-        service.events().delete(calendarId=calendar_id, eventId=event_id)
-    )
-    logger.info(f"Deleted GCal event: {event_id}")
-    return True
+    def _do(c):
+        service = _build_service(c)
+        _execute_with_retry(
+            service.events().delete(calendarId=calendar_id, eventId=event_id)
+        )
+        logger.info(f"Deleted GCal event: {event_id}")
+        return True
+    return _with_auth_refresh(creds, _do)
 
 
 # --- Local cache ---

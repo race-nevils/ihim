@@ -1,11 +1,15 @@
 """FastAPI routes for brain search and entry management."""
+import asyncio
+import json
 import logging
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
 from adapters.embeddings import EmbeddingAdapter
+from api.calendar.google_auth import token_health
 from data.database import (
     get_all_entries,
     get_entries_by_category,
@@ -17,6 +21,7 @@ from data.database import (
     has_embedding,
     store_embedding,
 )
+from data.integrity import spot_check_drift
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +144,79 @@ async def brain_stats():
         "embedding_pct": round(total_embeddings / total_entries * 100, 1) if total_entries > 0 else 0,
         "categories": categories,
     }
+
+
+@router.get("/integrity")
+async def brain_integrity():
+    """Spot-check content hash drift between JSON-LD files and DB."""
+    result = spot_check_drift(20)
+    result["status"] = "clean" if result["drifted"] == 0 else "drift_detected"
+    return result
+
+
+@router.get("/status")
+async def brain_status():
+    """System health: entry count, embeddings, Ollama, calendar, rebuild, drift."""
+    response = {}
+
+    # Entry count
+    try:
+        categories = count_by_category()
+        entry_count = sum(categories.values())
+        response["entry_count"] = entry_count
+    except Exception:
+        response["entry_count"] = 0
+        entry_count = 0
+
+    # Embedding coverage
+    try:
+        embeddings = count_embeddings()
+        response["embedding_coverage_pct"] = (
+            round(embeddings / entry_count * 100, 1) if entry_count > 0 else 0.0
+        )
+    except Exception:
+        response["embedding_coverage_pct"] = 0.0
+
+    # Ollama health (sync httpx — run in executor to avoid blocking event loop)
+    try:
+        loop = asyncio.get_event_loop()
+        adapter = EmbeddingAdapter()
+        alive = await loop.run_in_executor(None, adapter.health_check)
+        response["ollama"] = "alive" if alive else "down"
+    except Exception:
+        response["ollama"] = "unknown"
+
+    # Calendar auth
+    try:
+        health = token_health()
+        if health.get("valid"):
+            response["calendar_auth"] = "valid"
+        elif health.get("expired"):
+            response["calendar_auth"] = "expired"
+        else:
+            response["calendar_auth"] = "missing"
+    except Exception:
+        response["calendar_auth"] = "unknown"
+
+    # Last rebuild
+    try:
+        rebuild_file = Path(__file__).parent.parent / "data" / "last_rebuild.json"
+        if rebuild_file.exists():
+            record = json.loads(rebuild_file.read_text(encoding="utf-8"))
+            response["last_rebuild"] = record.get("completed_at")
+        else:
+            response["last_rebuild"] = None
+    except Exception:
+        response["last_rebuild"] = None
+
+    # Drift sample
+    try:
+        drift = spot_check_drift(5)
+        response["drift_sample"] = {"checked": drift["checked"], "drifted": drift["drifted"]}
+    except Exception:
+        response["drift_sample"] = {"checked": 0, "drifted": 0}
+
+    return response
 
 
 @router.post("/embeddings/backfill")

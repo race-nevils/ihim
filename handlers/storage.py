@@ -69,6 +69,20 @@ def _extract_calendar_fields(calendar: Optional[CalendarEvent]) -> Optional[dict
     return fields
 
 
+def _build_frontmatter(brain_id: str, jsonld_path: str, category: str,
+                       created_at: str, content_hash: str) -> str:
+    """YAML frontmatter for Obsidian files. Links back to source of truth."""
+    return (
+        f"---\n"
+        f"brain_id: {brain_id}\n"
+        f"jsonld_path: {jsonld_path}\n"
+        f"category: {category}\n"
+        f"created_at: {created_at}\n"
+        f"content_hash: {content_hash}\n"
+        f"---\n"
+    )
+
+
 # ---------------------------------------------------------------------------
 # store_new — Create a new brain entry (triple-write)
 # ---------------------------------------------------------------------------
@@ -202,7 +216,9 @@ def store_new(
                 obsidian_path = target_dir / filename
                 counter += 1
 
-            obsidian_path.write_text(content, encoding="utf-8")
+            fm = _build_frontmatter(note_id, str(jsonld_path), category,
+                                    timestamp.isoformat(), content_hash)
+            obsidian_path.write_text(fm + content, encoding="utf-8")
             logger.info(f"Written to Obsidian: {obsidian_path}")
         except Exception as e:
             logger.warning(f"Obsidian write failed (non-blocking, rebuild regenerates): {e}")
@@ -316,7 +332,9 @@ def update_existing(
         try:
             obsidian_path = OBSIDIAN_MEMORY / category / f"{sanitize_title(title)}.md"
             obsidian_path.parent.mkdir(parents=True, exist_ok=True)
-            obsidian_path.write_text(content, encoding="utf-8")
+            fm = _build_frontmatter(entry_id, str(jsonld_path) if jsonld_path else "",
+                                    category, existing.get("created_at", ""), content_hash)
+            obsidian_path.write_text(fm + content, encoding="utf-8")
             logger.info(f"Updated Obsidian: {obsidian_path}")
         except Exception as e:
             logger.warning(f"Obsidian update failed (non-blocking): {e}")
@@ -475,7 +493,9 @@ def update_with_reclassify(
             target_dir = OBSIDIAN_MEMORY / new_category
             target_dir.mkdir(parents=True, exist_ok=True)
             obsidian_path = target_dir / f"{sanitize_title(new_title)}.md"
-            obsidian_path.write_text(content, encoding="utf-8")
+            fm = _build_frontmatter(entry_id, str(jsonld_path) if jsonld_path else "",
+                                    new_category, existing.get("created_at", ""), content_hash)
+            obsidian_path.write_text(fm + content, encoding="utf-8")
             logger.info(f"Written to Obsidian: {obsidian_path}")
         except Exception as e:
             logger.warning(f"Obsidian update failed (non-blocking): {e}")

@@ -61,6 +61,9 @@ class InboxWatcher:
         self._recent_activity = deque(maxlen=10)
         self._heartbeat_path = Path(__file__).parent.parent.parent / "data" / "watcher_heartbeat.json"
         self._ollama_warmed_at = 0.0  # Timestamp of last Ollama warm-up
+        self._files_processed = 0
+        self._files_errored = 0
+        self._total_processing_ms = 0
 
         self.failed_path = self.processed_path.parent / "failed"
         self._warm_up_event = threading.Event()
@@ -79,8 +82,12 @@ class InboxWatcher:
         return content.strip()
 
     def _get_content_hash(self, file_path: Path) -> str:
-        """Get SHA-256 hash of file content (first 16 chars)."""
-        content = file_path.read_text(encoding="utf-8")
+        """Get SHA-256 hash of file content (first 16 chars).
+
+        Uses read_file_content() to strip frontmatter before hashing,
+        so the hash matches what the DB stores.
+        """
+        content = self.read_file_content(file_path)
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
     def move_to_processed(self, file_path: Path) -> Path:
@@ -96,9 +103,10 @@ class InboxWatcher:
         return dest_path
 
     def _is_excluded(self, file_path: Path, source: InboxSource) -> bool:
-        """Check if a file is in an excluded folder."""
+        """Check if a file is in an excluded folder (case-insensitive on Windows)."""
+        exclude_lower = {f.lower() for f in source.exclude_folders}
         for parent in file_path.parents:
-            if parent.name in source.exclude_folders:
+            if parent.name.lower() in exclude_lower:
                 return True
             if parent == source.path:
                 break
@@ -118,8 +126,9 @@ class InboxWatcher:
                 continue
             # Strip timestamp prefix (YYYYMMDD-HHMMSS_) to get original name
             original_name = f.name
-            if len(original_name) > 16 and original_name[15] == '_':
-                original_name = original_name[16:]
+            ts_match = re.match(r'^\d{8}-\d{6}_(.*)$', original_name)
+            if ts_match:
+                original_name = ts_match.group(1)
             dest = self.sources[0].path / original_name
             if dest.exists():
                 # Original still in inbox — skip (don't overwrite)
@@ -281,6 +290,7 @@ class InboxWatcher:
             except OSError:
                 logger.info(f"Processing {original_name}")
 
+            _proc_elapsed_ms = 0
             try:
                 content = self.read_file_content(file_path)
 
@@ -288,12 +298,14 @@ class InboxWatcher:
                     logger.info(f"Empty file, archiving immediately: {original_name}")
                     self.move_to_processed(file_path)
                     self.tracker.remove(file_path)
-                    results.append({"file": original_name, "action_type": "skipped", "result": {"action": "skipped"}})
+                    results.append({"file": original_name, "action_type": "skipped", "result": {"action": "skipped"}, "processing_ms": 0})
                     continue
 
                 # Process the file - brain handler does deduplication via database
                 # This is a slow LLM call, but we're safe because we marked PROCESSING
+                _proc_t0 = time.time()
                 result = processor(content, str(file_path))
+                _proc_elapsed_ms = round((time.time() - _proc_t0) * 1000)
                 action = result.get("result", {}).get("action", "unknown")
 
                 # Check if the HANDLER returned an error action
@@ -302,13 +314,15 @@ class InboxWatcher:
                 if action == "error":
                     error_msg = result.get("error", result.get("result", {}).get("error", "unknown"))
                     logger.warning(f"Processor returned error for {original_name}: {error_msg}")
+                    self._files_errored += 1
+                    self._total_processing_ms += _proc_elapsed_ms
                     retry_count = self.tracker.increment_retry(file_path)
                     if retry_count >= FileTracker.MAX_RETRIES:
                         self._move_to_failed(file_path, f"processor_error: {error_msg}")
                     elif file_path in self.tracker.files:
                         self.tracker.files[file_path].state = FileState.READY
                         logger.info(f"Will retry {original_name} in {FileTracker.RETRY_DELAYS[min(retry_count-1, len(FileTracker.RETRY_DELAYS)-1)]}s (attempt {retry_count}/{FileTracker.MAX_RETRIES})")
-                    results.append({"file": original_name, "error": f"processor_error: {error_msg}"})
+                    results.append({"file": original_name, "error": f"processor_error: {error_msg}", "processing_ms": _proc_elapsed_ms})
                     continue
 
                 # Verify brain write actually landed in database
@@ -336,22 +350,28 @@ class InboxWatcher:
                 content_hash = self._get_content_hash(file_path)
                 self.tracker.mark_processed(file_path, content_hash)
 
+                self._files_processed += 1
+                self._total_processing_ms += _proc_elapsed_ms
+
                 results.append({
                     "file": original_name,
                     "result": result,
-                    "action_type": action
+                    "action_type": action,
+                    "processing_ms": _proc_elapsed_ms
                 })
 
             except Exception as e:
                 error_tb = traceback.format_exc()
                 logger.error(f"Failed to process {original_name}: {e}\n{error_tb}")
+                self._files_errored += 1
+                self._total_processing_ms += _proc_elapsed_ms
                 retry_count = self.tracker.increment_retry(file_path)
                 if retry_count >= FileTracker.MAX_RETRIES:
                     self._move_to_failed(file_path, str(e))
                 elif file_path in self.tracker.files:
                     self.tracker.files[file_path].state = FileState.READY
                     logger.info(f"Will retry {original_name} in {FileTracker.RETRY_DELAYS[min(retry_count-1, len(FileTracker.RETRY_DELAYS)-1)]}s (attempt {retry_count}/{FileTracker.MAX_RETRIES})")
-                results.append({"file": original_name, "error": str(e), "traceback": error_tb})
+                results.append({"file": original_name, "error": str(e), "traceback": error_tb, "processing_ms": _proc_elapsed_ms})
 
         return results
 
@@ -442,13 +462,15 @@ class InboxWatcher:
         def _ping():
             try:
                 import httpx
+                from adapters.ollama import OllamaAdapter
+                from adapters.embeddings import EMBED_MODEL
                 base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
                 with httpx.Client(timeout=60.0) as client:
                     # 1. Warm classification model
                     client.post(
                         f"{base_url}/api/generate",
                         json={
-                            "model": "qwen2.5:7b-fast",
+                            "model": OllamaAdapter.FAST_MODEL,
                             "prompt": "hi",
                             "stream": False,
                             "options": {"num_predict": 1}
@@ -460,7 +482,7 @@ class InboxWatcher:
                     client.post(
                         f"{base_url}/api/embeddings",
                         json={
-                            "model": "nomic-embed-text",
+                            "model": EMBED_MODEL,
                             "prompt": "warmup"
                         }
                     )
@@ -487,6 +509,7 @@ class InboxWatcher:
                 self._recent_activity.append({
                     "file": r.get("file", "?"),
                     "action": action,
+                    "processing_ms": r.get("processing_ms", 0),
                     "time": datetime.now(timezone.utc).isoformat()
                 })
 
@@ -501,6 +524,9 @@ class InboxWatcher:
 
             settling = sum(1 for t in tracked if t["state"] == "SETTLING")
 
+            total_files = self._files_processed + self._files_errored
+            avg_ms = round(self._total_processing_ms / total_files) if total_files > 0 else 0
+
             heartbeat = {
                 "status": "running",
                 "pid": os.getpid(),
@@ -511,6 +537,12 @@ class InboxWatcher:
                 "tracked_count": len(tracked),
                 "settling_count": settling,
                 "recent_activity": list(self._recent_activity),
+                "processing_stats": {
+                    "files_processed": self._files_processed,
+                    "files_errored": self._files_errored,
+                    "avg_processing_ms": avg_ms,
+                    "total_processing_ms": self._total_processing_ms,
+                },
             }
 
             # Atomic write: write to .tmp then replace

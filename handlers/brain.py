@@ -9,8 +9,10 @@ Thin orchestration layer. All logic delegated to:
 All steps traced via Langfuse for observability.
 """
 import logging
+import time
+import json
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from handlers.tracing import observe
 
@@ -22,6 +24,30 @@ from handlers.storage import store_new, update_existing, log_receipt
 from data.database import update_entry
 
 logger = logging.getLogger(__name__)
+
+_BRAIN_METRICS_PATH = Path(__file__).parent.parent / "data" / "brain_metrics.jsonl"
+_BRAIN_METRICS_CAP = 500
+
+
+def _persist_brain_metric(entry: dict):
+    """Append a metric entry to brain_metrics.jsonl, capped at 500 lines."""
+    try:
+        _BRAIN_METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(entry, default=str) + "\n"
+
+        # Read existing, cap, append
+        lines = []
+        if _BRAIN_METRICS_PATH.exists():
+            lines = _BRAIN_METRICS_PATH.read_text(encoding="utf-8").splitlines()
+
+        # Keep last (cap - 1) lines, then append new one
+        if len(lines) >= _BRAIN_METRICS_CAP:
+            lines = lines[-((_BRAIN_METRICS_CAP) - 1):]
+
+        lines.append(line.rstrip("\n"))
+        _BRAIN_METRICS_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception as e:
+        logger.debug(f"Brain metrics write failed (non-blocking): {e}")
 
 
 def _push_single_event(event_data: dict, classification: dict, content: str, creds,
@@ -44,53 +70,38 @@ def _push_single_event(event_data: dict, classification: dict, content: str, cre
     description = content or classification.get("summary", "")
     recurrence = [rrule] if rrule else None
 
-    if all_day or not time_str:
-        if existing_gcal_id:
-            try:
-                result = update_event(creds, existing_gcal_id, summary=title,
-                                      start=date_str, end=date_str, description=description,
-                                      all_day=True, recurrence=recurrence)
-                save_event_jsonld(result)
-                gcal_id = result.get("id")
-                if not gcal_id:
-                    logger.warning(f"GCal update returned no event ID for '{title}' on {date_str}")
-                else:
-                    logger.info(f"Updated calendar event: {title} on {date_str}")
-                return gcal_id
-            except Exception as e:
-                logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
-                # Fall through to insert
-
-        result = push_event(creds, summary=title, start=date_str, end=date_str,
-                            description=description, all_day=True, recurrence=recurrence)
+    # Build start/end strings (unified for all-day and timed events)
+    is_all_day = all_day or not time_str
+    if is_all_day:
+        start_str, end_str = date_str, date_str
     else:
-        start_dt = f"{date_str}T{time_str}:00"
+        start_str = f"{date_str}T{time_str}:00"
         end_time = event_data.get("end_time")
         if end_time:
-            end_dt = f"{date_str}T{end_time}:00"
+            end_str = f"{date_str}T{end_time}:00"
         else:
-            start_obj = datetime.fromisoformat(start_dt)
-            end_obj = start_obj + timedelta(hours=1)
-            end_dt = end_obj.strftime("%Y-%m-%dT%H:%M:%S")
+            start_obj = datetime.fromisoformat(start_str)
+            end_str = (start_obj + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
 
-        if existing_gcal_id:
-            try:
-                result = update_event(creds, existing_gcal_id, summary=title,
-                                      start=start_dt, end=end_dt, description=description,
-                                      recurrence=recurrence)
-                save_event_jsonld(result)
-                gcal_id = result.get("id")
-                if not gcal_id:
-                    logger.warning(f"GCal update returned no event ID for '{title}' on {date_str}")
-                else:
-                    logger.info(f"Updated calendar event: {title} on {date_str}")
-                return gcal_id
-            except Exception as e:
-                logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
+    # Try update first if we have an existing event ID
+    if existing_gcal_id:
+        try:
+            result = update_event(creds, existing_gcal_id, summary=title,
+                                  start=start_str, end=end_str, description=description,
+                                  all_day=is_all_day, recurrence=recurrence)
+            save_event_jsonld(result)
+            gcal_id = result.get("id")
+            if not gcal_id:
+                logger.warning(f"GCal update returned no event ID for '{title}' on {date_str}")
+            else:
+                logger.info(f"Updated calendar event: {title} on {date_str}")
+            return gcal_id
+        except Exception as e:
+            logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
 
-        result = push_event(creds, summary=title, start=start_dt, end=end_dt,
-                            description=description)
-
+    # Insert new event
+    result = push_event(creds, summary=title, start=start_str, end=end_str,
+                        description=description, all_day=is_all_day, recurrence=recurrence)
     save_event_jsonld(result)
     gcal_id = result.get("id")
     if not gcal_id:
@@ -186,6 +197,8 @@ def handle(state: OrchestratorState) -> OrchestratorState:
     3. If changed → update existing
     4. If new → classify and store
 
+    All stages are timed and metrics persisted to brain_metrics.jsonl.
+
     Args:
         state: Current orchestrator state
 
@@ -203,40 +216,73 @@ def handle(state: OrchestratorState) -> OrchestratorState:
 
     source_filename = Path(source_file).name if source_file else None
     content_hash = compute_content_hash(content)
+    timing = {}
+    t_total = time.time()
+    metric_action = None
+    metric_category = None
+    metric_confidence = None
+    metric_error = None
 
     try:
-        # Step 1: Check for existing entry
+        # Step 1: Dedup check
+        t0 = time.time()
         existing = find_existing(source_file, content)
+        dedup_unchanged = False
 
         if existing:
-            # Step 2: Check if unchanged
-            if is_unchanged(existing, content_hash):
-                state["result"] = {"action": "skipped", "reason": "unchanged"}
-                return state
+            dedup_unchanged = is_unchanged(existing, content_hash)
+        timing["dedup"] = round((time.time() - t0) * 1000)
 
+        if existing and dedup_unchanged:
+            state["result"] = {"action": "skipped", "reason": "unchanged"}
+            metric_action = "skipped"
+            timing["total"] = round((time.time() - t_total) * 1000)
+            state["result"]["timing_ms"] = timing
+            _persist_brain_metric({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "source_file": source_filename,
+                "action": metric_action,
+                "category": None,
+                "confidence": None,
+                "timing_ms": timing,
+                "error": None,
+            })
+            return state
+
+        if existing:
             # Step 3: Content changed - check if file is still live (in inbox)
-            # Live files get reclassified, archived files just update content
             source_path = Path(source_file) if source_file else None
             is_live = source_path and source_path.exists() and "processed" not in str(source_path)
 
             if is_live:
                 # Reclassify live files when content changes
+                t0 = time.time()
                 classification = classify_content(content, source_filename)
+                timing["classify"] = round((time.time() - t0) * 1000)
+
                 new_category = classification.get("category")
                 old_category = existing.get("category")
 
                 from handlers.storage import update_with_reclassify
+
+                t0 = time.time()
                 obsidian_path, note_id = update_with_reclassify(
                     existing, content, content_hash, classification
                 )
+                timing["store"] = round((time.time() - t0) * 1000)
 
                 # Calendar push on update (atomic — DB write inside _push_to_calendar)
+                t0 = time.time()
                 existing_gcal_id = existing.get("gcal_event_id")
                 _push_to_calendar(classification, content,
                                   existing_gcal_id=existing_gcal_id, note_id=note_id)
+                timing["calendar"] = round((time.time() - t0) * 1000)
 
                 action = "updated_reclassified" if new_category != old_category else "updated"
                 log_receipt(source_file, classification, action, obsidian_path)
+                metric_action = action
+                metric_category = new_category
+                metric_confidence = classification.get("confidence")
 
                 state["result"] = {
                     "action": action,
@@ -249,13 +295,18 @@ def handle(state: OrchestratorState) -> OrchestratorState:
                 }
             else:
                 # Archived/stale files just update content, keep category
+                t0 = time.time()
                 obsidian_path, note_id = update_existing(existing, content, content_hash)
+                timing["store"] = round((time.time() - t0) * 1000)
 
                 log_receipt(source_file, {
                     "category": existing.get("category"),
                     "title": existing.get("title"),
                     "confidence": existing.get("confidence", 0.0)
                 }, "updated", obsidian_path)
+                metric_action = "updated"
+                metric_category = existing.get("category")
+                metric_confidence = existing.get("confidence")
 
                 state["result"] = {
                     "action": "updated",
@@ -264,19 +315,41 @@ def handle(state: OrchestratorState) -> OrchestratorState:
                     "destination": str(obsidian_path),
                     "processed_id": note_id
                 }
+
+            timing["total"] = round((time.time() - t_total) * 1000)
+            state["result"]["timing_ms"] = timing
+            _persist_brain_metric({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "source_file": source_filename,
+                "action": metric_action,
+                "category": metric_category,
+                "confidence": metric_confidence,
+                "timing_ms": timing,
+                "error": None,
+            })
             return state
 
         # Step 4: Classify and store new entry
+        t0 = time.time()
         classification = classify_content(content, source_filename)
+        timing["classify"] = round((time.time() - t0) * 1000)
+
+        t0 = time.time()
         obsidian_path, note_id = store_new(
             content, classification, source_file, source_filename
         )
+        timing["store"] = round((time.time() - t0) * 1000)
 
         # Auto-push to Google Calendar if event detected (atomic — DB write inside)
+        t0 = time.time()
         _push_to_calendar(classification, content, note_id=note_id)
+        timing["calendar"] = round((time.time() - t0) * 1000)
 
         action = "misc" if classification.get("confidence", 0) < 0.7 else "classified"
         log_receipt(source_file, classification, action, obsidian_path)
+        metric_action = action
+        metric_category = classification.get("category")
+        metric_confidence = classification.get("confidence")
 
         state["result"] = {
             "action": action,
@@ -292,5 +365,21 @@ def handle(state: OrchestratorState) -> OrchestratorState:
         logger.error(f"Brain handler error: {e}", exc_info=True)
         state["error"] = f"Brain handler error: {str(e)}"
         state["result"] = {"action": "error", "error": str(e)}
+        metric_action = "error"
+        metric_error = str(e)
+
+    timing["total"] = round((time.time() - t_total) * 1000)
+    if "result" in state:
+        state["result"]["timing_ms"] = timing
+
+    _persist_brain_metric({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "source_file": source_filename,
+        "action": metric_action,
+        "category": metric_category,
+        "confidence": metric_confidence,
+        "timing_ms": timing,
+        "error": metric_error,
+    })
 
     return state

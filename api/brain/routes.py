@@ -4,12 +4,14 @@ import json
 import logging
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query, Request
+from pydantic import BaseModel, Field
 
 from adapters.embeddings import EmbeddingAdapter
 from api.calendar.google_auth import token_health
+from api.errors import problem
 from data.database import (
     get_all_entries,
     get_entries_by_category,
@@ -28,14 +30,59 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/brain", tags=["Brain"])
 
 
+# --- Response models ---
+
+class BrainSearchResponse(BaseModel):
+    query: str
+    mode: str
+    search_mode_actual: str
+    count: int
+    results: list[dict[str, Any]]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class BrainEntryListResponse(BaseModel):
+    count: int
+    entries: list[dict[str, Any]]
+
+
+class BrainStatsResponse(BaseModel):
+    total_entries: int
+    total_embeddings: int
+    embedding_coverage: str
+    embedding_pct: float
+    categories: dict[str, int]
+
+
+class IntegrityResponse(BaseModel):
+    checked: int
+    drifted: int
+    drift_ids: list[str]
+    drift_pct: float
+    missing: int
+    hash_mismatch: int
+    errors: int
+    unhashed: int
+    status: str
+
+
+class BackfillResponse(BaseModel):
+    success: bool
+    generated: int
+    skipped: int
+    failed: int
+    total: int
+
+
 class SearchMode(str, Enum):
     keyword = "keyword"
     semantic = "semantic"
     hybrid = "hybrid"
 
 
-@router.get("/search")
+@router.get("/search", response_model=BrainSearchResponse)
 async def brain_search(
+    request: Request,
     q: str = Query(..., min_length=1, description="Search query"),
     mode: SearchMode = Query(SearchMode.hybrid, description="Search mode"),
     limit: int = Query(10, ge=1, le=50, description="Max results"),
@@ -48,6 +95,8 @@ async def brain_search(
     - hybrid: runs both, merges and deduplicates by entry ID
     """
     results = []
+    actual_mode = mode.value
+    warnings = []
 
     if mode in (SearchMode.keyword, SearchMode.hybrid):
         keyword_results = search_entries(q)
@@ -57,6 +106,7 @@ async def brain_search(
             entry["distance"] = None
             results.append(entry)
 
+    semantic_failed = False
     if mode in (SearchMode.semantic, SearchMode.hybrid):
         try:
             with EmbeddingAdapter() as adapter:
@@ -67,46 +117,50 @@ async def brain_search(
                     entry["match_type"] = "semantic"
                     results.append(entry)
             else:
+                semantic_failed = True
                 if mode == SearchMode.semantic:
-                    raise HTTPException(
-                        status_code=503,
-                        detail="Embedding generation failed - is Ollama running?"
-                    )
-        except HTTPException:
-            raise
+                    return problem(503, "Embedding generation failed - is Ollama running?",
+                                   instance=request.url.path)
         except Exception as e:
+            semantic_failed = True
             logger.error(f"Semantic search failed: {e}")
             if mode == SearchMode.semantic:
-                raise HTTPException(status_code=503, detail=f"Semantic search failed: {e}")
+                return problem(503, f"Semantic search failed: {e}",
+                               instance=request.url.path)
+
+    if mode == SearchMode.hybrid and semantic_failed:
+        actual_mode = "keyword_only"
+        warnings.append("Semantic search unavailable, results are keyword-only")
 
     # Deduplicate hybrid results (prefer semantic if entry appears in both)
     if mode == SearchMode.hybrid:
-        seen = {}
+        seen = {}  # eid -> (entry, index)
         deduped = []
         for entry in results:
             eid = entry["id"]
             if eid not in seen:
-                seen[eid] = entry
+                seen[eid] = (entry, len(deduped))
                 deduped.append(entry)
-            elif entry["match_type"] == "semantic" and seen[eid]["match_type"] == "keyword":
-                # Replace keyword match with semantic (has similarity_score)
+            elif entry["match_type"] == "semantic" and seen[eid][0]["match_type"] == "keyword":
                 entry["match_type"] = "both"
-                idx = deduped.index(seen[eid])
+                idx = seen[eid][1]
                 deduped[idx] = entry
-                seen[eid] = entry
-            elif entry["match_type"] == "keyword" and seen[eid]["match_type"] == "semantic":
-                seen[eid]["match_type"] = "both"
+                seen[eid] = (entry, idx)
+            elif entry["match_type"] == "keyword" and seen[eid][0]["match_type"] == "semantic":
+                seen[eid][0]["match_type"] = "both"
         results = deduped[:limit]
 
     return {
         "query": q,
         "mode": mode.value,
+        "search_mode_actual": actual_mode,
         "count": len(results),
         "results": results,
+        "warnings": warnings,
     }
 
 
-@router.get("/entries")
+@router.get("/entries", response_model=BrainEntryListResponse)
 async def list_entries(
     category: Optional[str] = Query(None, description="Filter by category"),
 ):
@@ -122,16 +176,16 @@ async def list_entries(
 
 
 @router.get("/entries/{entry_id}")
-async def get_entry(entry_id: str):
+async def get_entry(entry_id: str, request: Request):
     """Get a single brain entry by ID."""
     entry = get_entry_by_id(entry_id)
     if not entry:
-        raise HTTPException(status_code=404, detail=f"Entry not found: {entry_id}")
+        return problem(404, f"Entry not found: {entry_id}", instance=request.url.path)
     entry["has_embedding"] = has_embedding(entry_id)
     return entry
 
 
-@router.get("/stats")
+@router.get("/stats", response_model=BrainStatsResponse)
 async def brain_stats():
     """Brain statistics: category counts and embedding coverage."""
     categories = count_by_category()
@@ -146,7 +200,7 @@ async def brain_stats():
     }
 
 
-@router.get("/integrity")
+@router.get("/integrity", response_model=IntegrityResponse)
 async def brain_integrity():
     """Spot-check content hash drift between JSON-LD files and DB."""
     result = spot_check_drift(20)
@@ -228,7 +282,7 @@ async def brain_status():
     return response
 
 
-@router.post("/embeddings/backfill")
+@router.post("/embeddings/backfill", response_model=BackfillResponse)
 async def backfill_embeddings():
     """Generate embeddings for all entries that don't have one yet.
 

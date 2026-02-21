@@ -168,13 +168,3 @@ def extract_title(content: str, source_filename: Optional[str] = None) -> str:
             return stem
 
     return "Untitled"
-
-
-def yaml_escape(text: str) -> str:
-    """Escape a string for safe use in YAML double-quoted values."""
-    if not text:
-        return ""
-    text = text.replace("\\", "\\\\")
-    text = text.replace('"', '\\"')
-    text = text.replace("\n", "\\n")
-    return text

@@ -27,6 +27,8 @@ IHIM_CONTEXT = {
 }
 
 DEFAULT_TIMEZONE = os.environ.get("IHIM_TIMEZONE", "America/Chicago")
+if not os.environ.get("IHIM_TIMEZONE"):
+    logger.warning("IHIM_TIMEZONE not set, defaulting to America/Chicago")
 
 
 def _build_service(creds: Credentials):

@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import time
 from typing import AsyncGenerator, Optional
 
 import httpx
@@ -64,15 +65,25 @@ class OllamaAdapter:
         if system:
             payload["system"] = system
 
-        response = self.client.post(
-            f"{self.base_url}/api/generate",
-            json=payload
-        )
-        response.raise_for_status()
-        result = response.json().get("response", "")
-        if not result:
-            logger.warning("Ollama generate returned empty/missing 'response' field")
-        return result
+        last_exc = None
+        for attempt in range(3):
+            try:
+                response = self.client.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload
+                )
+                response.raise_for_status()
+                result = response.json().get("response", "")
+                if not result:
+                    logger.warning("Ollama generate returned empty/missing 'response' field")
+                return result
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                last_exc = e
+                if attempt < 2:
+                    wait = 2 ** attempt  # 1s, 2s
+                    logger.warning(f"Ollama generate attempt {attempt + 1} failed: {e}, retrying in {wait}s")
+                    time.sleep(wait)
+        raise last_exc
 
     def generate_json(
         self,
@@ -101,11 +112,23 @@ class OllamaAdapter:
         if system:
             payload["system"] = system
 
-        response = self.client.post(
-            f"{self.base_url}/api/generate",
-            json=payload
-        )
-        response.raise_for_status()
+        last_exc = None
+        for attempt in range(3):
+            try:
+                response = self.client.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload
+                )
+                response.raise_for_status()
+                break
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                last_exc = e
+                if attempt < 2:
+                    wait = 2 ** attempt  # 1s, 2s
+                    logger.warning(f"Ollama generate_json attempt {attempt + 1} failed: {e}, retrying in {wait}s")
+                    time.sleep(wait)
+        else:
+            raise last_exc
         raw = response.json().get("response", "")
 
         try:
@@ -131,10 +154,10 @@ class OllamaAdapter:
         logger.error(f"LLM returned unexpected JSON type {type(parsed).__name__}: {str(parsed)[:200]}")
         return {"error": "unexpected_json_type", "raw_type": type(parsed).__name__}
 
-    def health_check(self) -> bool:
+    def health_check(self, timeout: float = 5.0) -> bool:
         """Check if Ollama is running and accessible."""
         try:
-            response = self.client.get(f"{self.base_url}/api/tags")
+            response = self.client.get(f"{self.base_url}/api/tags", timeout=timeout)
             return response.status_code == 200
         except Exception:
             return False

@@ -153,11 +153,10 @@ _allowed_origins = os.environ.get("IHIM_CORS_ORIGINS", "").strip()
 if _allowed_origins:
     _origins_list = [o.strip() for o in _allowed_origins.split(",") if o.strip()]
 else:
-    # Default: permissive for local dev + Chrome extensions
+    # Default: permissive for local dev
     _origins_list = [
         "http://localhost:7777",
         "http://127.0.0.1:7777",
-        "chrome-extension://*",
     ]
 
 app.add_middleware(
@@ -180,13 +179,14 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 # =============================================================================
 
 # CSP directives — report-only to start (won't block anything, just logs violations)
+_IHIM_PORT = os.environ.get("IHIM_PORT", "7777")
 _CSP_POLICY = "; ".join([
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",       # inline scripts in index.html
     "style-src 'self' 'unsafe-inline'",         # inline styles + glassmorphism
     "img-src 'self' data: blob:",               # data URIs for icons
     "font-src 'self'",
-    "connect-src 'self' ws://localhost:7777 ws://127.0.0.1:7777",  # WebSocket
+    f"connect-src 'self' ws://localhost:{_IHIM_PORT} ws://127.0.0.1:{_IHIM_PORT}",  # WebSocket
     "frame-ancestors 'none'",
 ])
 
@@ -249,13 +249,22 @@ for rtr, available in _routers:
 # =============================================================================
 
 UI_DIR = Path(__file__).parent.parent / "ui"
-app.mount("/static", StaticFiles(directory=UI_DIR / "static"), name="static")
+_static_dir = UI_DIR / "static"
+if _static_dir.exists():
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+else:
+    import logging as _log
+    _log.getLogger(__name__).warning(f"Static directory not found: {_static_dir}")
+
+
+_index_html_path = UI_DIR / "index.html"
+_INDEX_HTML: bytes | None = _index_html_path.read_bytes() if _index_html_path.exists() else None
 
 
 @app.get("/")
 async def root():
     """Serve the dashboard."""
-    content = (UI_DIR / "index.html").read_bytes()
+    content = _INDEX_HTML or (UI_DIR / "index.html").read_bytes()
     return Response(
         content=content,
         media_type="text/html",
@@ -696,3 +705,347 @@ async def calculate_vpt_post(req: VPTCalculateRequest, request: Request):
         }
     except Exception as e:
         return problem(500, f"Calculation failed: {str(e)}", instance=request.url.path)
+
+
+# =============================================================================
+# VPT: DEBRIEF RECORD & SUMMARY
+# =============================================================================
+
+_DEBRIEFS_PATH = Path(__file__).parent.parent / "data" / "debriefs.jsonl"
+
+
+class VPTRecordRequest(BaseModel):
+    """Request model for recording a debrief with auto-VPT calculation."""
+    task: str = Field(..., min_length=1, description="Task description")
+    outcome: str = Field(..., pattern="^(success|partial|failed)$")
+    total_commands: int = Field(..., ge=1)
+    effective_commands: int = Field(..., ge=0)
+    dead_ends: int = Field(default=0, ge=0)
+    pivots: int = Field(default=0, ge=0)
+    reusability: int = Field(default=3, ge=1, le=5)
+    learning_value: int = Field(default=3, ge=1, le=5)
+    root_cause: Optional[str] = None
+    learning: Optional[str] = None
+    pattern: Optional[str] = None
+    scores: Optional[dict] = None
+    dead_ends_detail: Optional[list] = None
+    missed_signals: Optional[list] = None
+
+
+@app.post("/api/vpt/record")
+async def record_debrief(req: VPTRecordRequest, request: Request):
+    """Record a debrief with auto-computed VPT, appended to debriefs.jsonl."""
+    from api.vpt.calculator import calculate_vpt_full, estimate_tokens_from_commands
+
+    try:
+        eff_commands = min(req.effective_commands, req.total_commands)
+        efficiency_ratio = eff_commands / req.total_commands
+        total_tokens = estimate_tokens_from_commands(req.total_commands)
+        outcome_quality = min(5, max(1, (req.scores or {}).get("overall", 3)))
+        is_success = req.outcome == "success"
+
+        composite, vpt, rating = calculate_vpt_full(
+            success=is_success,
+            outcome_quality=outcome_quality,
+            efficiency_ratio=efficiency_ratio,
+            dead_ends=req.dead_ends,
+            pivots=req.pivots,
+            total_tokens=total_tokens,
+            reusability=req.reusability,
+            learning_value=req.learning_value,
+        )
+
+        ts = datetime.now(timezone.utc).isoformat()
+        entry = {
+            "timestamp": ts,
+            "task": req.task,
+            "outcome": req.outcome,
+            "metrics": {
+                "total_commands": req.total_commands,
+                "effective_commands": eff_commands,
+                "efficiency_ratio": round(efficiency_ratio, 3),
+            },
+            "scores": req.scores or {},
+            "vpt": {
+                "composite_score": round(composite, 2),
+                "score": round(vpt, 2),
+                "rating": rating,
+            },
+            "root_cause": req.root_cause,
+            "learning": req.learning,
+            "pattern": req.pattern,
+            "dead_ends_detail": req.dead_ends_detail,
+            "missed_signals": req.missed_signals,
+        }
+
+        _DEBRIEFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_DEBRIEFS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, default=str) + "\n")
+
+        return {
+            "success": True,
+            "recorded": True,
+            "timestamp": ts,
+            "vpt": {
+                "composite_score": round(composite, 2),
+                "score": round(vpt, 2),
+                "rating": rating,
+            },
+        }
+    except Exception as e:
+        return problem(500, f"Record failed: {str(e)}", instance=request.url.path)
+
+
+@app.get("/api/vpt/summary")
+async def vpt_summary(request: Request, limit: int = 20):
+    """Read debrief trends from debriefs.jsonl."""
+    if not _DEBRIEFS_PATH.exists():
+        return {
+            "count": 0, "shown": 0, "debriefs": [],
+            "trend": "insufficient_data",
+            "stats": {},
+        }
+
+    try:
+        entries = []
+        for line in _DEBRIEFS_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+        total = len(entries)
+        shown = min(limit, total)
+        recent = list(reversed(entries[-shown:])) if entries else []
+
+        # Compute stats from entries with VPT data
+        vpt_scores = [
+            e.get("vpt", {}).get("score")
+            for e in entries
+            if e.get("vpt", {}).get("score") is not None
+        ]
+        success_count = sum(1 for e in entries if e.get("outcome") == "success")
+
+        stats = {}
+        if vpt_scores:
+            stats = {
+                "avg_vpt": round(sum(vpt_scores) / len(vpt_scores), 2),
+                "min_vpt": round(min(vpt_scores), 2),
+                "max_vpt": round(max(vpt_scores), 2),
+                "success_rate": round(success_count / total, 3) if total else 0,
+                "total_debriefs": total,
+            }
+
+        # Trend: compare first-half avg to second-half avg (5% threshold)
+        trend = "insufficient_data"
+        if len(vpt_scores) >= 4:
+            mid = len(vpt_scores) // 2
+            first_avg = sum(vpt_scores[:mid]) / mid
+            second_avg = sum(vpt_scores[mid:]) / (len(vpt_scores) - mid)
+            if first_avg > 0:
+                change = (second_avg - first_avg) / first_avg
+                if change > 0.05:
+                    trend = "improving"
+                elif change < -0.05:
+                    trend = "declining"
+                else:
+                    trend = "stable"
+
+        return {
+            "count": total,
+            "shown": shown,
+            "debriefs": recent,
+            "trend": trend,
+            "stats": stats,
+        }
+    except Exception as e:
+        return problem(500, f"Summary failed: {str(e)}", instance=request.url.path)
+
+
+# =============================================================================
+# HEURISTIC BANK
+# =============================================================================
+
+_HEURISTICS_PATH = Path(__file__).parent.parent / "data" / "heuristics.json"
+
+
+def _load_heuristics() -> dict:
+    """Load heuristics bank from JSON file."""
+    if not _HEURISTICS_PATH.exists():
+        return {"meta": {"last_updated": None, "total": 0, "version": "1.0.0"}, "heuristics": []}
+    return json.loads(_HEURISTICS_PATH.read_text(encoding="utf-8"))
+
+
+def _save_heuristics(data: dict):
+    """Atomic write heuristics bank (tmp + replace)."""
+    tmp_path = _HEURISTICS_PATH.with_suffix(".tmp")
+    data["meta"]["last_updated"] = datetime.now(timezone.utc).isoformat()
+    data["meta"]["total"] = len(data.get("heuristics", []))
+    tmp_path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    tmp_path.replace(_HEURISTICS_PATH)
+
+
+class HeuristicCreateRequest(BaseModel):
+    """Request model for creating a new heuristic."""
+    id: str = Field(..., min_length=1, pattern="^h\\d+$")
+    trigger: str = Field(..., min_length=1)
+    action: str = Field(..., min_length=1)
+    pattern: str = Field(default="uncategorized")
+    status: str = Field(default="banked", pattern="^(active|banked)$")
+
+
+@app.get("/api/vpt/heuristics")
+async def list_heuristics(status: Optional[str] = None):
+    """List all heuristics, optionally filtered by status."""
+    data = _load_heuristics()
+    heuristics = data.get("heuristics", [])
+
+    if status:
+        heuristics = [h for h in heuristics if h.get("status") == status]
+
+    return {
+        "count": len(heuristics),
+        "total": data["meta"]["total"],
+        "heuristics": heuristics,
+    }
+
+
+@app.post("/api/vpt/heuristics")
+async def create_heuristic(req: HeuristicCreateRequest, request: Request):
+    """Add a new heuristic to the bank."""
+    data = _load_heuristics()
+    existing_ids = {h["id"] for h in data.get("heuristics", [])}
+
+    if req.id in existing_ids:
+        return problem(409, f"Heuristic '{req.id}' already exists", instance=request.url.path)
+
+    new_h = {
+        "id": req.id,
+        "trigger": req.trigger,
+        "action": req.action,
+        "fire_count": 0,
+        "last_fired": None,
+        "status": req.status,
+        "pattern": req.pattern,
+    }
+    data["heuristics"].append(new_h)
+    _save_heuristics(data)
+
+    return {"success": True, "created": new_h}
+
+
+@app.patch("/api/vpt/heuristics/{heuristic_id}/fire")
+async def fire_heuristic(heuristic_id: str, request: Request):
+    """Increment fire_count for a heuristic. Auto-promotes banked->active at 3 fires."""
+    data = _load_heuristics()
+    target = None
+    for h in data.get("heuristics", []):
+        if h["id"] == heuristic_id:
+            target = h
+            break
+
+    if target is None:
+        return problem(404, f"Heuristic '{heuristic_id}' not found", instance=request.url.path)
+
+    target["fire_count"] = target.get("fire_count", 0) + 1
+    target["last_fired"] = datetime.now(timezone.utc).isoformat()
+
+    promoted = False
+    if target.get("status") == "banked" and target["fire_count"] >= 3:
+        target["status"] = "active"
+        promoted = True
+
+    _save_heuristics(data)
+
+    return {
+        "success": True,
+        "id": heuristic_id,
+        "fire_count": target["fire_count"],
+        "last_fired": target["last_fired"],
+        "status": target["status"],
+        "promoted": promoted,
+    }
+
+
+# =============================================================================
+# BRAIN PROCESSING METRICS
+# =============================================================================
+
+_BRAIN_METRICS_PATH = Path(__file__).parent.parent / "data" / "brain_metrics.jsonl"
+
+
+@app.get("/api/brain/metrics")
+async def brain_metrics(request: Request):
+    """Read brain processing health from brain_metrics.jsonl."""
+    if not _BRAIN_METRICS_PATH.exists():
+        return {"total_entries": 0, "recent": [], "stats": {}}
+
+    try:
+        entries = []
+        for line in _BRAIN_METRICS_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+        total = len(entries)
+        recent = entries[-10:] if entries else []
+
+        if not entries:
+            return {"total_entries": 0, "recent": [], "stats": {}}
+
+        # Aggregate timing stats
+        def _avg(vals):
+            return round(sum(vals) / len(vals)) if vals else 0
+
+        def _p95(vals):
+            if not vals:
+                return 0
+            s = sorted(vals)
+            idx = int(len(s) * 0.95)
+            return s[min(idx, len(s) - 1)]
+
+        dedup_ms = [e["timing_ms"]["dedup"] for e in entries if "timing_ms" in e and "dedup" in e.get("timing_ms", {})]
+        classify_ms = [e["timing_ms"]["classify"] for e in entries if "timing_ms" in e and "classify" in e.get("timing_ms", {})]
+        store_ms = [e["timing_ms"]["store"] for e in entries if "timing_ms" in e and "store" in e.get("timing_ms", {})]
+        calendar_ms = [e["timing_ms"]["calendar"] for e in entries if "timing_ms" in e and "calendar" in e.get("timing_ms", {})]
+        total_ms = [e["timing_ms"]["total"] for e in entries if "timing_ms" in e and "total" in e.get("timing_ms", {})]
+
+        # Error rate
+        error_count = sum(1 for e in entries if e.get("action") == "error" or e.get("error"))
+        error_rate = round(error_count / total, 3) if total else 0
+
+        # Category distribution
+        categories = {}
+        for e in entries:
+            cat = e.get("category")
+            if cat:
+                categories[cat] = categories.get(cat, 0) + 1
+
+        # Action breakdown
+        actions = {}
+        for e in entries:
+            act = e.get("action")
+            if act:
+                actions[act] = actions.get(act, 0) + 1
+
+        stats = {
+            "avg_dedup_ms": _avg(dedup_ms),
+            "avg_classify_ms": _avg(classify_ms),
+            "avg_store_ms": _avg(store_ms),
+            "avg_calendar_ms": _avg(calendar_ms),
+            "avg_total_ms": _avg(total_ms),
+            "p95_classify_ms": _p95(classify_ms),
+            "error_rate": error_rate,
+            "category_distribution": categories,
+            "actions": actions,
+        }
+
+        return {"total_entries": total, "recent": recent, "stats": stats}
+
+    except Exception as e:
+        return problem(500, f"Metrics read failed: {str(e)}", instance=request.url.path)

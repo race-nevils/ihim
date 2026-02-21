@@ -1,6 +1,6 @@
 # iHIM Backlog
 
-Updated: 2026-02-20
+Updated: 2026-02-20 (medium+low sweep complete)
 
 ## How to Use
 
@@ -38,7 +38,7 @@ Updated: 2026-02-20
 - [x] `FileTracker` memory leak — `files` dict grows unbounded as files are added but never removed on processing (Scout 5) — **Fixed: cleanup handles missing files + periodic purge of dead entries. `high-tier-fixes`**
 - [x] DB verification in watcher silently catches ALL exceptions including `OperationalError` (locked DB) (Scout 5) — **Fixed: OperationalError logged at WARNING. `high-tier-fixes`**
 - [x] Duplicate `CATEGORIES` definition in `classify.py` (~line 204) shadows the import from `utils` (Scout 1) — **Fixed: removed local def, added to import. `critical-fixes`**
-- [ ] Sync `OllamaAdapter` blocks up to 120s on cold Ollama start — no async alternative (Scout 6)
+- [x] Sync `OllamaAdapter` blocks up to 120s on cold Ollama start — no async alternative (Scout 6) — **Fixed: health_check() gets own 5s timeout. generate() 120s is correct for LLM inference. `medium-low-sweep`**
 - [ ] ~~Deferred~~ New `EmbeddingAdapter` connection created per call — connection pool thrashing (Scout 6) — **Not a leak — context managers close properly. Singleton pattern is optimization, not reliability fix.**
 - [x] Rebuild calendar push not idempotent — crash between push and DB write creates duplicate GCal events (Scout 4) — **Fixed: per-entry commit after each push+DB-write. `high-tier-fixes`**
 - [x] `sqlite-vec` missing from `requirements.txt` (Scout 9) — **Fixed: added `sqlite-vec>=0.1.6`. `high-tier-fixes`**
@@ -46,47 +46,47 @@ Updated: 2026-02-20
 
 ## Medium (affects maintainability / observability)
 
-- [ ] `_push_single_event` has two parallel code paths for all-day vs timed events — should be unified (S3)
-- [ ] Silent search degradation: hybrid search drops to keyword-only when Ollama down, no log or indicator (S4)
-- [ ] Fuzzy title matching is weakest link for Obsidian reconciliation — fails when frontmatter not backfilled (S4)
-- [ ] Legacy entries have NULL `content_hash` — drift detection counts them as "unchecked" not "drifted" (S4)
+- [x] `_push_single_event` has two parallel code paths for all-day vs timed events — should be unified (S3) — **Fixed: unified start/end string building, single update/insert path. `medium-low-sweep`**
+- [x] Silent search degradation: hybrid search drops to keyword-only when Ollama down, no log or indicator (S4) — **Fixed: `search_mode_actual` + `warnings` fields in response. `medium-low-sweep`**
+- [x] Fuzzy title matching is weakest link for Obsidian reconciliation — fails when frontmatter not backfilled (S4) — **Fixed: SequenceMatcher ratio > 0.8 replaces substring match. `medium-low-sweep`**
+- [x] Legacy entries have NULL `content_hash` — drift detection counts them as "unchecked" not "drifted" (S4) — **Fixed: excluded from drift query, reported as `unhashed` count. `medium-low-sweep`**
 - [x] `_move_to_failed` uses `os.rename` — same-filesystem only, fails on cross-mount moves (S5) — **Fixed: shutil.move fallback. `critical-fixes`**
-- [ ] Recovery timestamp prefix strip is position-dependent (char 16) — breaks if format changes from `YYYYMMDD-HHMMSS_` (S5)
-- [ ] Watcher hashes file WITH frontmatter, DB `content_hash` is from stripped content — values will never match (S4)
-- [ ] No `response_model` declarations on any brain API endpoint — responses unvalidated (Scout 3)
-- [ ] No RFC 9457 `problem()` usage in brain endpoints — inconsistent error format (Scout 3)
+- [x] Recovery timestamp prefix strip is position-dependent (char 16) — breaks if format changes from `YYYYMMDD-HHMMSS_` (S5) — **Fixed: regex `r'^\d{8}-\d{6}_(.*)$'` with fallback. `medium-low-sweep`**
+- [x] Watcher hashes file WITH frontmatter, DB `content_hash` is from stripped content — values will never match (S4) — **Fixed: `_get_content_hash()` now uses `read_file_content()` to strip frontmatter. `medium-low-sweep`**
+- [x] No `response_model` declarations on any brain API endpoint — responses unvalidated (Scout 3) — **Fixed: Pydantic models for all 7 endpoints. `medium-low-sweep`**
+- [x] No RFC 9457 `problem()` usage in brain endpoints — inconsistent error format (Scout 3) — **Fixed: HTTPException → `problem()` in search + get_entry. `medium-low-sweep`**
 - [x] Missing shutdown handler in `main.py` — no graceful cleanup on SIGTERM (Scout 7) — **Fixed: lifespan asynccontextmanager with shutdown. `critical-fixes`**
-- [ ] Unhandled exceptions not logged by catch-all middleware before returning 500 (Scout 7)
-- [ ] CSP WebSocket directive hardcoded to port 7777 — breaks on test ports (Scout 7)
-- [ ] Confusing `needs_auth` logic in `token_health()` — double-negative makes intent unclear (Scout 4)
-- [ ] `health_check()` in Ollama adapter uses 120s timeout — should be <5s for health probes (Scout 6)
-- [ ] No retry logic for failed Ollama API calls — single failure = complete loss (Scout 6)
-- [ ] Calendar fields update after `store_new` can fail silently — entry saved but cal fields missing (Scout 1)
-- [ ] `old_title` fallback uses "Ideas" category instead of "untitled" — misleading default (Scout 1)
-- [ ] No JSON error handling in `read_jsonld()` — corrupt file crashes caller (Scout 2)
-- [ ] O(n²) dedup logic in hybrid search — linear scan for each result (Scout 3)
-- [ ] Sanity check doesn't validate DB schema or brain directory structure (Scout 9)
-- [ ] S1 handoff server tests reference non-existent `/api/brain` POST endpoint — actual flow is inbox-based (validation finding)
-- [ ] S3 live tests can't detect running server — health check path mismatch (validation finding)
-- [ ] `drift_sample` in `/api/brain/status` is non-deterministic — random sampling gives different results per call (validation finding)
+- [x] ~~Already OK~~ Unhandled exceptions not logged by catch-all middleware before returning 500 (Scout 7) — **Already implemented: `unhandled_exception_handler` in `api/errors.py`**
+- [x] CSP WebSocket directive hardcoded to port 7777 — breaks on test ports (Scout 7) — **Fixed: reads `IHIM_PORT` env var. `medium-low-sweep`**
+- [x] Confusing `needs_auth` logic in `token_health()` — double-negative makes intent unclear (Scout 4) — **Fixed: simplified to `not creds.valid and not has_refresh`. `medium-low-sweep`**
+- [x] `health_check()` in Ollama adapter uses 120s timeout — should be <5s for health probes (Scout 6) — **Fixed: own `timeout` param defaulting to 5s. `medium-low-sweep`**
+- [x] No retry logic for failed Ollama API calls — single failure = complete loss (Scout 6) — **Fixed: 3-attempt retry on TimeoutException/ConnectError with 1s/2s backoff. `medium-low-sweep`**
+- [x] Calendar fields update after `store_new` can fail silently — entry saved but cal fields missing (Scout 1) — **Fixed: escalated to `logger.error` with note_id. `medium-low-sweep`**
+- [x] `old_title` fallback uses "Ideas" category instead of "untitled" — misleading default (Scout 1) — **Fixed: `"Ideas"` → `"Misc"` at 4 sites in rebuild.py. `medium-low-sweep`**
+- [x] No JSON error handling in `read_jsonld()` — corrupt file crashes caller (Scout 2) — **Fixed: try/except JSONDecodeError, returns None, logs warning. `medium-low-sweep`**
+- [x] O(n²) dedup logic in hybrid search — linear scan for each result (Scout 3) — **Fixed: `seen[eid] = (entry, idx)` for O(1) index lookup. `medium-low-sweep`**
+- [ ] ~~Deferred~~ Sanity check doesn't validate DB schema or brain directory structure (Scout 9) — **Medium effort, separate concern. Doesn't affect runtime.**
+- [ ] ~~Deferred~~ S1 handoff server tests reference non-existent `/api/brain` POST endpoint — actual flow is inbox-based (validation finding)
+- [ ] ~~Deferred~~ S3 live tests can't detect running server — health check path mismatch (validation finding)
+- [ ] ~~Deferred~~ `drift_sample` in `/api/brain/status` is non-deterministic — random sampling gives different results per call (validation finding) — **By design (random sampling). Could seed but value unclear.**
 
 ## Low (cleanup / improvement / nice-to-have)
 
-- [ ] Dead code: `yaml_escape()` in `utils.py` never called anywhere (Scout 1)
-- [ ] Chrome extension wildcard in CORS config — overly permissive (Scout 7)
-- [ ] No static dir existence check before `StaticFiles` mount — fails if dir missing (Scout 7)
-- [ ] Root handler reads file synchronously on every request (Scout 7)
-- [ ] Hardcoded "primary" calendar ID — no secondary calendar support (Scout 4)
-- [ ] Timezone defaults to `America/Chicago` if `IHIM_TIMEZONE` not set — should warn (Scout 4)
-- [ ] Watcher poll interval has no adaptive backoff when inbox is consistently empty (Scout 5)
-- [ ] Exclude folders list is case-sensitive on Windows — may miss `.git` vs `.Git` (Scout 5)
-- [ ] Ollama model names hardcoded in watcher warm-up — not configurable (Scout 5)
-- [ ] Processor result validation missing in `runner.py` — trusts processor output blindly (Scout 5)
-- [ ] Heartbeat file write not truly atomic on Windows — `os.replace` may fail (Scout 5)
-- [ ] Loose version constraints in `requirements.txt` — `>=` without upper bounds (Scout 9)
-- [ ] Empty `scripts/` directory — remove or populate (Scout 9)
-- [ ] 3 TODO comments in `team/` code — resolve or convert to backlog items (Scout 9)
-- [ ] No `.env` file committed (only `.env.example`) — expected but undocumented (Scout 9)
+- [x] Dead code: `yaml_escape()` in `utils.py` never called anywhere (Scout 1) — **Fixed: deleted. `medium-low-sweep`**
+- [x] Chrome extension wildcard in CORS config — overly permissive (Scout 7) — **Fixed: removed `chrome-extension://*`. `medium-low-sweep`**
+- [x] No static dir existence check before `StaticFiles` mount — fails if dir missing (Scout 7) — **Fixed: `if _static_dir.exists():` guard with warning log. `medium-low-sweep`**
+- [x] Root handler reads file synchronously on every request (Scout 7) — **Fixed: `_INDEX_HTML` cached at module load. `medium-low-sweep`**
+- [ ] ~~Deferred~~ Hardcoded "primary" calendar ID — no secondary calendar support (Scout 4) — **No secondary calendar in use. Future feature.**
+- [x] Timezone defaults to `America/Chicago` if `IHIM_TIMEZONE` not set — should warn (Scout 4) — **Fixed: `logger.warning()` in both sync.py and dateparse.py. `medium-low-sweep`**
+- [ ] ~~Deferred~~ Watcher poll interval has no adaptive backoff when inbox is consistently empty (Scout 5) — **Design needed. Current 2s poll is fine for single user.**
+- [x] Exclude folders list is case-sensitive on Windows — may miss `.git` vs `.Git` (Scout 5) — **Fixed: case-insensitive comparison. `medium-low-sweep`**
+- [x] Ollama model names hardcoded in watcher warm-up — not configurable (Scout 5) — **Fixed: reads from `OllamaAdapter.FAST_MODEL` and `EMBED_MODEL`. `medium-low-sweep`**
+- [ ] ~~Deferred~~ Processor result validation missing in `runner.py` — trusts processor output blindly (Scout 5) — **Needs Pydantic model design for processor output. Separate task.**
+- [x] ~~Already OK~~ Heartbeat file write not truly atomic on Windows — `os.replace` may fail (Scout 5) — **Already uses `os.replace()` (atomic on all platforms)**
+- [ ] ~~Deferred~~ Loose version constraints in `requirements.txt` — `>=` without upper bounds (Scout 9) — **Intentional flexibility for dev environment.**
+- [x] Empty `scripts/` directory — remove or populate (Scout 9) — **Fixed: deleted. `medium-low-sweep`**
+- [ ] ~~Deferred~~ 3 TODO comments in `team/` code — resolve or convert to backlog items (Scout 9) — **Feature work (agent selection, file locking), not bugs.**
+- [ ] ~~Deferred~~ No `.env` file committed (only `.env.example`) — expected but undocumented (Scout 9) — **Not a code fix.**
 
 ---
 
@@ -131,3 +131,50 @@ Updated: 2026-02-20
 - Phase 3 reclassification not transactional — rebuild self-heals
 - Inbox safety: rebuild + watcher coordination — needs design protocol
 - EmbeddingAdapter per-instance creation — not a leak, context managers close
+
+### `medium-low-sweep` on main (2026-02-20)
+
+| # | Tier | Item | Fix |
+|---|------|------|-----|
+| 1 | H | OllamaAdapter 120s cold-start blocking | `health_check()` gets 5s timeout; generate 120s is correct for LLM inference |
+| 2 | M | `_push_single_event` duplicate code paths | Unified start/end building, single update/insert path |
+| 3 | M | Silent search degradation | `search_mode_actual` + `warnings` fields in response |
+| 4 | M | Fuzzy title matching too permissive | SequenceMatcher ratio > 0.8 replaces substring |
+| 5 | M | NULL `content_hash` drift false positives | Excluded from query, reported as `unhashed` count |
+| 6 | M | Recovery timestamp strip position-dependent | Regex `r'^\d{8}-\d{6}_(.*)$'` |
+| 7 | M | Watcher content hash includes frontmatter | `_get_content_hash()` uses `read_file_content()` |
+| 8 | M | No `response_model` on brain endpoints | Pydantic models for all 7 endpoints |
+| 9 | M | No `problem()` in brain endpoints | HTTPException → `problem()` |
+| 10 | M | CSP WebSocket hardcoded to 7777 | Reads `IHIM_PORT` env var |
+| 11 | M | `needs_auth` double-negative logic | Simplified to `not creds.valid and not has_refresh` |
+| 12 | M | Ollama health_check 120s timeout | Own `timeout` param defaulting to 5s |
+| 13 | M | No Ollama retry logic | 3-attempt retry on transient errors (1s/2s backoff) |
+| 14 | M | Calendar fields fail silently | Escalated to `logger.error` with note_id |
+| 15 | M | Category fallback "Ideas" misleading | Changed to "Misc" at 4 sites in rebuild.py |
+| 16 | M | `read_jsonld()` crashes on corrupt JSON | try/except JSONDecodeError, returns None |
+| 17 | M | O(n²) hybrid search dedup | `seen[eid] = (entry, idx)` for O(1) lookup |
+| 18 | L | Dead `yaml_escape()` | Deleted |
+| 19 | L | Chrome extension CORS wildcard | Removed |
+| 20 | L | StaticFiles no existence check | Guarded with `if exists():` |
+| 21 | L | Root handler sync I/O per request | `_INDEX_HTML` cached at module load |
+| 22 | L | Timezone default no warning | `logger.warning()` in sync.py + dateparse.py |
+| 23 | L | Exclude folders case-sensitive | Case-insensitive comparison |
+| 24 | L | Ollama model names hardcoded in warm-up | Reads from adapter constants |
+| 25 | L | Empty `scripts/` directory | Deleted |
+
+**Already resolved (2):**
+- Unhandled exception middleware — properly implemented in `api/errors.py`
+- Heartbeat atomicity — already uses `os.replace()`
+
+**Deferred (11):**
+- `last_rebuild.json` → DB table — architectural change
+- Sanity check DB schema validation — medium effort, separate concern
+- S1 handoff tests wrong endpoint — documentation finding
+- S3 live tests health check mismatch — documentation finding
+- `drift_sample` non-deterministic — by design (random sampling)
+- Processor result validation — needs Pydantic model design
+- Hardcoded "primary" calendar ID — no secondary calendar in use
+- Watcher adaptive backoff — design needed, 2s poll is fine
+- Loose version constraints — intentional for dev
+- 3 TODO comments in team/ — feature work, not bugs
+- No .env documented — not a code fix

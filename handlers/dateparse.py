@@ -3,9 +3,10 @@
 Wraps the dateparser library to provide broad natural-language date coverage
 when the regex tier misses. Returns same dict format as fallback.extract_date().
 
-Settings: future-preferring, America/Chicago timezone, rejects past dates.
+Settings: future-preferring, configurable timezone, rejects past dates.
 """
 import logging
+import os
 from datetime import date, datetime
 from typing import Optional
 
@@ -18,9 +19,13 @@ except ImportError:
     _DATEPARSER_AVAILABLE = False
     logger.warning("dateparser not installed, Tier 2.5 disabled")
 
+_DATEPARSE_TIMEZONE = os.environ.get("IHIM_TIMEZONE", "America/Chicago")
+if not os.environ.get("IHIM_TIMEZONE"):
+    logger.warning("IHIM_TIMEZONE not set, defaulting to America/Chicago")
+
 _DATEPARSER_SETTINGS = {
     "PREFER_DATES_FROM": "future",
-    "TIMEZONE": "America/Chicago",
+    "TIMEZONE": _DATEPARSE_TIMEZONE,
     "RETURN_AS_TIMEZONE_AWARE": False,
     "RELATIVE_BASE": None,  # Set dynamically
 }

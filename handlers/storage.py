@@ -244,7 +244,7 @@ def store_new(
             update_entry(note_id, cal_fields)
             logger.info(f"Stored calendar fields for: {note_id}")
         except Exception as e:
-            logger.warning(f"Failed to store calendar fields (non-blocking): {e}")
+            logger.error(f"Failed to store calendar fields for {note_id} (non-blocking): {e}")
 
     # Log metadata to Langfuse (enriched with rerouting details)
     langfuse_context.update_current_observation(
@@ -468,7 +468,7 @@ def update_with_reclassify(
             update_entry(entry_id, cal_fields)
             logger.info(f"Updated calendar fields for: {entry_id}")
         except Exception as e:
-            logger.warning(f"Failed to update calendar fields (non-blocking): {e}")
+            logger.error(f"Failed to update calendar fields for {entry_id} (non-blocking): {e}")
 
     # === UPDATE 3: Obsidian Memory — non-fatal ===
     obsidian_path = None

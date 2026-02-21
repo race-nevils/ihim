@@ -119,5 +119,5 @@ def token_health() -> dict:
         "expired": bool(creds.expired),
         "expiry": expiry_str,
         "has_refresh_token": has_refresh,
-        "needs_auth": not creds.valid and (not has_refresh or not creds.expired),
+        "needs_auth": not creds.valid and not has_refresh,
     }

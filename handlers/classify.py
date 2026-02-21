@@ -10,7 +10,7 @@ from typing import Optional
 from handlers.tracing import observe, langfuse_context
 
 from adapters.ollama import OllamaAdapter
-from handlers.utils import get_classify_prompt, extract_title
+from handlers.utils import get_classify_prompt, extract_title, CATEGORIES
 from handlers.fallback import extract_date, validate_summary, detect_calendar_by_keywords
 
 logger = logging.getLogger(__name__)
@@ -201,7 +201,6 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
         elif instr["type"] == "categorization" and category_hints:
             # Explicit category hint from user
             # Check if it's a valid category (case-insensitive)
-            CATEGORIES = ["Tasks", "Ideas", "Projects", "People", "Reference", "Misc"]
             for hint in category_hints:
                 matched_cat = next(
                     (c for c in CATEGORIES if c.lower() == hint.lower()),

@@ -84,10 +84,14 @@ class InboxWatcher:
 
     def move_to_processed(self, file_path: Path) -> Path:
         """Move a file to the processed directory."""
+        import shutil
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         new_name = f"{timestamp}_{file_path.name}"
         dest_path = self.processed_path / new_name
-        file_path.rename(dest_path)
+        try:
+            file_path.rename(dest_path)
+        except OSError:
+            shutil.move(str(file_path), str(dest_path))
         return dest_path
 
     def _is_excluded(self, file_path: Path, source: InboxSource) -> bool:
@@ -136,10 +140,14 @@ class InboxWatcher:
 
     def _move_to_failed(self, file_path: Path, error_msg: str):
         """Move file to failed/ directory with error sidecar."""
+        import shutil
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         new_name = f"{timestamp}_{file_path.name}"
         dest = self.failed_path / new_name
-        file_path.rename(dest)
+        try:
+            file_path.rename(dest)
+        except OSError:
+            shutil.move(str(file_path), str(dest))
 
         sidecar = self.failed_path / f"{timestamp}_{file_path.stem}_error.txt"
         sidecar.write_text(

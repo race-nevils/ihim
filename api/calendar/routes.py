@@ -1,4 +1,5 @@
 """FastAPI routes for Google Calendar integration."""
+import asyncio
 import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -110,12 +111,13 @@ async def sync_calendar(request: SyncRequest = SyncRequest()):
     """Force pull from Google Calendar and refresh local cache + JSON-LD."""
     creds = _require_auth()
     try:
-        cache = sync_and_store(
+        loop = asyncio.get_event_loop()
+        cache = await loop.run_in_executor(None, lambda: sync_and_store(
             creds,
             days_ahead=request.days_ahead,
             days_behind=request.days_behind,
             calendar_id=request.calendar_id,
-        )
+        ))
         return {
             "success": True,
             "events": cache.get("events", []),
@@ -139,18 +141,19 @@ async def create_event(request: CreateEventRequest):
     """Create a new event on Google Calendar."""
     creds = _require_auth()
     try:
-        created = push_event(
+        loop = asyncio.get_event_loop()
+        created = await loop.run_in_executor(None, lambda: push_event(
             creds,
             summary=request.summary,
             start=request.start,
             end=request.end,
             description=request.description,
             calendar_id=request.calendar_id,
-        )
+        ))
         # Save locally as JSON-LD
-        save_event_jsonld(created)
+        await loop.run_in_executor(None, save_event_jsonld, created)
         # Refresh cache
-        events = pull_events(creds, calendar_id=request.calendar_id)
+        events = await loop.run_in_executor(None, lambda: pull_events(creds, calendar_id=request.calendar_id))
         save_to_cache(events)
 
         return {
@@ -175,9 +178,10 @@ async def remove_event(event_id: str, calendar_id: str = "primary"):
     """Delete an event from Google Calendar."""
     creds = _require_auth()
     try:
-        delete_event(creds, event_id, calendar_id)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: delete_event(creds, event_id, calendar_id))
         # Refresh cache
-        events = pull_events(creds, calendar_id=calendar_id)
+        events = await loop.run_in_executor(None, lambda: pull_events(creds, calendar_id=calendar_id))
         save_to_cache(events)
 
         return {"success": True, "message": f"Deleted event {event_id}"}
@@ -221,15 +225,16 @@ async def push_brain_entry(request: PushBrainEntryRequest):
         if not entry:
             raise HTTPException(status_code=404, detail=f"Brain entry not found: {request.entry_id}")
 
-        created = push_event(
+        loop = asyncio.get_event_loop()
+        created = await loop.run_in_executor(None, lambda: push_event(
             creds,
             summary=entry.get("title", "Untitled"),
             start=request.start,
             end=request.end,
             description=entry.get("content", ""),
             calendar_id=request.calendar_id,
-        )
-        save_event_jsonld(created)
+        ))
+        await loop.run_in_executor(None, save_event_jsonld, created)
 
         return {
             "success": True,

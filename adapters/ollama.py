@@ -69,7 +69,10 @@ class OllamaAdapter:
             json=payload
         )
         response.raise_for_status()
-        return response.json()["response"]
+        result = response.json().get("response", "")
+        if not result:
+            logger.warning("Ollama generate returned empty/missing 'response' field")
+        return result
 
     def generate_json(
         self,

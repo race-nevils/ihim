@@ -51,8 +51,12 @@ def _push_single_event(event_data: dict, classification: dict, content: str, cre
                                       start=date_str, end=date_str, description=description,
                                       all_day=True, recurrence=recurrence)
                 save_event_jsonld(result)
-                logger.info(f"Updated calendar event: {title} on {date_str}")
-                return result.get("id")
+                gcal_id = result.get("id")
+                if not gcal_id:
+                    logger.warning(f"GCal update returned no event ID for '{title}' on {date_str}")
+                else:
+                    logger.info(f"Updated calendar event: {title} on {date_str}")
+                return gcal_id
             except Exception as e:
                 logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
                 # Fall through to insert
@@ -75,8 +79,12 @@ def _push_single_event(event_data: dict, classification: dict, content: str, cre
                                       start=start_dt, end=end_dt, description=description,
                                       recurrence=recurrence)
                 save_event_jsonld(result)
-                logger.info(f"Updated calendar event: {title} on {date_str}")
-                return result.get("id")
+                gcal_id = result.get("id")
+                if not gcal_id:
+                    logger.warning(f"GCal update returned no event ID for '{title}' on {date_str}")
+                else:
+                    logger.info(f"Updated calendar event: {title} on {date_str}")
+                return gcal_id
             except Exception as e:
                 logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
 
@@ -84,8 +92,12 @@ def _push_single_event(event_data: dict, classification: dict, content: str, cre
                             description=description)
 
     save_event_jsonld(result)
-    logger.info(f"Auto-pushed calendar event: {title} on {date_str}")
-    return result.get("id")
+    gcal_id = result.get("id")
+    if not gcal_id:
+        logger.warning(f"GCal push returned no event ID for '{title}' on {date_str}")
+    else:
+        logger.info(f"Auto-pushed calendar event: {title} on {date_str}")
+    return gcal_id
 
 
 def _push_to_calendar(classification: dict, content: str = "",

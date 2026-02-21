@@ -55,26 +55,59 @@ def is_process_running(pid: int) -> bool:
 
 
 def acquire_lock() -> bool:
-    """Try to acquire the singleton lock.
+    """Try to acquire the singleton lock using atomic file creation.
 
+    Uses O_CREAT | O_EXCL for atomic creation (no TOCTOU race).
+    Checks lock file age to mitigate PID reuse on Windows.
     Returns True if lock acquired, False if another instance is running.
     """
-    if LOCK_FILE.exists():
-        try:
-            pid = int(LOCK_FILE.read_text().strip())
-            if is_process_running(pid):
-                # Process exists - another watcher is running
-                return False
-            # Process dead - stale lock file
-            LOCK_FILE.unlink(missing_ok=True)
-        except (ValueError, OSError):
-            # Invalid lock file - remove it
-            LOCK_FILE.unlink(missing_ok=True)
+    import time as _time
 
-    # Write our PID to lock file
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    LOCK_FILE.write_text(str(os.getpid()))
-    return True
+
+    # First attempt: atomic creation
+    try:
+        fd = os.open(str(LOCK_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        return True
+    except FileExistsError:
+        pass  # Lock file exists — check if it's stale
+
+    # Lock exists — read PID and validate
+    try:
+        pid = int(LOCK_FILE.read_text().strip())
+    except (ValueError, OSError):
+        # Corrupt lock file — remove and retry
+        LOCK_FILE.unlink(missing_ok=True)
+        return _retry_atomic_create()
+
+    if is_process_running(pid):
+        # Extra safety: check lock age to mitigate PID reuse (Windows recycles PIDs)
+        try:
+            lock_age = _time.time() - LOCK_FILE.stat().st_mtime
+            if lock_age > 86400:  # >24h — likely stale despite PID reuse
+                logger.warning(f"Lock file >24h old (PID {pid} may be reused), reclaiming")
+                LOCK_FILE.unlink(missing_ok=True)
+                return _retry_atomic_create()
+        except OSError:
+            pass
+        return False  # Genuine running instance
+
+    # Process dead — stale lock
+    LOCK_FILE.unlink(missing_ok=True)
+    return _retry_atomic_create()
+
+
+def _retry_atomic_create() -> bool:
+    """Retry atomic lock file creation after stale cleanup."""
+    try:
+        fd = os.open(str(LOCK_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        return True
+    except (FileExistsError, OSError):
+        return False
 
 
 def release_lock():

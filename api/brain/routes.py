@@ -180,8 +180,8 @@ async def brain_status():
     # Ollama health (sync httpx — run in executor to avoid blocking event loop)
     try:
         loop = asyncio.get_event_loop()
-        adapter = EmbeddingAdapter()
-        alive = await loop.run_in_executor(None, adapter.health_check)
+        with EmbeddingAdapter() as adapter:
+            alive = await loop.run_in_executor(None, adapter.health_check)
         response["ollama"] = "alive" if alive else "down"
     except Exception:
         response["ollama"] = "unknown"
@@ -230,6 +230,7 @@ async def backfill_embeddings():
     skipped = 0
     failed = 0
 
+    loop = asyncio.get_event_loop()
     with EmbeddingAdapter() as adapter:
         for entry in entries:
             entry_id = entry["id"]
@@ -237,7 +238,7 @@ async def backfill_embeddings():
                 skipped += 1
                 continue
             embed_text = f"{entry.get('title', '')}\n{entry.get('content', '')}"
-            embedding = adapter.generate_embedding(embed_text)
+            embedding = await loop.run_in_executor(None, adapter.generate_embedding, embed_text)
             if embedding:
                 stored = store_embedding(entry_id, embedding)
                 if stored:

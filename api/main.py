@@ -10,6 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response, JSONResponse
@@ -120,12 +121,10 @@ except ImportError:
 # APP SETUP
 # =============================================================================
 
-app = FastAPI(title="iHIM", description="Your Command Center")
-
-
-@app.on_event("startup")
-async def refresh_google_token():
-    """Refresh Google Calendar token at boot (non-fatal)."""
+@asynccontextmanager
+async def lifespan(app):
+    """Startup/shutdown lifecycle for iHIM."""
+    # --- Startup ---
     if CALENDAR_AVAILABLE:
         try:
             from api.calendar.google_auth import get_credentials
@@ -133,6 +132,20 @@ async def refresh_google_token():
             print(f"Google Calendar: {'token valid' if creds else 'no valid token (re-auth needed)'}")
         except Exception as e:
             print(f"Google Calendar: startup token check failed: {e}")
+
+    yield
+
+    # --- Shutdown ---
+    if CHAT_AVAILABLE:
+        try:
+            from api.chat.routes import ollama_adapter
+            await ollama_adapter.close()
+            print("AsyncOllamaAdapter closed.")
+        except Exception as e:
+            print(f"AsyncOllamaAdapter shutdown failed (non-fatal): {e}")
+
+
+app = FastAPI(title="iHIM", description="Your Command Center", lifespan=lifespan)
 
 
 # CORS — env-configured origins (falls back to permissive for local dev)

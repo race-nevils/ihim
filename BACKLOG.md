@@ -28,21 +28,21 @@ Updated: 2026-02-20
 
 ## High (affects reliability / resource management)
 
-- [ ] `EmbeddingAdapter` uses sync httpx — blocks event loop in all async endpoints that call embeddings (S4)
-- [ ] `store_embedding()` creates its own DB connection — can't participate in rebuild's EXCLUSIVE transaction (S2)
-- [ ] Phase 3 reclassification in rebuild not transactional — file moves + DB updates lack rollback on partial failure (S2)
-- [ ] Multi-event notes store only last `gcal_id` — earlier events in same note lose their calendar link (S3)
+- [ ] ~~Deferred~~ `EmbeddingAdapter` uses sync httpx — blocks event loop in all async endpoints that call embeddings (S4) — **Already mitigated by `run_in_executor` wrapping in `critical-fixes`. Full async adapter is a larger refactor.**
+- [x] `store_embedding()` creates its own DB connection — can't participate in rebuild's EXCLUSIVE transaction (S2) — **Fixed: optional `conn` param, rebuild passes its connection. `high-tier-fixes`**
+- [ ] ~~Deferred~~ Phase 3 reclassification in rebuild not transactional — file moves + DB updates lack rollback on partial failure (S2) — **Rebuild self-heals on next run. Proper atomic file+DB needs architectural work.**
+- [x] Multi-event notes store only last `gcal_id` — earlier events in same note lose their calendar link (S3) — **Fixed: only first successful push writes gcal_event_id. `high-tier-fixes`**
 - [ ] `last_rebuild.json` is fragile — should be a DB table for atomicity and queryability (S4)
-- [ ] Inbox safety: rebuild + watcher need coordination protocol to avoid processing same files (S2)
-- [ ] Silent failure in `/api/brain/status` drift check — returns "clean" when check actually threw an exception (Scout 3)
-- [ ] `FileTracker` memory leak — `files` dict grows unbounded as files are added but never removed on processing (Scout 5)
-- [ ] DB verification in watcher silently catches ALL exceptions including `OperationalError` (locked DB) (Scout 5)
+- [ ] ~~Deferred~~ Inbox safety: rebuild + watcher need coordination protocol to avoid processing same files (S2) — **Same as deferred Critical item. Needs design protocol. `rebuild.py:748` workaround holds.**
+- [x] Silent failure in `/api/brain/status` drift check — returns "clean" when check actually threw an exception (Scout 3) — **Fixed: reports `status: "error"` + logs warning. `high-tier-fixes`**
+- [x] `FileTracker` memory leak — `files` dict grows unbounded as files are added but never removed on processing (Scout 5) — **Fixed: cleanup handles missing files + periodic purge of dead entries. `high-tier-fixes`**
+- [x] DB verification in watcher silently catches ALL exceptions including `OperationalError` (locked DB) (Scout 5) — **Fixed: OperationalError logged at WARNING. `high-tier-fixes`**
 - [x] Duplicate `CATEGORIES` definition in `classify.py` (~line 204) shadows the import from `utils` (Scout 1) — **Fixed: removed local def, added to import. `critical-fixes`**
 - [ ] Sync `OllamaAdapter` blocks up to 120s on cold Ollama start — no async alternative (Scout 6)
-- [ ] New `EmbeddingAdapter` connection created per call — connection pool thrashing (Scout 6)
-- [ ] Rebuild calendar push not idempotent — crash between push and DB write creates duplicate GCal events (Scout 4)
-- [ ] `pytest` and `sqlite-vec` missing from `requirements.txt` (Scout 9)
-- [ ] 3 incomplete terminal test files need deletion: `test_terminal_integration.py`, `test_terminal_pty.py`, `test_terminal_websocket.py` (Scout 8)
+- [ ] ~~Deferred~~ New `EmbeddingAdapter` connection created per call — connection pool thrashing (Scout 6) — **Not a leak — context managers close properly. Singleton pattern is optimization, not reliability fix.**
+- [x] Rebuild calendar push not idempotent — crash between push and DB write creates duplicate GCal events (Scout 4) — **Fixed: per-entry commit after each push+DB-write. `high-tier-fixes`**
+- [x] `sqlite-vec` missing from `requirements.txt` (Scout 9) — **Fixed: added `sqlite-vec>=0.1.6`. `high-tier-fixes`**
+- [x] ~~3 incomplete terminal test files need deletion~~ (Scout 8) — **Already cleaned — files don't exist. Resolved.**
 
 ## Medium (affects maintainability / observability)
 
@@ -111,3 +111,23 @@ Updated: 2026-02-20
 | — | `_move_to_failed` cross-filesystem (Medium) | Fixed alongside #6 |
 | — | Missing shutdown handler (Medium) | Fixed alongside #9 |
 | — | Duplicate CATEGORIES (High) | Fixed alongside #3 |
+
+### `high-tier-fixes` on main (2026-02-20)
+
+| # | Item | Fix |
+|---|------|-----|
+| 1 | `store_embedding()` creates own DB connection | Optional `conn` param; rebuild passes existing conn |
+| 2 | Rebuild calendar push not idempotent | Per-entry commit after each push+DB-write |
+| 3 | Drift check lumps errors with real drift | Categorized: `missing`, `hash_mismatch`, `errors` |
+| 4 | `/status` drift sample masks errors as "clean" | Reports `status: "error"` + logs warning |
+| 5 | Multi-event notes overwrite gcal_id | Only first successful push writes to DB |
+| 6 | FileTracker memory leak (deleted files stay in dict) | Cleanup handles missing files + periodic purge |
+| 7 | DB verification swallows OperationalError silently | OperationalError logged at WARNING level |
+| 8 | `sqlite-vec` missing from requirements.txt | Added `sqlite-vec>=0.1.6` |
+| 9 | Terminal test files need deletion | Already cleaned — files don't exist |
+
+**Deferred (4):**
+- EmbeddingAdapter sync httpx — already mitigated by `run_in_executor`
+- Phase 3 reclassification not transactional — rebuild self-heals
+- Inbox safety: rebuild + watcher coordination — needs design protocol
+- EmbeddingAdapter per-instance creation — not a leak, context managers close

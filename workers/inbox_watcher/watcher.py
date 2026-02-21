@@ -10,6 +10,7 @@ The FileTracker provides the debounce to prevent mid-type interruptions.
 Deduplication (new vs update) is handled by database via content_hash.
 """
 import logging
+import sqlite3
 import time
 import json
 import os
@@ -206,15 +207,37 @@ class InboxWatcher:
         archived = 0
 
         for file_path in self.tracker.get_stale():
+            if not file_path.exists():
+                # File already deleted/moved externally — remove from tracker to prevent leak
+                self.tracker.remove(file_path)
+                archived += 1
+                logger.info(f"Removed missing stale file from tracker: {file_path.name}")
+                continue
             try:
                 self.move_to_processed(file_path)
                 self.tracker.remove(file_path)
                 archived += 1
                 logger.info(f"Archived stale file: {file_path.name}")
+            except (FileNotFoundError, OSError) as e:
+                # File disappeared between exists() check and move — clean up tracker
+                self.tracker.remove(file_path)
+                archived += 1
+                logger.info(f"File gone during archive, removed from tracker: {file_path.name} ({e})")
             except Exception as e:
                 logger.error(f"Failed to archive {file_path.name}: {e}")
 
         return archived
+
+    def purge_dead_tracker_entries(self) -> int:
+        """Remove tracker entries for files that no longer exist on disk.
+
+        Called periodically during poll to prevent unbounded memory growth.
+        """
+        dead = [p for p in list(self.tracker.files.keys()) if not p.exists()]
+        for p in dead:
+            self.tracker.remove(p)
+            logger.debug(f"Purged dead tracker entry: {p.name}")
+        return len(dead)
 
     def process_files(self, processor: Callable) -> list[dict]:
         """Process files through the brain handler.
@@ -302,9 +325,12 @@ class InboxWatcher:
                                 self.tracker.files[file_path].state = FileState.READY
                             results.append({"file": original_name, "error": f"db_verify_failed: {processed_id}"})
                             continue
+                    except sqlite3.OperationalError as db_err:
+                        # DB locked or similar — don't penalize the file, but make it visible
+                        logger.warning(f"DB verification skipped for {original_name} (OperationalError): {db_err}")
                     except Exception as db_err:
-                        # DB hiccup (locked, etc.) — don't penalize the file, skip verification
-                        logger.debug(f"DB verification skipped for {original_name}: {db_err}")
+                        # Other DB errors — still skip verification but log
+                        logger.warning(f"DB verification skipped for {original_name}: {db_err}")
 
                 # Mark as processed (stays in inbox for potential re-editing)
                 content_hash = self._get_content_hash(file_path)
@@ -354,6 +380,11 @@ class InboxWatcher:
                 stale = self.cleanup_stale_files()
                 if stale > 0:
                     print(f"[ARCHIVE] Moved {stale} stale file(s) to processed")
+
+                # Purge tracker entries for files that no longer exist on disk
+                purged = self.purge_dead_tracker_entries()
+                if purged > 0:
+                    logger.info(f"Purged {purged} dead tracker entries")
 
                 results = self.process_files(processor)
 

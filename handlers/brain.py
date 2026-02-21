@@ -150,7 +150,7 @@ def _push_to_calendar(classification: dict, content: str = "",
                     existing_gcal_id=existing_gcal_id if pushed == 0 else None
                 )
                 if gcal_id:
-                    if note_id:
+                    if note_id and first_gcal_id is None:
                         try:
                             update_entry(note_id, {"gcal_event_id": gcal_id})
                         except Exception as db_err:

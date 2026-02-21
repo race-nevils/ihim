@@ -150,7 +150,8 @@ async def brain_stats():
 async def brain_integrity():
     """Spot-check content hash drift between JSON-LD files and DB."""
     result = spot_check_drift(20)
-    result["status"] = "clean" if result["drifted"] == 0 else "drift_detected"
+    has_issues = result["drifted"] > 0 or result["errors"] > 0
+    result["status"] = "drift_detected" if has_issues else "clean"
     return result
 
 
@@ -212,9 +213,17 @@ async def brain_status():
     # Drift sample
     try:
         drift = spot_check_drift(5)
-        response["drift_sample"] = {"checked": drift["checked"], "drifted": drift["drifted"]}
-    except Exception:
-        response["drift_sample"] = {"checked": 0, "drifted": 0}
+        response["drift_sample"] = {
+            "status": "clean" if drift["drifted"] == 0 and drift["errors"] == 0 else "drift_detected",
+            "checked": drift["checked"],
+            "drifted": drift["drifted"],
+            "missing": drift["missing"],
+            "hash_mismatch": drift["hash_mismatch"],
+            "errors": drift["errors"],
+        }
+    except Exception as e:
+        logger.warning(f"Drift sample failed: {e}")
+        response["drift_sample"] = {"status": "error", "checked": 0, "drifted": 0}
 
     return response
 

@@ -626,13 +626,14 @@
     </ihim-panel>
 
 <!-- Meeting Recorder Window (Draggable) -->
-    <div id="recorder-window" class="recorder-window" style="display: none;">
-        <div class="recorder-header recorder-drag-handle">
+    <ihim-panel id="recorder-window" class="recorder-window" persist-key="recorderWindowPosition">
+        <div class="recorder-header recorder-drag-handle" data-drag-handle>
             <span class="recorder-label"><i data-lucide="mic" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Meeting Recorder</span>
-            <span class="recorder-status-badge" id="recorder-status-badge">IDLE</span>
-            <button class="recorder-close" aria-label="Close Meeting Recorder">&times;</button>
+            <span class="recorder-status-badge" id="recorder-status-badge" aria-live="polite" role="status">IDLE</span>
+            <button class="recorder-close" data-close-btn aria-label="Close Meeting Recorder">&times;</button>
         </div>
 
+        <ihim-tabs>
         <!-- Tabs -->
         <div class="recorder-tabs" id="recorder-tablist" role="tablist" aria-label="Meeting Recorder">
             <button class="recorder-tab-btn active" data-tab="record" role="tab" id="recorder-tab-record-btn" aria-selected="true" aria-controls="recorder-tab-record" tabindex="0">Record</button>
@@ -667,12 +668,12 @@
                     <button class="recorder-btn recorder-reset-btn" id="recorder-reset-btn" style="display: none;">Reset</button>
                 </div>
 
-                <div class="recorder-error" id="recorder-error" style="display: none;"></div>
+                <div class="recorder-error" id="recorder-error" role="alert" aria-live="assertive" style="display: none;"></div>
             </div>
         </div>
 
         <!-- Recordings Tab -->
-        <div id="recorder-tab-recordings" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-recordings-btn" style="display: none;">
+        <div id="recorder-tab-recordings" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-recordings-btn">
             <div class="recorder-list-header">
                 <span class="recorder-list-count" id="recorder-list-count">0 recordings</span>
                 <button class="recorder-btn recorder-refresh-btn" id="recorder-refresh-btn">Refresh</button>
@@ -683,7 +684,7 @@
         </div>
 
         <!-- Transcript Tab -->
-        <div id="recorder-tab-transcript" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-transcript-btn" style="display: none;">
+        <div id="recorder-tab-transcript" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-transcript-btn">
             <div class="recorder-transcript-toolbar" id="recorder-transcript-toolbar" style="display: none;">
                 <button class="recorder-btn recorder-back-btn" id="recorder-back-btn">&larr; Back</button>
                 <span class="recorder-transcript-meta" id="recorder-transcript-meta"></span>
@@ -693,7 +694,8 @@
                 <div class="recorder-placeholder">Select a recording to view its transcript.</div>
             </div>
         </div>
-    </div>
+        </ihim-tabs>
+    </ihim-panel>
 
 <!-- Brain Chat Window (Draggable) -->
     <ihim-panel id="chat-window" class="chat-window" persist-key="chatWindowPosition">

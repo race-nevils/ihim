@@ -32,7 +32,7 @@ Updated: 2026-02-20 (medium+low sweep complete)
 - [x] `store_embedding()` creates its own DB connection — can't participate in rebuild's EXCLUSIVE transaction (S2) — **Fixed: optional `conn` param, rebuild passes its connection. `high-tier-fixes`**
 - [ ] ~~Deferred~~ Phase 3 reclassification in rebuild not transactional — file moves + DB updates lack rollback on partial failure (S2) — **Rebuild self-heals on next run. Proper atomic file+DB needs architectural work.**
 - [x] Multi-event notes store only last `gcal_id` — earlier events in same note lose their calendar link (S3) — **Fixed: only first successful push writes gcal_event_id. `high-tier-fixes`**
-- [ ] `last_rebuild.json` is fragile — should be a DB table for atomicity and queryability (S4)
+- [x] `last_rebuild.json` is fragile — should be a DB table for atomicity and queryability (S4) — **Fixed: `rebuild_log` table in SQLite. Atomic writes, queryable history. `debugging`**
 - [ ] ~~Deferred~~ Inbox safety: rebuild + watcher need coordination protocol to avoid processing same files (S2) — **Same as deferred Critical item. Needs design protocol. `rebuild.py:748` workaround holds.**
 - [x] Silent failure in `/api/brain/status` drift check — returns "clean" when check actually threw an exception (Scout 3) — **Fixed: reports `status: "error"` + logs warning. `high-tier-fixes`**
 - [x] `FileTracker` memory leak — `files` dict grows unbounded as files are added but never removed on processing (Scout 5) — **Fixed: cleanup handles missing files + periodic purge of dead entries. `high-tier-fixes`**

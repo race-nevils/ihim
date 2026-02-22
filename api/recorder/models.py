@@ -91,3 +91,26 @@ class StopResponse(BaseModel):
     segments_count: int
     transcript_preview: str
     status: str = "complete"
+
+
+class StartResponse(BaseModel):
+    success: bool = True
+    recording_id: str
+    label: Optional[str] = None
+    mic_device: Optional[str] = None
+    sys_device: Optional[str] = None
+    model_size: str
+
+
+class RecordingsListResponse(BaseModel):
+    recordings: list[RecordingSummary] = []
+
+
+class DeleteResponse(BaseModel):
+    success: bool = True
+    deleted: list[str] = []
+
+
+class ResetResponse(BaseModel):
+    success: bool = True
+    status: str = "idle"

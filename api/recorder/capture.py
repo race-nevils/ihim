@@ -4,6 +4,7 @@ Two threads capture simultaneously. On stop, buffers are concatenated and writte
 16-bit mono WAV files at 16 kHz (resampled from native rate if needed).
 """
 
+import logging
 import threading
 import wave
 import struct
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports — only fail when actually used, not at module load
 _sd = None
@@ -68,7 +71,7 @@ def list_audio_devices() -> dict:
                     "is_loopback": False,
                 })
     except Exception as e:
-        print(f"[recorder] Failed to enumerate mic devices: {e}")
+        logger.warning("Failed to enumerate mic devices: %s", e)
 
     # System audio (WASAPI loopback) via PyAudioWPatch
     try:
@@ -97,7 +100,7 @@ def list_audio_devices() -> dict:
         finally:
             p.terminate()
     except Exception as e:
-        print(f"[recorder] Failed to enumerate WASAPI loopback devices: {e}")
+        logger.warning("Failed to enumerate WASAPI loopback devices: %s", e)
 
     # Fallback: scan all PyAudioWPatch devices for loopback
     if not system_devices:
@@ -121,7 +124,7 @@ def list_audio_devices() -> dict:
             finally:
                 p.terminate()
         except Exception as e:
-            print(f"[recorder] Fallback WASAPI scan failed: {e}")
+            logger.warning("Fallback WASAPI scan failed: %s", e)
 
     return {"mic_devices": mic_devices, "system_devices": system_devices}
 
@@ -280,7 +283,7 @@ class DualStreamCapture:
 
             def callback(indata, frames, time_info, status):
                 if status:
-                    print(f"[recorder] mic status: {status}")
+                    logger.debug("mic status: %s", status)
                 self._mic_buffers.append(indata[:, 0].copy())
 
             with sd.InputStream(
@@ -294,7 +297,7 @@ class DualStreamCapture:
                 self._stop_event.wait()
         except Exception as e:
             self._mic_error = str(e)
-            print(f"[recorder] mic capture error: {e}")
+            logger.error("mic capture error: %s", e)
 
     def _capture_system(self) -> None:
         """Capture system audio via PyAudioWPatch WASAPI loopback."""
@@ -330,11 +333,11 @@ class DualStreamCapture:
                     self._sys_buffers.append(arr)
                 except Exception as e:
                     if not self._stop_event.is_set():
-                        print(f"[recorder] sys read error: {e}")
+                        logger.warning("sys read error: %s", e)
                     break
         except Exception as e:
             self._sys_error = str(e)
-            print(f"[recorder] sys capture error: {e}")
+            logger.error("sys capture error: %s", e)
         finally:
             if stream:
                 try:

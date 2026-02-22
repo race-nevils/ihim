@@ -1,9 +1,8 @@
 /**
  * recorder.js — Meeting recorder dashboard (record, playback, transcripts)
+ * Uses <ihim-panel> for window lifecycle and <ihim-tabs> for tab management.
  */
 import { API, escapeHtml } from './app.js';
-import { makeDraggable } from './draggable.js';
-import { initAccessibleTabs } from './a11y.js';
 
 let devicesData = null;
 let selectedRecordingId = null;
@@ -18,27 +17,7 @@ let recordingStartedAt = null;
 export async function openRecorderWindow() {
     const win = document.getElementById('recorder-window');
     if (!win) return;
-
-    let posRestored = false;
-    try {
-        const saved = localStorage.getItem('recorderWindowPosition');
-        if (saved) {
-            const { x, y } = JSON.parse(saved);
-            if (x >= 0 && y >= 0 && x < window.innerWidth - 50 && y < window.innerHeight - 50) {
-                win.style.left = x + 'px'; win.style.top = y + 'px'; posRestored = true;
-            }
-        }
-    } catch (e) { console.warn('Failed to restore recorder position:', e); }
-    if (!posRestored) {
-        win.style.left = Math.max(0, (window.innerWidth - 680) / 2) + 'px';
-        win.style.top = Math.max(0, (window.innerHeight - 550) / 2) + 'px';
-    }
-
-    win.style.display = 'flex';
-    if (!win.dataset.dragInitialized) {
-        makeDraggable('recorder-window', '.recorder-drag-handle', 'recorderWindowPosition');
-        win.dataset.dragInitialized = 'true';
-    }
+    win.open();
     if (typeof lucide !== 'undefined') lucide.createIcons();
     if (!devicesData) await loadDevices();
     startStatusPolling();
@@ -46,26 +25,16 @@ export async function openRecorderWindow() {
 
 export function closeRecorderWindow() {
     const win = document.getElementById('recorder-window');
-    if (win) win.style.display = 'none';
+    if (win) win.close();
     stopStatusPolling();
     clearElapsedTimer();
 }
 
-// =====================
-// Tabs
-// =====================
-
-export function switchRecorderTab(tab) {
-    document.querySelectorAll('.recorder-tab-btn').forEach(btn => {
-        const isTarget = btn.dataset.tab === tab;
-        btn.classList.toggle('active', isTarget);
-        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
-        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
-    });
-    document.querySelectorAll('.recorder-tab-content').forEach(content => {
-        content.style.display = content.id === `recorder-tab-${tab}` ? 'block' : 'none';
-    });
-    if (tab === 'recordings') loadRecordings();
+export function toggleRecorderWindow() {
+    const win = document.getElementById('recorder-window');
+    if (!win) return;
+    if (win.hasAttribute('open')) closeRecorderWindow();
+    else openRecorderWindow();
 }
 
 // =====================
@@ -240,7 +209,8 @@ async function pollStatus() {
 
         // Auto-switch to recordings tab when transcription completes
         if (previousStatus === 'transcribing' && data.status === 'idle') {
-            switchRecorderTab('recordings');
+            const tabs = document.querySelector('#recorder-window ihim-tabs');
+            if (tabs) tabs.activate('recordings');
         }
         previousStatus = data.status;
     } catch (e) { /* silent — polling resilience */ }
@@ -386,7 +356,8 @@ function formatDuration(seconds) {
 
 async function loadTranscript(id) {
     selectedRecordingId = id;
-    switchRecorderTab('transcript');
+    const tabs = document.querySelector('#recorder-window ihim-tabs');
+    if (tabs) tabs.activate('transcript');
     const body = document.getElementById('recorder-transcript-body');
     const toolbar = document.getElementById('recorder-transcript-toolbar');
     const meta = document.getElementById('recorder-transcript-meta');
@@ -446,7 +417,8 @@ async function deleteRecording(id) {
         document.getElementById('recorder-transcript-toolbar').style.display = 'none';
         document.getElementById('recorder-transcript-body').innerHTML =
             '<div class="recorder-placeholder">Select a recording to view its transcript.</div>';
-        switchRecorderTab('recordings');
+        const tabs = document.querySelector('#recorder-window ihim-tabs');
+        if (tabs) tabs.activate('recordings');
     } catch (e) {
         showRecorderError(`Failed to delete: ${e.message}`);
     }
@@ -474,11 +446,18 @@ export function initRecorderEvents() {
     const win = document.getElementById('recorder-window');
     if (!win) return;
 
-    const tablist = document.getElementById('recorder-tablist');
-    if (tablist) {
-        initAccessibleTabs(tablist, {
-            tabSelector: '[role="tab"]',
-            onActivate(tab) { switchRecorderTab(tab.dataset.tab); }
+    // Cleanup on panel close (Escape key, close button)
+    win.addEventListener('panel:close', () => {
+        stopStatusPolling();
+        clearElapsedTimer();
+    });
+
+    // Tab change — load recordings when switching to that tab
+    const tabs = win.querySelector('ihim-tabs');
+    if (tabs) {
+        tabs.addEventListener('tab:change', (e) => {
+            const tabName = e.detail.tab?.dataset?.tab;
+            if (tabName === 'recordings') loadRecordings();
         });
     }
 
@@ -492,7 +471,11 @@ export function initRecorderEvents() {
         // Refresh recordings
         if (e.target.closest('#recorder-refresh-btn')) { loadRecordings(); return; }
         // Back from transcript
-        if (e.target.closest('#recorder-back-btn')) { switchRecorderTab('recordings'); return; }
+        if (e.target.closest('#recorder-back-btn')) {
+            const tabs = win.querySelector('ihim-tabs');
+            if (tabs) tabs.activate('recordings');
+            return;
+        }
         // Delete recording
         if (e.target.closest('#recorder-delete-btn') && selectedRecordingId) {
             deleteRecording(selectedRecordingId); return;

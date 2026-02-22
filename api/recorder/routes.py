@@ -5,7 +5,11 @@ Transcription runs in thread pool to avoid blocking the event loop.
 """
 
 import asyncio
+import hashlib
 import json
+import logging
+import re
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -14,11 +18,14 @@ from fastapi import APIRouter, Request
 from api.errors import problem
 
 from api.recorder.models import (
-    StartRequest, StatusResponse, DevicesResponse, DeviceInfo,
+    StartRequest, StartResponse, StatusResponse, DevicesResponse, DeviceInfo,
     StopResponse, RecordingSummary, RecordingDetail, SegmentOut,
+    RecordingsListResponse, DeleteResponse, ResetResponse,
     RecorderStatus,
 )
 from api.recorder.state import RecorderState
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/recorder", tags=["recorder"])
 
@@ -30,13 +37,24 @@ BRAIN_DIR = DATA_DIR / "brain" / "Meetings"
 # Singleton state
 _state = RecorderState()
 
-# Active capture engine (set during recording)
+# Active capture engine (set during recording), protected by _capture_lock
 _capture = None
+_capture_lock = threading.Lock()
+
+# Path traversal guard: recording IDs must match YYYYMMDD-HHMMSS
+RECORDING_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 
 
 def _recording_id() -> str:
     """Generate a recording ID from current timestamp."""
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+
+
+def _validate_recording_id(recording_id: str, request: Request):
+    """Validate recording ID format to prevent path traversal."""
+    if not RECORDING_ID_RE.match(recording_id):
+        return problem(400, "Invalid recording ID format", instance=request.url.path)
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -60,10 +78,11 @@ async def recorder_devices(request: Request):
             system_devices=[DeviceInfo(**d) for d in raw["system_devices"]],
         )
     except Exception as e:
+        logger.error("Failed to enumerate audio devices: %s", e)
         return problem(503, f"Failed to enumerate audio devices: {e}", instance=request.url.path)
 
 
-@router.post("/start")
+@router.post("/start", response_model=StartResponse)
 async def recorder_start(body: StartRequest, request: Request):
     """Start recording mic + system audio."""
     global _capture
@@ -91,22 +110,25 @@ async def recorder_start(body: StartRequest, request: Request):
             mic_device=capture.mic_device_name,
             sys_device=capture.sys_device_name,
         )
-        _capture = capture
+        with _capture_lock:
+            _capture = capture
 
-        return {
-            "success": True,
-            "recording_id": rec_id,
-            "label": body.label,
-            "mic_device": capture.mic_device_name,
-            "sys_device": capture.sys_device_name,
-            "model_size": body.model_size.value,
-        }
+        logger.info("Recording started: %s (label=%s)", rec_id, body.label)
+
+        return StartResponse(
+            recording_id=rec_id,
+            label=body.label,
+            mic_device=capture.mic_device_name,
+            sys_device=capture.sys_device_name,
+            model_size=body.model_size.value,
+        )
     except Exception as e:
         _state.set_error(str(e))
+        logger.error("Failed to start recording: %s", e)
         return problem(503, f"Failed to start recording: {e}", instance=request.url.path)
 
 
-@router.post("/stop")
+@router.post("/stop", response_model=StopResponse)
 async def recorder_stop(request: Request):
     """Stop recording, transcribe, and return results.
 
@@ -129,17 +151,19 @@ async def recorder_stop(request: Request):
 
     try:
         # Stop capture
-        _capture.stop()
+        with _capture_lock:
+            _capture.stop()
+            local_capture = _capture
+            _capture = None
         _state.stop_recording()
 
         # Save WAV files
         RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
         mic_path = RECORDINGS_DIR / f"recording-{rec_id}-mic.wav"
         sys_path = RECORDINGS_DIR / f"recording-{rec_id}-sys.wav"
-        _capture.save(mic_path, sys_path)
+        local_capture.save(mic_path, sys_path)
 
-        capture_errors = _capture.errors
-        _capture = None
+        capture_errors = local_capture.errors
 
         # Transcribe in thread pool (non-blocking)
         from api.recorder.transcribe import transcribe_dual
@@ -179,10 +203,15 @@ async def recorder_stop(request: Request):
         sidecar_path = RECORDINGS_DIR / f"recording-{rec_id}.json"
         sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
 
-        # Create brain entry
-        _create_brain_entry(rec_id, label, started_at, duration, result["transcript"])
+        # Create brain entry (non-fatal)
+        try:
+            _create_brain_entry(rec_id, label, started_at, duration, result["transcript"])
+        except Exception as brain_err:
+            logger.error("Failed to create brain entry for %s: %s", rec_id, brain_err)
 
         _state.finish_transcription()
+
+        logger.info("Recording complete: %s (%.1fs, %d segments)", rec_id, duration, len(result["segments"]))
 
         # Build preview (first 500 chars)
         preview = result["transcript"][:500]
@@ -197,15 +226,17 @@ async def recorder_stop(request: Request):
         )
     except Exception as e:
         _state.set_error(str(e))
-        _capture = None
+        with _capture_lock:
+            _capture = None
+        logger.error("Recording/transcription failed for %s: %s", rec_id, e)
         return problem(500, f"Recording/transcription failed: {e}", instance=request.url.path)
 
 
-@router.get("/recordings")
+@router.get("/recordings", response_model=RecordingsListResponse)
 async def list_recordings():
     """List all past recordings (scans sidecar JSONs)."""
     if not RECORDINGS_DIR.exists():
-        return {"recordings": []}
+        return RecordingsListResponse(recordings=[])
 
     recordings = []
     for f in sorted(RECORDINGS_DIR.glob("recording-*.json"), reverse=True):
@@ -221,12 +252,16 @@ async def list_recordings():
         except Exception:
             continue
 
-    return {"recordings": recordings}
+    return RecordingsListResponse(recordings=recordings)
 
 
-@router.get("/recordings/{recording_id}")
+@router.get("/recordings/{recording_id}", response_model=RecordingDetail)
 async def get_recording(recording_id: str, request: Request):
     """Full recording detail + transcript."""
+    err = _validate_recording_id(recording_id, request)
+    if err:
+        return err
+
     sidecar = RECORDINGS_DIR / f"recording-{recording_id}.json"
     if not sidecar.exists():
         return problem(404, f"Recording '{recording_id}' not found", instance=request.url.path)
@@ -248,12 +283,17 @@ async def get_recording(recording_id: str, request: Request):
             status=data.get("status", "complete"),
         )
     except Exception as e:
+        logger.error("Failed to read recording %s: %s", recording_id, e)
         return problem(500, f"Failed to read recording: {e}", instance=request.url.path)
 
 
-@router.delete("/recordings/{recording_id}")
+@router.delete("/recordings/{recording_id}", response_model=DeleteResponse)
 async def delete_recording(recording_id: str, request: Request):
     """Delete recording files + brain entry."""
+    err = _validate_recording_id(recording_id, request)
+    if err:
+        return err
+
     sidecar = RECORDINGS_DIR / f"recording-{recording_id}.json"
     if not sidecar.exists():
         return problem(404, f"Recording '{recording_id}' not found", instance=request.url.path)
@@ -277,24 +317,28 @@ async def delete_recording(recording_id: str, request: Request):
         brain_file.unlink()
         deleted.append(f"brain/{brain_file.name}")
 
-    return {"success": True, "deleted": deleted}
+    logger.info("Deleted recording %s: %s", recording_id, deleted)
+
+    return DeleteResponse(deleted=deleted)
 
 
-@router.post("/reset")
+@router.post("/reset", response_model=ResetResponse)
 async def recorder_reset(request: Request):
     """Clear error state → idle."""
     global _capture
 
-    if _state.status == RecorderStatus.recording and _capture:
-        # Force stop any active capture
-        try:
-            _capture.stop()
-        except Exception:
-            pass
-        _capture = None
+    with _capture_lock:
+        if _state.status == RecorderStatus.recording and _capture:
+            # Force stop any active capture
+            try:
+                _capture.stop()
+            except Exception:
+                pass
+            _capture = None
 
     _state.reset()
-    return {"success": True, "status": "idle"}
+    logger.info("Recorder reset to idle")
+    return ResetResponse()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -318,6 +362,9 @@ def _create_brain_entry(
     # Truncate transcript for brain entry text (keep it searchable but bounded)
     text = transcript[:5000] if len(transcript) > 5000 else transcript
 
+    # Integrity hash of full transcript
+    sha256 = hashlib.sha256(transcript.encode("utf-8")).hexdigest()
+
     entry = {
         "@context": {
             "@vocab": "https://schema.org/",
@@ -336,6 +383,7 @@ def _create_brain_entry(
         "ihim:category": "Meetings",
         "ihim:confidence": 1.0,
         "ihim:classifier": "meeting-recorder",
+        "ihim:sha256": sha256,
         "dc:source": f"recording-{recording_id}",
     }
 

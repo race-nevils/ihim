@@ -61,9 +61,13 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
             }
         };
 
-        const onPointerUp = () => {
+        const onPointerUp = (e) => {
             handle.removeEventListener('pointermove', onPointerMove);
             handle.removeEventListener('pointerup', onPointerUp);
+            handle.removeEventListener('pointercancel', onPointerUp);
+            if (e && handle.hasPointerCapture(e.pointerId)) {
+                handle.releasePointerCapture(e.pointerId);
+            }
             if (isDragging && storageKey) {
                 localStorage.setItem(storageKey, JSON.stringify({
                     x: parseInt(el.style.left), y: parseInt(el.style.top)
@@ -77,6 +81,7 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
 
         handle.addEventListener('pointermove', onPointerMove);
         handle.addEventListener('pointerup', onPointerUp);
+        handle.addEventListener('pointercancel', onPointerUp);
     });
 
     // Keyboard movement: Ctrl+Arrow keys (20px per press)

@@ -197,8 +197,8 @@ export async function runAction(actionId, btn = null) {
         toggleVaultWindow(); return;
     }
     if (actionId === 'meeting_recorder') {
-        const { openRecorderWindow } = await import('./recorder.js');
-        openRecorderWindow(); return;
+        const { toggleRecorderWindow } = await import('./recorder.js');
+        toggleRecorderWindow(); return;
     }
 
     if (btn) btn.classList.add('loading');

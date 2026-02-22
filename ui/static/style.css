@@ -6697,7 +6697,6 @@ button:focus-visible {
    ===================================================== */
 
 .recorder-window {
-    position: fixed;
     width: 680px;
     max-height: 80vh;
     min-width: 380px;
@@ -6708,12 +6707,9 @@ button:focus-visible {
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg), 0 2px 6px rgba(220, 20, 60, 0.15);
-    display: flex;
-    flex-direction: column;
     padding: var(--space-3);
     overflow: hidden;
     resize: both;
-    z-index: 100;
 }
 
 .recorder-header {
@@ -6850,9 +6846,10 @@ button:focus-visible {
     font-size: 0.85rem;
     font-family: inherit;
 }
-.recorder-device-row select:focus,
-.recorder-device-row input:focus {
-    outline: none;
+.recorder-device-row select:focus-visible,
+.recorder-device-row input:focus-visible {
+    outline: 2px solid var(--color-primary, rgba(220, 20, 60, 0.7));
+    outline-offset: 2px;
     border-color: rgba(220, 20, 60, 0.5);
     box-shadow: 0 0 0 2px rgba(220, 20, 60, 0.15);
 }
@@ -6905,6 +6902,44 @@ button:focus-visible {
 .recorder-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+    color: var(--text-secondary);
+}
+
+/* Focus-visible — keyboard-only focus rings */
+.recorder-tab-btn:focus-visible,
+.recorder-btn:focus-visible,
+.recorder-close:focus-visible {
+    outline: 2px solid var(--color-primary, rgba(220, 20, 60, 0.7));
+    outline-offset: 2px;
+}
+
+/* Scrollbar styling — match chat window pattern */
+.recorder-tab-content,
+.recorder-list-body,
+.recorder-transcript-body {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+.recorder-tab-content::-webkit-scrollbar,
+.recorder-list-body::-webkit-scrollbar,
+.recorder-transcript-body::-webkit-scrollbar {
+    width: 6px;
+}
+.recorder-tab-content::-webkit-scrollbar-track,
+.recorder-list-body::-webkit-scrollbar-track,
+.recorder-transcript-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+.recorder-tab-content::-webkit-scrollbar-thumb,
+.recorder-list-body::-webkit-scrollbar-thumb,
+.recorder-transcript-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+.recorder-tab-content::-webkit-scrollbar-thumb:hover,
+.recorder-list-body::-webkit-scrollbar-thumb:hover,
+.recorder-transcript-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
 }
 
 .recorder-start-btn {

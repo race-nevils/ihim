@@ -1,9 +1,7 @@
 """FastAPI routes for brain search and entry management."""
 import asyncio
-import json
 import logging
 from enum import Enum
-from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Query, Request
@@ -16,6 +14,7 @@ from data.database import (
     get_all_entries,
     get_entries_by_category,
     get_entry_by_id,
+    get_latest_rebuild,
     search_entries,
     search_semantic,
     count_by_category,
@@ -255,12 +254,8 @@ async def brain_status():
 
     # Last rebuild
     try:
-        rebuild_file = Path(__file__).parent.parent / "data" / "last_rebuild.json"
-        if rebuild_file.exists():
-            record = json.loads(rebuild_file.read_text(encoding="utf-8"))
-            response["last_rebuild"] = record.get("completed_at")
-        else:
-            response["last_rebuild"] = None
+        rebuild_record = get_latest_rebuild()
+        response["last_rebuild"] = rebuild_record["completed_at"] if rebuild_record else None
     except Exception:
         response["last_rebuild"] = None
 

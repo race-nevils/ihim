@@ -22,6 +22,7 @@ from typing import Optional
 import os
 import sys
 import json
+import uuid
 import psutil
 
 # Add parent to path for imports
@@ -115,6 +116,13 @@ try:
     SANITY_AVAILABLE = True
 except ImportError:
     SANITY_AVAILABLE = False
+
+
+# =============================================================================
+# BOOT ID — regenerates on every server restart, used for cache busting
+# =============================================================================
+
+BOOT_ID = uuid.uuid4().hex[:8]
 
 
 # =============================================================================
@@ -258,13 +266,30 @@ else:
 
 
 _index_html_path = UI_DIR / "index.html"
-_INDEX_HTML: bytes | None = _index_html_path.read_bytes() if _index_html_path.exists() else None
+_INDEX_HTML_RAW: bytes | None = _index_html_path.read_bytes() if _index_html_path.exists() else None
+
+
+def _inject_boot_id(html_bytes: bytes) -> bytes:
+    """Replace __BOOT_ID__ placeholders and legacy ?v= params with current BOOT_ID."""
+    text = html_bytes.decode("utf-8")
+    text = text.replace("__BOOT_ID__", BOOT_ID)
+    return text.encode("utf-8")
+
+
+# Pre-compute the versioned HTML at startup
+_INDEX_HTML: bytes | None = _inject_boot_id(_INDEX_HTML_RAW) if _INDEX_HTML_RAW else None
+
+
+@app.get("/api/boot-id")
+async def get_boot_id():
+    """Return the current server boot ID. Clients poll this to detect restarts."""
+    return {"boot_id": BOOT_ID}
 
 
 @app.get("/")
 async def root():
-    """Serve the dashboard."""
-    content = _INDEX_HTML or (UI_DIR / "index.html").read_bytes()
+    """Serve the dashboard with cache-busted static file references."""
+    content = _INDEX_HTML or _inject_boot_id((UI_DIR / "index.html").read_bytes())
     return Response(
         content=content,
         media_type="text/html",

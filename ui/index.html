@@ -7,7 +7,7 @@
     <title>iHIM</title>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <link rel="stylesheet" href="/static/style.css?v=2.2">
+    <link rel="stylesheet" href="/static/style.css?v=__BOOT_ID__">
 </head>
 
 <body>
@@ -735,7 +735,37 @@
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
 
     <!-- Application ES Modules -->
-    <script type="module" src="/static/js/main.js"></script>
+    <script type="module" src="/static/js/main.js?v=__BOOT_ID__"></script>
+
+    <!-- Auto-reload on server restart (detects BOOT_ID change) -->
+    <script>
+    (function() {
+        var bootId = '__BOOT_ID__';
+        var CHECK_INTERVAL = 5000;
+        var stored = sessionStorage.getItem('ihim_boot_id');
+        if (stored && stored !== bootId) {
+            // Server restarted since last load — force hard reload
+            sessionStorage.setItem('ihim_boot_id', bootId);
+            location.reload();
+            return;
+        }
+        sessionStorage.setItem('ihim_boot_id', bootId);
+
+        // Also check on tab focus (catches restarts while tab was backgrounded)
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) return;
+            fetch('/api/boot-id', { cache: 'no-store' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.boot_id && data.boot_id !== bootId) {
+                        sessionStorage.setItem('ihim_boot_id', data.boot_id);
+                        location.reload();
+                    }
+                })
+                .catch(function() { /* server down — ignore */ });
+        });
+    })();
+    </script>
 
 </body>
 

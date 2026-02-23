@@ -874,7 +874,7 @@ _HEURISTICS_PATH = Path(__file__).parent.parent / "data" / "heuristics.json"
 def _load_heuristics() -> dict:
     """Load heuristics bank from JSON file."""
     if not _HEURISTICS_PATH.exists():
-        return {"meta": {"last_updated": None, "total": 0, "version": "1.0.0"}, "heuristics": []}
+        return {"meta": {"last_updated": None, "total": 0, "version": "1.1.0"}, "heuristics": []}
     return json.loads(_HEURISTICS_PATH.read_text(encoding="utf-8"))
 
 
@@ -894,6 +894,12 @@ class HeuristicCreateRequest(BaseModel):
     action: str = Field(..., min_length=1)
     pattern: str = Field(default="uncategorized")
     status: str = Field(default="banked", pattern="^(active|banked)$")
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class HeuristicFireRequest(BaseModel):
+    """Optional body for firing a heuristic with a confidence score."""
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 @app.get("/api/vpt/heuristics")
@@ -929,6 +935,8 @@ async def create_heuristic(req: HeuristicCreateRequest, request: Request):
         "last_fired": None,
         "status": req.status,
         "pattern": req.pattern,
+        "confidence": req.confidence,
+        "miss_count": 0,
     }
     data["heuristics"].append(new_h)
     _save_heuristics(data)
@@ -938,7 +946,14 @@ async def create_heuristic(req: HeuristicCreateRequest, request: Request):
 
 @app.patch("/api/vpt/heuristics/{heuristic_id}/fire")
 async def fire_heuristic(heuristic_id: str, request: Request):
-    """Increment fire_count for a heuristic. Auto-promotes banked->active at 3 fires."""
+    """Increment fire_count for a heuristic with optional confidence score.
+
+    Accepts optional JSON body: {"confidence": 0.85}
+    - If confidence provided: updates running average
+    - If not provided: increments fire_count only (backward compat)
+    - Promotion: fire_count >= 3 AND (confidence is None OR >= 0.6)
+    - Demotion: active + confidence < 0.4 after 3+ fires → demoted to banked
+    """
     data = _load_heuristics()
     target = None
     for h in data.get("heuristics", []):
@@ -949,13 +964,46 @@ async def fire_heuristic(heuristic_id: str, request: Request):
     if target is None:
         return problem(404, f"Heuristic '{heuristic_id}' not found", instance=request.url.path)
 
+    # Parse optional confidence from body
+    fire_confidence = None
+    try:
+        body = await request.json()
+        req = HeuristicFireRequest(**body)
+        fire_confidence = req.confidence
+    except Exception:
+        pass  # No body or invalid — backward compat, just increment
+
     target["fire_count"] = target.get("fire_count", 0) + 1
     target["last_fired"] = datetime.now(timezone.utc).isoformat()
 
+    # Update confidence running average if score provided
+    if fire_confidence is not None:
+        old_confidence = target.get("confidence")
+        old_count = target["fire_count"] - 1  # count before this fire
+        if old_confidence is None or old_count == 0:
+            target["confidence"] = fire_confidence
+        else:
+            target["confidence"] = round(
+                ((old_confidence * old_count) + fire_confidence) / target["fire_count"], 4
+            )
+
+    confidence = target.get("confidence")
+
+    # Promotion: banked → active when fire_count >= 3 AND confidence qualifies
     promoted = False
     if target.get("status") == "banked" and target["fire_count"] >= 3:
-        target["status"] = "active"
-        promoted = True
+        if confidence is None or confidence >= 0.6:
+            target["status"] = "active"
+            promoted = True
+
+    # Demotion: active → banked when confidence drops below 0.4 after 3+ fires
+    demoted = False
+    if (target.get("status") == "active"
+            and confidence is not None
+            and confidence < 0.4
+            and target["fire_count"] >= 3):
+        target["status"] = "banked"
+        demoted = True
 
     _save_heuristics(data)
 
@@ -964,8 +1012,60 @@ async def fire_heuristic(heuristic_id: str, request: Request):
         "id": heuristic_id,
         "fire_count": target["fire_count"],
         "last_fired": target["last_fired"],
+        "confidence": target.get("confidence"),
+        "miss_count": target.get("miss_count", 0),
         "status": target["status"],
         "promoted": promoted,
+        "demoted": demoted,
+    }
+
+
+@app.patch("/api/vpt/heuristics/{heuristic_id}/miss")
+async def miss_heuristic(heuristic_id: str, request: Request):
+    """Record a miss for a heuristic (was applicable but led to wrong outcome).
+
+    Increments miss_count and recalculates confidence downward.
+    Formula: confidence = fire_count / (fire_count + miss_count)
+    """
+    data = _load_heuristics()
+    target = None
+    for h in data.get("heuristics", []):
+        if h["id"] == heuristic_id:
+            target = h
+            break
+
+    if target is None:
+        return problem(404, f"Heuristic '{heuristic_id}' not found", instance=request.url.path)
+
+    target["miss_count"] = target.get("miss_count", 0) + 1
+
+    # Recalculate confidence based on hit/miss ratio
+    fire_count = target.get("fire_count", 0)
+    miss_count = target["miss_count"]
+    if fire_count + miss_count > 0:
+        target["confidence"] = round(fire_count / (fire_count + miss_count), 4)
+
+    # Demotion check: active → banked when confidence < 0.4 after 3+ fires
+    demoted = False
+    confidence = target.get("confidence")
+    total_events = fire_count + miss_count
+    if (target.get("status") == "active"
+            and confidence is not None
+            and confidence < 0.4
+            and total_events >= 3):
+        target["status"] = "banked"
+        demoted = True
+
+    _save_heuristics(data)
+
+    return {
+        "success": True,
+        "id": heuristic_id,
+        "fire_count": fire_count,
+        "miss_count": target["miss_count"],
+        "confidence": target.get("confidence"),
+        "status": target["status"],
+        "demoted": demoted,
     }
 
 

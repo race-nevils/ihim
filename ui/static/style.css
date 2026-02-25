@@ -6145,6 +6145,7 @@ dialog.modal:not([open]) {
 .vault-item-info {
     flex: 1;
     min-width: 0;
+    cursor: pointer;
 }
 
 .vault-item-title {
@@ -6234,6 +6235,17 @@ dialog.modal:not([open]) {
     background: rgba(218, 165, 32, 0.12);
     color: var(--accent-gold);
     white-space: nowrap;
+}
+
+.vault-item-expand {
+    padding: 8px 12px 12px 38px;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+    border-bottom: 1px solid var(--glass-border);
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
 }
 
 .vault-doc-expand {

@@ -12,6 +12,8 @@ export const vaultManager = {
     docsPage: 0,
     docsLimit: 30,
     expandedDoc: null,
+    expandedItem: null,
+    _items: {},
 
     async loadTasks() {
         const body = document.getElementById('vault-tasks-body');
@@ -39,6 +41,7 @@ export const vaultManager = {
 
     renderChecklist(container, items, type) {
         if (!items || items.length === 0) { container.innerHTML = `<div class="vault-empty">No ${type}s found.</div>`; return; }
+        items.forEach(item => { this._items[item.id] = item; });
         const pending = items.filter(i => !i.is_completed);
         const completed = items.filter(i => i.is_completed);
         let html = '';
@@ -47,12 +50,14 @@ export const vaultManager = {
                 ? (item.event_date || '') + (item.event_start_time ? ' ' + item.event_start_time : '')
                 : this.formatDate(item.created_at);
             html += this.itemHTML(item, meta, false);
+            if (this.expandedItem === item.id) html += this.itemExpandHTML(item);
         });
         if (completed.length > 0) {
             html += `<div class="vault-divider"><span class="vault-divider-line"></span><span class="vault-divider-label">Completed (${completed.length})</span><span class="vault-divider-line"></span></div>`;
             completed.forEach(item => {
                 const meta = item.completed_at ? 'Done ' + this.formatDate(item.completed_at) : '';
                 html += this.itemHTML(item, meta, true);
+                if (this.expandedItem === item.id) html += this.itemExpandHTML(item);
             });
         }
         html += `<div class="vault-count">${pending.length} open, ${completed.length} done</div>`;
@@ -64,11 +69,23 @@ export const vaultManager = {
         const checked = isCompleted ? 'checked' : '';
         return `<div class="${cls}">
             <input type="checkbox" ${checked} data-vault-toggle="${item.id}">
-            <div class="vault-item-info">
+            <div class="vault-item-info" data-vault-item="${item.id}">
                 <div class="vault-item-title">${this.esc(item.title)}</div>
                 <div class="vault-item-meta">${this.esc(meta)}</div>
             </div>
         </div>`;
+    },
+
+    itemExpandHTML(item) {
+        const content = item.content || item.summary || 'No content available.';
+        return `<div class="vault-item-expand">${this.esc(content)}</div>`;
+    },
+
+    toggleItemExpand(entryId) {
+        this.expandedItem = this.expandedItem === entryId ? null : entryId;
+        const tasksTab = document.getElementById('vault-tab-tasks');
+        if (tasksTab && tasksTab.style.display !== 'none') this.loadTasks();
+        else this.loadProjects();
     },
 
     async toggle(entryId) {
@@ -326,6 +343,8 @@ export function initVaultEvents() {
     vaultWin.addEventListener('click', (e) => {
         const toggle = e.target.closest('[data-vault-toggle]');
         if (toggle) { vaultManager.toggle(toggle.dataset.vaultToggle); return; }
+        const item = e.target.closest('[data-vault-item]');
+        if (item) { vaultManager.toggleItemExpand(item.dataset.vaultItem); return; }
         const doc = e.target.closest('[data-vault-doc]');
         if (doc) { vaultManager.toggleExpand(doc.dataset.vaultDoc); return; }
         const page = e.target.closest('[data-vault-page]');

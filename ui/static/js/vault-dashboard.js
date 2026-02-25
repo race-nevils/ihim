@@ -177,20 +177,60 @@ export const workspacesManager = {
                 body.innerHTML = `<div class="workspaces-empty"><p>No active workspaces</p><p class="workspaces-hint">Use <code>/workspace create &lt;name&gt;</code> in the agent harness to create a workspace</p></div>`;
                 return;
             }
-            let html = '<div class="workspaces-list">';
+
+            let html = '';
+
+            // Summary bar
+            if (data.summary) {
+                const s = data.summary;
+                html += `<div class="workspaces-summary">
+                    <span class="ws-stat">${s.total} branch${s.total !== 1 ? 'es' : ''}</span>
+                    <span class="ws-stat">${s.branches} branch${s.branches !== 1 ? 's' : ''}</span>
+                    ${s.merged ? `<span class="ws-stat ws-stat-merged">${s.merged} merged</span>` : ''}
+                    ${s.dirty ? `<span class="ws-stat ws-stat-dirty">${s.dirty} dirty</span>` : ''}
+                </div>`;
+            }
+
+            html += '<div class="workspaces-list">';
             data.workspaces.forEach(ws => {
-                const statusClass = ws.status === 'active' ? 'status-active' :
-                    ws.status === 'branch-only' ? 'status-branch-only' :
-                    ws.status === 'merged' ? 'status-merged' :
-                    ws.status === 'stale' ? 'status-stale' : 'status-closed';
+                const statusClass = this.statusClass(ws.status);
                 const statusLabel = ws.status === 'branch-only' ? 'branch only' : ws.status;
+
+                // Ahead/behind indicator
+                let syncHtml = '';
+                if (ws.ahead_count > 0 || ws.behind_count > 0) {
+                    const parts = [];
+                    if (ws.ahead_count > 0) parts.push(`<span class="ws-ahead">\u2191${ws.ahead_count}</span>`);
+                    if (ws.behind_count > 0) parts.push(`<span class="ws-behind">\u2193${ws.behind_count}</span>`);
+                    syncHtml = `<span class="ws-sync">${parts.join(' ')}</span>`;
+                }
+
+                // Dirty indicator
+                const dirtyHtml = ws.is_dirty
+                    ? `<span class="ws-dirty">\u25cf ${ws.dirty_files_count} uncommitted</span>`
+                    : '';
+
+                // Remote indicator
+                const remoteHtml = !ws.has_remote
+                    ? '<span class="ws-local-only">local only</span>'
+                    : '';
+
+                // Last commit message
+                const commitHtml = ws.last_commit_message
+                    ? `<div class="workspace-commit">${this.escapeHtml(ws.last_commit_message)}</div>`
+                    : '';
+
                 html += `<div class="workspace-item ${statusClass}">
                     <div class="workspace-header">
                         <span class="workspace-name">${this.escapeHtml(ws.name)}</span>
-                        <span class="workspace-status-badge ${statusClass}">${statusLabel}</span>
+                        <span class="workspace-header-right">
+                            ${syncHtml}${dirtyHtml}${remoteHtml}
+                            <span class="workspace-status-badge ${statusClass}">${statusLabel}</span>
+                        </span>
                     </div>
                     <div class="workspace-details">
                         <div class="workspace-branch">Branch: <code>${this.escapeHtml(ws.branch)}</code></div>
+                        ${commitHtml}
                         ${ws.purpose ? `<div class="workspace-purpose">${this.escapeHtml(ws.purpose)}</div>` : ''}
                         ${ws.last_activity_relative ? `<div class="workspace-activity">Last active: ${ws.last_activity_relative}</div>` : ''}
                     </div>
@@ -202,6 +242,17 @@ export const workspacesManager = {
             console.error('Failed to load workspaces:', e);
             body.innerHTML = '<div class="workspaces-error">Failed to load workspaces</div>';
         }
+    },
+
+    statusClass(status) {
+        const map = {
+            'active': 'status-active',
+            'branch-only': 'status-branch-only',
+            'merged': 'status-merged',
+            'stale': 'status-stale',
+            'diverged': 'status-diverged',
+        };
+        return map[status] || 'status-closed';
     },
 
     escapeHtml(unsafe) {

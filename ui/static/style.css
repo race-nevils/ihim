@@ -6493,6 +6493,96 @@ dialog.modal:not([open]) {
     color: var(--text-dim);
 }
 
+/* Workspaces: Summary bar */
+.workspaces-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ws-stat {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.ws-stat-merged {
+    background: rgba(107, 114, 128, 0.15);
+    color: #9ca3af;
+}
+
+.ws-stat-dirty {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+/* Workspaces: Diverged status */
+.workspace-item.status-diverged {
+    border-left: 3px solid #f97316;
+}
+
+.workspace-status-badge.status-diverged {
+    background: rgba(249, 115, 22, 0.2);
+    color: #fb923c;
+}
+
+/* Workspaces: Header right cluster */
+.workspace-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* Workspaces: Sync arrows (ahead/behind) */
+.ws-sync {
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-flex;
+    gap: 0.25rem;
+}
+
+.ws-ahead {
+    color: #60a5fa;
+}
+
+.ws-behind {
+    color: #f87171;
+}
+
+/* Workspaces: Dirty indicator */
+.ws-dirty {
+    font-size: 0.7rem;
+    color: #fbbf24;
+    font-weight: 500;
+}
+
+/* Workspaces: Local-only indicator */
+.ws-local-only {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    font-style: italic;
+    opacity: 0.7;
+}
+
+/* Workspaces: Last commit message */
+.workspace-commit {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
 /* ============================================ */
 /* CONTAINER QUERIES                            */
 /* Panels respond to their container, not viewport */

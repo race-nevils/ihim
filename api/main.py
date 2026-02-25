@@ -280,16 +280,35 @@ def _inject_boot_id(html_bytes: bytes) -> bytes:
 _INDEX_HTML: bytes | None = _inject_boot_id(_INDEX_HTML_RAW) if _INDEX_HTML_RAW else None
 
 
+def _static_fingerprint() -> str:
+    """Max mtime of all static files — changes when any file is edited on disk."""
+    max_mtime = 0.0
+    if _static_dir.exists():
+        for root, _dirs, files in os.walk(_static_dir):
+            for f in files:
+                try:
+                    mt = os.path.getmtime(os.path.join(root, f))
+                    if mt > max_mtime:
+                        max_mtime = mt
+                except OSError:
+                    pass
+    return str(int(max_mtime))
+
+
 @app.get("/api/boot-id")
 async def get_boot_id():
-    """Return the current server boot ID. Clients poll this to detect restarts."""
-    return {"boot_id": BOOT_ID}
+    """Return boot ID + static fingerprint. Clients poll to detect any change."""
+    return {"boot_id": BOOT_ID, "static_fp": _static_fingerprint()}
 
 
 @app.get("/")
 async def root():
-    """Serve the dashboard with cache-busted static file references."""
-    content = _INDEX_HTML or _inject_boot_id((UI_DIR / "index.html").read_bytes())
+    """Serve the dashboard with cache-busted static file references.
+
+    Always reads from disk so HTML template changes are picked up instantly
+    without a server restart (same as static JS/CSS files).
+    """
+    content = _inject_boot_id(_index_html_path.read_bytes())
     return Response(
         content=content,
         media_type="text/html",

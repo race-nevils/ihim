@@ -656,6 +656,10 @@
                     <label for="recorder-label-input">Label</label>
                     <input type="text" id="recorder-label-input" placeholder="e.g. Weekly standup" maxlength="120" />
                 </div>
+                <div class="recorder-device-row">
+                    <label for="recorder-participant-input">Participant</label>
+                    <input type="text" id="recorder-participant-input" placeholder="e.g. Sarah" maxlength="120" />
+                </div>
 
                 <div class="recorder-live-status" id="recorder-live-status" style="display: none;">
                     <div class="recorder-elapsed" id="recorder-elapsed">00:00</div>
@@ -737,32 +741,56 @@
     <!-- Application ES Modules -->
     <script type="module" src="/static/js/main.js?v=__BOOT_ID__"></script>
 
-    <!-- Auto-reload on server restart (detects BOOT_ID change) -->
+    <!-- Auto-reload on server restart OR static file change -->
     <script>
     (function() {
         var bootId = '__BOOT_ID__';
-        var CHECK_INTERVAL = 5000;
+        var staticFp = null;          // learned from first poll
+        var POLL_MS = 3000;           // check every 3 seconds
+        var checking = false;
+
+        // On page load: detect if server restarted since last visit
         var stored = sessionStorage.getItem('ihim_boot_id');
         if (stored && stored !== bootId) {
-            // Server restarted since last load — force hard reload
             sessionStorage.setItem('ihim_boot_id', bootId);
             location.reload();
             return;
         }
         sessionStorage.setItem('ihim_boot_id', bootId);
 
-        // Also check on tab focus (catches restarts while tab was backgrounded)
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden) return;
+        function checkForChanges() {
+            if (checking) return;
+            checking = true;
             fetch('/api/boot-id', { cache: 'no-store' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
+                    checking = false;
+                    // Server restarted (new boot ID)
                     if (data.boot_id && data.boot_id !== bootId) {
                         sessionStorage.setItem('ihim_boot_id', data.boot_id);
                         location.reload();
+                        return;
+                    }
+                    // Static files changed on disk (JS/CSS edited without server restart)
+                    if (data.static_fp) {
+                        if (staticFp === null) {
+                            staticFp = data.static_fp; // learn baseline
+                        } else if (data.static_fp !== staticFp) {
+                            sessionStorage.setItem('ihim_boot_id', data.boot_id);
+                            location.reload();
+                            return;
+                        }
                     }
                 })
-                .catch(function() { /* server down — ignore */ });
+                .catch(function() { checking = false; });
+        }
+
+        // Continuous polling — catches changes while actively viewing the page
+        setInterval(checkForChanges, POLL_MS);
+
+        // Also check immediately on tab focus (faster than waiting for next interval)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) checkForChanges();
         });
     })();
     </script>

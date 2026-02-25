@@ -11,13 +11,20 @@ import struct
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
-
 logger = logging.getLogger(__name__)
 
 # Lazy imports — only fail when actually used, not at module load
 _sd = None
 _pyaudiowpatch = None
+_np = None
+
+
+def _get_numpy():
+    global _np
+    if _np is None:
+        import numpy as np
+        _np = np
+    return _np
 
 
 def _get_sounddevice():
@@ -150,20 +157,22 @@ def _get_default_loopback() -> Optional[dict]:
 # RESAMPLING
 # ═══════════════════════════════════════════════════════════════════════
 
-def _resample(data: np.ndarray, orig_rate: int, target_rate: int) -> np.ndarray:
+def _resample(data, orig_rate: int, target_rate: int):
     """Simple linear interpolation resample. Good enough for speech."""
     if orig_rate == target_rate:
         return data
+    np = _get_numpy()
     ratio = target_rate / orig_rate
     n_samples = int(len(data) * ratio)
     indices = np.linspace(0, len(data) - 1, n_samples)
     return np.interp(indices, np.arange(len(data)), data).astype(np.float32)
 
 
-def _to_mono(data: np.ndarray, channels: int) -> np.ndarray:
+def _to_mono(data, channels: int):
     """Downmix to mono if needed."""
     if channels <= 1:
         return data
+    np = _get_numpy()
     # Reshape and average across channels
     if len(data) % channels != 0:
         data = data[:len(data) - (len(data) % channels)]
@@ -183,8 +192,8 @@ class DualStreamCapture:
         sys_device_index: Optional[int] = None,
     ):
         self._stop_event = threading.Event()
-        self._mic_buffers: list[np.ndarray] = []
-        self._sys_buffers: list[np.ndarray] = []
+        self._mic_buffers: list = []
+        self._sys_buffers: list = []
         self._mic_thread: Optional[threading.Thread] = None
         self._sys_thread: Optional[threading.Thread] = None
         self._mic_error: Optional[str] = None
@@ -328,7 +337,8 @@ class DualStreamCapture:
             while not self._stop_event.is_set():
                 try:
                     data = stream.read(block_size, exception_on_overflow=False)
-                    arr = np.frombuffer(data, dtype=np.float32)
+                    numpy = _get_numpy()
+                    arr = numpy.frombuffer(data, dtype=numpy.float32)
                     arr = _to_mono(arr, channels)
                     self._sys_buffers.append(arr)
                 except Exception as e:
@@ -351,7 +361,7 @@ class DualStreamCapture:
                 except Exception:
                     pass
 
-    def _write_wav(self, path: Path, buffers: list[np.ndarray], native_rate: int) -> None:
+    def _write_wav(self, path: Path, buffers: list, native_rate: int) -> None:
         """Concatenate buffers, resample to 16 kHz, write 16-bit mono WAV."""
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -364,6 +374,7 @@ class DualStreamCapture:
                 wf.writeframes(b"")
             return
 
+        np = _get_numpy()
         audio = np.concatenate(buffers)
         audio = _resample(audio, native_rate, TARGET_RATE)
 

@@ -23,6 +23,7 @@ class ModelSize(str, Enum):
 
 class StartRequest(BaseModel):
     label: Optional[str] = Field(None, description="Human-readable label for the recording")
+    participant_name: Optional[str] = Field(None, description="Name of the other participant (default: 'Other')")
     model_size: ModelSize = Field(ModelSize.base, description="Whisper model size for transcription")
     mic_device_index: Optional[int] = Field(None, description="Mic device index (None = default)")
     sys_device_index: Optional[int] = Field(None, description="WASAPI loopback device index (None = auto-detect)")

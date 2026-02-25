@@ -24,6 +24,7 @@ class RecorderState:
                     inst._status = RecorderStatus.idle
                     inst._recording_id: Optional[str] = None
                     inst._label: Optional[str] = None
+                    inst._participant_name: Optional[str] = None
                     inst._started_at: Optional[datetime] = None
                     inst._mic_device: Optional[str] = None
                     inst._sys_device: Optional[str] = None
@@ -45,6 +46,10 @@ class RecorderState:
     @property
     def label(self) -> Optional[str]:
         return self._label
+
+    @property
+    def participant_name(self) -> Optional[str]:
+        return self._participant_name
 
     @property
     def started_at(self) -> Optional[datetime]:
@@ -76,6 +81,7 @@ class RecorderState:
         label: Optional[str],
         mic_device: str,
         sys_device: str,
+        participant_name: Optional[str] = None,
     ) -> None:
         with self._state_lock:
             if self._status not in (RecorderStatus.idle,):
@@ -83,6 +89,7 @@ class RecorderState:
             self._status = RecorderStatus.recording
             self._recording_id = recording_id
             self._label = label
+            self._participant_name = participant_name
             self._started_at = datetime.now(timezone.utc)
             self._mic_device = mic_device
             self._sys_device = sys_device
@@ -101,6 +108,7 @@ class RecorderState:
             self._status = RecorderStatus.idle
             self._recording_id = None
             self._label = None
+            self._participant_name = None
             self._started_at = None
             self._mic_device = None
             self._sys_device = None
@@ -115,6 +123,7 @@ class RecorderState:
             self._status = RecorderStatus.idle
             self._recording_id = None
             self._label = None
+            self._participant_name = None
             self._started_at = None
             self._mic_device = None
             self._sys_device = None
@@ -129,6 +138,7 @@ class RecorderState:
                 "status": self._status,
                 "recording_id": self._recording_id,
                 "label": self._label,
+                "participant_name": self._participant_name,
                 "started_at": self._started_at.isoformat() if self._started_at else None,
                 "elapsed_seconds": self.elapsed_seconds,
                 "mic_device": self._mic_device,

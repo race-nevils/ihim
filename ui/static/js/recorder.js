@@ -46,7 +46,10 @@ async function loadDevices() {
     const sysSelect = document.getElementById('recorder-sys-select');
     try {
         const res = await fetch(`${API}/api/recorder/devices`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
         const data = await res.json();
         devicesData = data;
 
@@ -64,6 +67,7 @@ async function loadDevices() {
         // Persist on change
         micSelect.addEventListener('change', saveDevicePreferences);
         sysSelect.addEventListener('change', saveDevicePreferences);
+        document.getElementById('recorder-participant-input').addEventListener('change', saveDevicePreferences);
     } catch (e) {
         micSelect.innerHTML = '<option value="">Failed to load</option>';
         sysSelect.innerHTML = '<option value="">Failed to load</option>';
@@ -85,6 +89,9 @@ async function restoreDevicePreferences(devices) {
         if (saved.sys_device) {
             const match = devices.system_devices.find(d => d.name === saved.sys_device);
             if (match) document.getElementById('recorder-sys-select').value = String(match.index);
+        }
+        if (saved.participant_name) {
+            document.getElementById('recorder-participant-input').value = saved.participant_name;
         }
     } catch (e) {
         console.warn('Failed to restore device preferences:', e);
@@ -108,7 +115,8 @@ async function saveDevicePreferences() {
             body: JSON.stringify({
                 recorder: {
                     mic_device: micDev ? micDev.name : null,
-                    sys_device: sysDev ? sysDev.name : null
+                    sys_device: sysDev ? sysDev.name : null,
+                    participant_name: document.getElementById('recorder-participant-input').value.trim() || null
                 }
             })
         });
@@ -131,8 +139,11 @@ async function startRecording() {
     startBtn.disabled = true;
     hideRecorderError();
 
+    const participant = document.getElementById('recorder-participant-input').value.trim();
+
     const body = {};
     if (label) body.label = label;
+    if (participant) body.participant_name = participant;
     if (micIdx !== '') body.mic_device_index = parseInt(micIdx, 10);
     if (sysIdx !== '') body.sys_device_index = parseInt(sysIdx, 10);
 
@@ -147,6 +158,7 @@ async function startRecording() {
             throw new Error(err.detail || err.title || `HTTP ${res.status}`);
         }
         stopBtn.disabled = false;
+        pollStatus(); // Immediate status poll — timer appears without waiting for next interval
     } catch (e) {
         startBtn.disabled = false;
         showRecorderError(`Failed to start: ${e.message}`);
@@ -177,7 +189,10 @@ async function resetRecorder() {
     hideRecorderError();
     try {
         const res = await fetch(`${API}/api/recorder/reset`, { method: 'POST' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
         document.getElementById('recorder-reset-btn').style.display = 'none';
     } catch (e) {
         showRecorderError(`Failed to reset: ${e.message}`);
@@ -243,8 +258,7 @@ function renderStatus(data) {
             }
             // Start elapsed timer from server's started_at
             if (data.started_at && !elapsedTimer) {
-                recordingStartedAt = new Date(data.started_at);
-                startElapsedTimer();
+                startElapsedTimer(new Date(data.started_at));
             }
             break;
         case 'transcribing':
@@ -252,7 +266,7 @@ function renderStatus(data) {
             badge.classList.add('status-transcribing');
             startBtn.disabled = true;
             stopBtn.disabled = true;
-            stopBtn.textContent = 'Stopping...';
+            stopBtn.textContent = 'Transcribing...';
             resetBtn.style.display = 'none';
             liveStatus.style.display = 'flex';
             clearElapsedTimer();
@@ -285,8 +299,9 @@ function renderStatus(data) {
 // Elapsed timer
 // =====================
 
-function startElapsedTimer() {
-    clearElapsedTimer();
+function startElapsedTimer(startedAt) {
+    if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+    recordingStartedAt = startedAt;
     updateElapsed();
     elapsedTimer = setInterval(updateElapsed, 1000);
 }
@@ -315,7 +330,10 @@ async function loadRecordings() {
     body.innerHTML = '<div class="recorder-loading">Loading recordings...</div>';
     try {
         const res = await fetch(`${API}/api/recorder/recordings`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
         const data = await res.json();
         const recordings = data.recordings || [];
         countEl.textContent = `${recordings.length} recording${recordings.length !== 1 ? 's' : ''}`;
@@ -366,7 +384,10 @@ async function loadTranscript(id) {
 
     try {
         const res = await fetch(`${API}/api/recorder/recordings/${encodeURIComponent(id)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
         const data = await res.json();
 
         const label = data.label ? escapeHtml(data.label) : 'Untitled';
@@ -412,7 +433,10 @@ async function deleteRecording(id) {
     if (!confirm('Delete this recording? This removes the audio files, transcript, and brain entry.')) return;
     try {
         const res = await fetch(`${API}/api/recorder/recordings/${encodeURIComponent(id)}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
         selectedRecordingId = null;
         document.getElementById('recorder-transcript-toolbar').style.display = 'none';
         document.getElementById('recorder-transcript-body').innerHTML =

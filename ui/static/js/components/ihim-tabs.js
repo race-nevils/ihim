@@ -43,6 +43,12 @@ class IhimTabs extends HTMLElement {
             const tab = e.target.closest('[role="tab"]');
             if (tab) this._onTabActivate(tab);
         });
+
+        // Initialize: activate the first selected/active tab so inactive panels are hidden
+        const activeTab = tablist.querySelector('[role="tab"][aria-selected="true"]')
+            || tablist.querySelector('[role="tab"].active')
+            || tablist.querySelector('[role="tab"]');
+        if (activeTab) this._onTabActivate(activeTab);
     }
 
     _onTabActivate(tab) {

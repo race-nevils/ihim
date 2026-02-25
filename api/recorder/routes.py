@@ -109,6 +109,7 @@ async def recorder_start(body: StartRequest, request: Request):
             label=body.label,
             mic_device=capture.mic_device_name,
             sys_device=capture.sys_device_name,
+            participant_name=body.participant_name,
         )
         with _capture_lock:
             _capture = capture
@@ -149,23 +150,33 @@ async def recorder_stop(request: Request):
     mic_device = _state.mic_device
     sys_device = _state.sys_device
 
+    # ── Block 1: Stop capture + save WAV files (fatal if fails) ──
     try:
-        # Stop capture
         with _capture_lock:
             _capture.stop()
             local_capture = _capture
             _capture = None
         _state.stop_recording()
 
-        # Save WAV files
         RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
         mic_path = RECORDINGS_DIR / f"recording-{rec_id}-mic.wav"
         sys_path = RECORDINGS_DIR / f"recording-{rec_id}-sys.wav"
         local_capture.save(mic_path, sys_path)
-
         capture_errors = local_capture.errors
+    except Exception as e:
+        _state.set_error(str(e))
+        with _capture_lock:
+            _capture = None
+        logger.error("Audio save failed for %s: %s", rec_id, e)
+        return problem(500, f"Audio save failed: {e}", instance=request.url.path)
 
-        # Transcribe in thread pool (non-blocking)
+    # ── Block 2: Transcription (non-fatal — save recording regardless) ──
+    segments = []
+    transcript = ""
+    sidecar_status = "complete"
+    transcription_error = None
+
+    try:
         from api.recorder.transcribe import transcribe_dual
 
         loop = asyncio.get_event_loop()
@@ -173,63 +184,86 @@ async def recorder_stop(request: Request):
             None,
             lambda: transcribe_dual(mic_path, sys_path, model_size="base"),
         )
+        segments = result["segments"]
+        transcript = result["transcript"]
 
-        ended_at = datetime.now(timezone.utc)
-        duration = (ended_at - started_at).total_seconds() if started_at else 0
-
-        # Write sidecar JSON
-        sidecar = {
-            "recording_id": rec_id,
-            "label": label,
-            "started_at": started_at.isoformat() if started_at else None,
-            "ended_at": ended_at.isoformat(),
-            "duration_seconds": round(duration, 1),
-            "config": {
-                "model_size": "base",
-                "sample_rate": 16000,
-                "mic_device": mic_device,
-                "sys_device": sys_device,
-            },
-            "speakers": {"mic": "the operator", "system": "Other"},
-            "segments": result["segments"],
-            "transcript": result["transcript"],
-            "wav_mic": mic_path.name,
-            "wav_sys": sys_path.name,
-            "status": "complete",
-        }
-        if capture_errors:
-            sidecar["capture_warnings"] = capture_errors
-
-        sidecar_path = RECORDINGS_DIR / f"recording-{rec_id}.json"
-        sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
-
-        # Create brain entry (non-fatal)
-        try:
-            _create_brain_entry(rec_id, label, started_at, duration, result["transcript"])
-        except Exception as brain_err:
-            logger.error("Failed to create brain entry for %s: %s", rec_id, brain_err)
-
-        _state.finish_transcription()
-
-        logger.info("Recording complete: %s (%.1fs, %d segments)", rec_id, duration, len(result["segments"]))
-
-        # Build preview (first 500 chars)
-        preview = result["transcript"][:500]
-        if len(result["transcript"]) > 500:
-            preview += "..."
-
-        return StopResponse(
-            recording_id=rec_id,
-            duration_seconds=round(duration, 1),
-            segments_count=len(result["segments"]),
-            transcript_preview=preview,
-        )
+        if not segments:
+            sidecar_status = "no_transcript"
     except Exception as e:
-        _state.set_error(str(e))
-        with _capture_lock:
-            _capture = None
-        logger.error("Recording/transcription failed for %s: %s", rec_id, e)
-        return problem(500, f"Recording/transcription failed: {e}", instance=request.url.path)
+        logger.error("Transcription failed for %s: %s", rec_id, e)
+        sidecar_status = "transcription_failed"
+        transcription_error = str(e)
+
+    # ── Block 3: Sidecar write (always runs after audio save) ──
+    ended_at = datetime.now(timezone.utc)
+    duration = (ended_at - started_at).total_seconds() if started_at else 0
+
+    sidecar = {
+        "recording_id": rec_id,
+        "label": label,
+        "started_at": started_at.isoformat() if started_at else None,
+        "ended_at": ended_at.isoformat(),
+        "duration_seconds": round(duration, 1),
+        "config": {
+            "model_size": "base",
+            "sample_rate": 16000,
+            "mic_device": mic_device,
+            "sys_device": sys_device,
+        },
+        "speakers": {"mic": "the operator", "system": _state.participant_name or "Other"},
+        "segments": segments,
+        "transcript": transcript,
+        "wav_mic": mic_path.name,
+        "wav_sys": sys_path.name,
+        "status": sidecar_status,
+    }
+    if capture_errors:
+        sidecar["capture_warnings"] = capture_errors
+    if transcription_error:
+        sidecar["transcription_error"] = transcription_error
+
+    sidecar_path = RECORDINGS_DIR / f"recording-{rec_id}.json"
+    sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+
+    # ── Block 3b: Transcript markdown (non-fatal, only if segments exist) ──
+    if segments:
+        try:
+            md_path = RECORDINGS_DIR / f"recording-{rec_id}-transcript.md"
+            _write_transcript_md(
+                rec_id=rec_id,
+                label=label,
+                started_at=started_at,
+                duration=duration,
+                speakers=sidecar["speakers"],
+                segments=segments,
+                output_path=md_path,
+            )
+        except Exception as md_err:
+            logger.error("Failed to write transcript markdown for %s: %s", rec_id, md_err)
+
+    # ── Block 4: Brain entry (non-fatal, existing pattern) ──
+    try:
+        _create_brain_entry(rec_id, label, started_at, duration, transcript)
+    except Exception as brain_err:
+        logger.error("Failed to create brain entry for %s: %s", rec_id, brain_err)
+
+    # ── Always transition state out of "transcribing" ──
+    _state.finish_transcription()
+
+    logger.info("Recording complete: %s (%.1fs, %d segments, status=%s)",
+                rec_id, duration, len(segments), sidecar_status)
+
+    preview = transcript[:500]
+    if len(transcript) > 500:
+        preview += "..."
+
+    return StopResponse(
+        recording_id=rec_id,
+        duration_seconds=round(duration, 1),
+        segments_count=len(segments),
+        transcript_preview=preview,
+        status=sidecar_status,
+    )
 
 
 @router.get("/recordings", response_model=RecordingsListResponse)
@@ -300,12 +334,12 @@ async def delete_recording(recording_id: str, request: Request):
 
     deleted = []
 
-    # Delete WAV files
-    for suffix in ["-mic.wav", "-sys.wav"]:
-        wav = RECORDINGS_DIR / f"recording-{recording_id}{suffix}"
-        if wav.exists():
-            wav.unlink()
-            deleted.append(wav.name)
+    # Delete WAV files + transcript markdown
+    for suffix in ["-mic.wav", "-sys.wav", "-transcript.md"]:
+        f = RECORDINGS_DIR / f"recording-{recording_id}{suffix}"
+        if f.exists():
+            f.unlink()
+            deleted.append(f.name)
 
     # Delete sidecar
     sidecar.unlink()
@@ -339,6 +373,63 @@ async def recorder_reset(request: Request):
     _state.reset()
     logger.info("Recorder reset to idle")
     return ResetResponse()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# TRANSCRIPT MARKDOWN
+# ═══════════════════════════════════════════════════════════════════════
+
+def _format_timestamp(seconds: float) -> str:
+    """Format seconds as M:SS (e.g., 65.3 → '1:05')."""
+    m, s = divmod(int(seconds), 60)
+    return f"{m}:{s:02d}"
+
+
+def _format_duration(seconds: float) -> str:
+    """Format duration as human-readable (e.g., '2m 15s')."""
+    m, s = divmod(int(seconds), 60)
+    if m > 0:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
+def _write_transcript_md(
+    rec_id: str,
+    label: Optional[str],
+    started_at: Optional[datetime],
+    duration: float,
+    speakers: dict,
+    segments: list,
+    output_path: Path,
+) -> None:
+    """Write a standalone markdown transcript file."""
+    title = label or f"Meeting {rec_id}"
+    date_str = started_at.strftime("%Y-%m-%d %H:%M UTC") if started_at else "Unknown"
+    duration_str = _format_duration(duration)
+
+    # Collect unique participant names from speakers dict
+    participants = sorted(set(speakers.values()))
+
+    lines = [
+        f"# {title}",
+        "",
+        f"**Date:** {date_str}",
+        f"**Duration:** {duration_str}",
+        f"**Participants:** {', '.join(participants)}",
+        "",
+        "---",
+        "",
+    ]
+
+    for seg in segments:
+        speaker = seg.get("speaker", "Unknown") if isinstance(seg, dict) else getattr(seg, "speaker", "Unknown")
+        start = seg.get("start", 0) if isinstance(seg, dict) else getattr(seg, "start", 0)
+        text = seg.get("text", "") if isinstance(seg, dict) else getattr(seg, "text", "")
+        lines.append(f"**{speaker}** [{_format_timestamp(start)}]")
+        lines.append(text.strip())
+        lines.append("")
+
+    output_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -2,7 +2,7 @@
  * standards-library.js — Compliance standards library viewer
  */
 import { API, escapeHtml, showStatus } from './app.js';
-import { initAccessibleTabs } from './a11y.js';
+
 
 let standardsLibraryModules = [];
 let selectedModuleId = null;
@@ -155,18 +155,6 @@ function updateStandardsLibraryCount() {
     if (countEl) countEl.textContent = `${standardsLibraryModules.length} modules (${activeCount} active)`;
 }
 
-export function switchStandardsLibraryTab(tab) {
-    document.querySelectorAll('.sl-tab-btn').forEach(btn => {
-        const isTarget = btn.dataset.tab === tab;
-        btn.classList.toggle('active', isTarget);
-        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
-        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
-    });
-    document.querySelectorAll('.sl-tab-panel').forEach(panel => panel.style.display = 'none');
-    document.getElementById(`sl-${tab}-panel`).style.display = 'block';
-    if (tab === 'references' && !referencesData) loadStandardsReferences();
-}
-
 async function loadStandardsReferences() {
     try {
         const res = await fetch(`${API}/api/standards/references`);
@@ -215,12 +203,11 @@ export function initStandardsLibraryEvents() {
     const win = document.getElementById('standards-library-window');
     if (!win) return;
 
-    // Accessible tabs — keyboard nav + ARIA state sync
-    const tablist = document.getElementById('sl-tablist');
-    if (tablist) {
-        initAccessibleTabs(tablist, {
-            tabSelector: '[role="tab"]',
-            onActivate(tab) { switchStandardsLibraryTab(tab.dataset.tab); }
+    const tabs = win.querySelector('ihim-tabs');
+    if (tabs) {
+        tabs.addEventListener('tab:change', (e) => {
+            const tabName = e.detail.tab?.dataset?.tab;
+            if (tabName === 'references' && !referencesData) loadStandardsReferences();
         });
     }
 

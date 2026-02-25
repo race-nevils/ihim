@@ -2,7 +2,7 @@
  * terminal-manager.js — Mission Control: xterm.js terminals + Agent Workshop
  */
 import { API, escapeHtml, showStatus } from './app.js';
-import { initAccessibleTabs } from './a11y.js';
+
 
 // =====================
 // Terminal Manager
@@ -212,16 +212,6 @@ export function closeMCWindow() { document.getElementById('mc-window').close(); 
 let savedAgents = [];
 let editingAgentId = null;
 
-export function switchMCSection(section) {
-    document.querySelectorAll('.mc-tab-btn').forEach(btn => {
-        const isTarget = btn.dataset.section === section;
-        btn.classList.toggle('active', isTarget);
-        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
-        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
-    });
-    document.querySelectorAll('.mc-section-panel').forEach(panel => panel.classList.toggle('active', panel.id === `mc-section-${section}`));
-}
-
 function newAgent() { editingAgentId = null; clearAgentForm(); }
 
 function clearAgentForm() {
@@ -322,14 +312,6 @@ export function initMCEvents() {
     const mcWindow = document.getElementById('mc-window');
     if (!mcWindow) return;
 
-    const tablist = document.getElementById('mc-tablist');
-    if (tablist) {
-        initAccessibleTabs(tablist, {
-            tabSelector: '[role="tab"]',
-            onActivate(tab) { switchMCSection(tab.dataset.section); }
-        });
-    }
-
     // Terminal tab and pane event delegation
     mcWindow.addEventListener('click', (e) => {
         // Tab activation
@@ -338,9 +320,6 @@ export function initMCEvents() {
         // Tab close
         const closeBtn = e.target.closest('[data-close-tab]');
         if (closeBtn) { e.stopPropagation(); terminalManager.closeTab(closeBtn.dataset.closeTab); return; }
-        // MC section tabs
-        const sectionBtn = e.target.closest('.mc-tab-btn');
-        if (sectionBtn?.dataset.section) { switchMCSection(sectionBtn.dataset.section); return; }
         // Agent cards
         const agentCard = e.target.closest('[data-agent-id]');
         if (agentCard) { loadAgentToForm(agentCard.dataset.agentId); return; }

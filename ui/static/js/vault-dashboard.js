@@ -1,7 +1,7 @@
 /**
  * vault-dashboard.js — Vault (tasks, projects, documents) + Workspaces viewer
  */
-import { initAccessibleTabs } from './a11y.js';
+
 
 // =====================
 // Vault Manager
@@ -287,21 +287,6 @@ export function toggleVaultWindow() {
     else openVaultWindow();
 }
 
-export function switchVaultTab(tab) {
-    document.querySelectorAll('.vault-tab-btn').forEach(btn => {
-        const isTarget = btn.dataset.tab === tab;
-        btn.classList.toggle('active', isTarget);
-        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
-        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
-    });
-    document.querySelectorAll('.vault-tab-content').forEach(content => {
-        content.style.display = content.id === `vault-tab-${tab}` ? 'block' : 'none';
-    });
-    if (tab === 'tasks') vaultManager.loadTasks();
-    else if (tab === 'projects') vaultManager.loadProjects();
-    else if (tab === 'documents') { vaultManager.docsPage = 0; vaultManager.loadDocuments(); }
-}
-
 export async function openWorkspacesWindow() {
     const win = document.getElementById('workspaces-window');
     if (!win) return;
@@ -325,32 +310,34 @@ export function toggleWorkspacesWindow() {
 
 // Event delegation for vault interactions
 export function initVaultEvents() {
-    const tablist = document.getElementById('vault-tablist');
-    if (tablist) {
-        initAccessibleTabs(tablist, {
-            tabSelector: '[role="tab"]',
-            onActivate(tab) { switchVaultTab(tab.dataset.tab); }
+    const vaultWin = document.getElementById('vault-window');
+    if (!vaultWin) return;
+
+    const tabs = vaultWin.querySelector('ihim-tabs');
+    if (tabs) {
+        tabs.addEventListener('tab:change', (e) => {
+            const tabName = e.detail.tab?.dataset?.tab;
+            if (tabName === 'tasks') vaultManager.loadTasks();
+            else if (tabName === 'projects') vaultManager.loadProjects();
+            else if (tabName === 'documents') { vaultManager.docsPage = 0; vaultManager.loadDocuments(); }
         });
     }
 
-    const vaultWin = document.getElementById('vault-window');
-    if (vaultWin) {
-        vaultWin.addEventListener('click', (e) => {
-            const toggle = e.target.closest('[data-vault-toggle]');
-            if (toggle) { vaultManager.toggle(toggle.dataset.vaultToggle); return; }
-            const doc = e.target.closest('[data-vault-doc]');
-            if (doc) { vaultManager.toggleExpand(doc.dataset.vaultDoc); return; }
-            const page = e.target.closest('[data-vault-page]');
-            if (page) {
-                if (page.dataset.vaultPage === 'prev') vaultManager.docsPage--;
-                else vaultManager.docsPage++;
-                vaultManager.loadDocuments();
-            }
-        });
-        vaultWin.addEventListener('change', (e) => {
-            if (e.target.id === 'vault-doc-category' || e.target.id === 'vault-doc-sort') {
-                vaultManager.loadDocuments();
-            }
-        });
-    }
+    vaultWin.addEventListener('click', (e) => {
+        const toggle = e.target.closest('[data-vault-toggle]');
+        if (toggle) { vaultManager.toggle(toggle.dataset.vaultToggle); return; }
+        const doc = e.target.closest('[data-vault-doc]');
+        if (doc) { vaultManager.toggleExpand(doc.dataset.vaultDoc); return; }
+        const page = e.target.closest('[data-vault-page]');
+        if (page) {
+            if (page.dataset.vaultPage === 'prev') vaultManager.docsPage--;
+            else vaultManager.docsPage++;
+            vaultManager.loadDocuments();
+        }
+    });
+    vaultWin.addEventListener('change', (e) => {
+        if (e.target.id === 'vault-doc-category' || e.target.id === 'vault-doc-sort') {
+            vaultManager.loadDocuments();
+        }
+    });
 }

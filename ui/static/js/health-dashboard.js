@@ -2,7 +2,7 @@
  * health-dashboard.js — Health & wellness dashboard (workouts, nutrition, glossary)
  */
 import { API, escapeHtml } from './app.js';
-import { initAccessibleTabs } from './a11y.js';
+
 
 let workoutsData = null;
 let nutritionData = null;
@@ -20,19 +20,6 @@ export async function openHealthWindow() {
 export function closeHealthWindow() {
     const win = document.getElementById('health-window');
     if (win) win.close();
-}
-
-export function switchHealthTab(tab) {
-    document.querySelectorAll('.health-tab-btn').forEach(btn => {
-        const isTarget = btn.dataset.tab === tab;
-        btn.classList.toggle('active', isTarget);
-        btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
-        btn.setAttribute('tabindex', isTarget ? '0' : '-1');
-    });
-    document.querySelectorAll('.health-tab-content').forEach(content => {
-        content.style.display = content.id === `health-tab-${tab}` ? 'block' : 'none';
-    });
-    if (tab === 'glossary' && !glossaryData) loadGlossary();
 }
 
 async function loadWorkouts() {
@@ -163,11 +150,11 @@ export function initHealthEvents() {
     const win = document.getElementById('health-window');
     if (!win) return;
 
-    const tablist = document.getElementById('health-tablist');
-    if (tablist) {
-        initAccessibleTabs(tablist, {
-            tabSelector: '[role="tab"]',
-            onActivate(tab) { switchHealthTab(tab.dataset.tab); }
+    const tabs = win.querySelector('ihim-tabs');
+    if (tabs) {
+        tabs.addEventListener('tab:change', (e) => {
+            const tabName = e.detail.tab?.dataset?.tab;
+            if (tabName === 'glossary' && !glossaryData) loadGlossary();
         });
     }
 

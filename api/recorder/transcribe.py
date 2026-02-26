@@ -1,15 +1,56 @@
 """faster-whisper integration + transcript merging.
 
-Lazy-loads the model on first use (~74MB for 'base'). Transcribes each
-channel independently with a speaker label, then merges chronologically.
+Lazy-loads the model on first use. Transcribes each channel independently
+with a speaker label, then merges chronologically. Uses GPU (CUDA) when
+available with automatic CPU fallback if VRAM is insufficient.
 """
 
+import os
+import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Optional
 
+# Register NVIDIA CUDA DLL directories so ctranslate2 can find cuBLAS/cuDNN.
+# The nvidia-cublas-cu12 pip package installs DLLs into subdirectories that
+# aren't on Windows' default DLL search path. We prepend to PATH because
+# ctranslate2's C++ runtime uses LoadLibrary which only searches PATH,
+# not directories added via os.add_dll_directory().
+if sys.platform == "win32":
+    _site_packages = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+    if _site_packages.exists():
+        _nvidia_bins = [str(d) for d in _site_packages.glob("*/bin")]
+        if _nvidia_bins:
+            os.environ["PATH"] = os.pathsep.join(_nvidia_bins) + os.pathsep + os.environ.get("PATH", "")
+
 _model_cache: dict = {}
 _model_lock = threading.Lock()
+
+# Minimum free VRAM (MB) required to load Whisper on GPU.
+# "small" model needs ~2GB; leave headroom for CUDA overhead.
+_MIN_VRAM_MB = 2500
+
+
+def _pick_device() -> tuple[str, str]:
+    """Choose device and compute type based on available VRAM.
+
+    Returns ("cuda", "float16") if enough VRAM is free,
+    otherwise ("cpu", "int8") as a safe fallback.
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.free",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        free_mb = int(result.stdout.strip())
+        if free_mb >= _MIN_VRAM_MB:
+            return ("cuda", "float16")
+        print(f"[recorder] Low VRAM ({free_mb}MB free), falling back to CPU")
+    except Exception:
+        print("[recorder] Could not query GPU, falling back to CPU")
+    return ("cpu", "int8")
 
 
 def _get_model(model_size: str = "base"):
@@ -23,10 +64,11 @@ def _get_model(model_size: str = "base"):
 
         from faster_whisper import WhisperModel
 
-        print(f"[recorder] Loading faster-whisper model '{model_size}'...")
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        device, compute_type = _pick_device()
+        print(f"[recorder] Loading faster-whisper '{model_size}' on {device} ({compute_type})...")
+        model = WhisperModel(model_size, device=device, compute_type=compute_type)
         _model_cache[model_size] = model
-        print(f"[recorder] Model '{model_size}' loaded.")
+        print(f"[recorder] Model '{model_size}' loaded on {device}.")
         return model
 
 

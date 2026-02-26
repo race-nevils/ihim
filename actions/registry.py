@@ -113,6 +113,13 @@ ACTIONS = {
         "category": "tools",
         "has_modal": True,
     },
+    "stt": {
+        "name": "STT Dictation",
+        "description": "Hold-to-dictate with Whisper + LLM cleanup — text appears where you type",
+        "icon": "mic",
+        "category": "tools",
+        "has_modal": True,
+    },
     # System actions
     "restart_server": {
         "name": "Restart Server",
@@ -184,6 +191,10 @@ def run_action(action_id: str) -> dict:
     elif action_id == "meeting_recorder":
         # Handled by UI (modal for meeting recorder)
         return {"success": True, "message": "Opening Meeting Recorder..."}
+
+    elif action_id == "stt":
+        # Handled by UI (modal for STT dictation)
+        return {"success": True, "message": "Opening STT Dictation..."}
 
     elif action_id == "restart_server":
         # Handled by frontend - calls /api/server/restart directly

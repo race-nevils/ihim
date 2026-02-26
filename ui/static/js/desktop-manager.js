@@ -200,6 +200,10 @@ export async function runAction(actionId, btn = null) {
         const { toggleRecorderWindow } = await import('./recorder.js');
         toggleRecorderWindow(); return;
     }
+    if (actionId === 'stt') {
+        const { toggleSTTWindow } = await import('./stt.js');
+        toggleSTTWindow(); return;
+    }
 
     if (btn) btn.classList.add('loading');
     showStatus('Running...', 'pending');

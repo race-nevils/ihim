@@ -28,6 +28,7 @@ class RecorderState:
                     inst._started_at: Optional[datetime] = None
                     inst._mic_device: Optional[str] = None
                     inst._sys_device: Optional[str] = None
+                    inst._model_size: str = "small"
                     inst._error: Optional[str] = None
                     inst._state_lock = threading.Lock()
                     cls._instance = inst
@@ -64,6 +65,10 @@ class RecorderState:
         return self._sys_device
 
     @property
+    def model_size(self) -> str:
+        return self._model_size
+
+    @property
     def error(self) -> Optional[str]:
         return self._error
 
@@ -82,6 +87,7 @@ class RecorderState:
         mic_device: str,
         sys_device: str,
         participant_name: Optional[str] = None,
+        model_size: str = "small",
     ) -> None:
         with self._state_lock:
             if self._status not in (RecorderStatus.idle,):
@@ -93,6 +99,7 @@ class RecorderState:
             self._started_at = datetime.now(timezone.utc)
             self._mic_device = mic_device
             self._sys_device = sys_device
+            self._model_size = model_size
             self._error = None
 
     def stop_recording(self) -> None:
@@ -112,6 +119,7 @@ class RecorderState:
             self._started_at = None
             self._mic_device = None
             self._sys_device = None
+            self._model_size = "small"
 
     def set_error(self, message: str) -> None:
         with self._state_lock:
@@ -127,6 +135,7 @@ class RecorderState:
             self._started_at = None
             self._mic_device = None
             self._sys_device = None
+            self._model_size = "small"
             self._error = None
 
     # ── Snapshot ──────────────────────────────────────────────────────

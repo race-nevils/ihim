@@ -53,7 +53,7 @@ def _pick_device() -> tuple[str, str]:
     return ("cpu", "int8")
 
 
-def _get_model(model_size: str = "base"):
+def _get_model(model_size: str = "small"):
     """Lazy-load and cache a faster-whisper model."""
     if model_size in _model_cache:
         return _model_cache[model_size]
@@ -75,23 +75,36 @@ def _get_model(model_size: str = "base"):
 def transcribe_channel(
     wav_path: Path,
     speaker_label: str,
-    model_size: str = "base",
+    model_size: str = "small",
+    initial_prompt: Optional[str] = None,
 ) -> list[dict]:
     """Transcribe a single WAV file, returning labeled segments.
+
+    Args:
+        wav_path: Path to mono 16kHz WAV file.
+        speaker_label: Label for the speaker in output segments.
+        model_size: Whisper model size (tiny/base/small/medium).
+        initial_prompt: Optional text to prime the decoder (vocabulary terms).
 
     Returns list of:
         {"speaker": str, "start": float, "end": float, "text": str, "confidence": float}
     """
     model = _get_model(model_size)
 
-    segments_iter, info = model.transcribe(
-        str(wav_path),
+    transcribe_kwargs = dict(
         beam_size=5,
         vad_filter=True,
         vad_parameters=dict(
             min_silence_duration_ms=500,
             speech_pad_ms=200,
         ),
+    )
+    if initial_prompt:
+        transcribe_kwargs["initial_prompt"] = initial_prompt
+
+    segments_iter, info = model.transcribe(
+        str(wav_path),
+        **transcribe_kwargs,
     )
 
     results = []
@@ -140,7 +153,7 @@ def transcribe_dual(
     sys_wav: Path,
     mic_label: str = "the operator",
     sys_label: str = "Other",
-    model_size: str = "base",
+    model_size: str = "small",
 ) -> dict:
     """Full transcription pipeline: both channels → merge → format.
 

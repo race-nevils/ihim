@@ -110,6 +110,7 @@ async def recorder_start(body: StartRequest, request: Request):
             mic_device=capture.mic_device_name,
             sys_device=capture.sys_device_name,
             participant_name=body.participant_name,
+            model_size=body.model_size.value,
         )
         with _capture_lock:
             _capture = capture
@@ -182,7 +183,7 @@ async def recorder_stop(request: Request):
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
-            lambda: transcribe_dual(mic_path, sys_path, model_size="small"),
+            lambda: transcribe_dual(mic_path, sys_path, model_size=_state.model_size),
         )
         segments = result["segments"]
         transcript = result["transcript"]
@@ -205,7 +206,7 @@ async def recorder_stop(request: Request):
         "ended_at": ended_at.isoformat(),
         "duration_seconds": round(duration, 1),
         "config": {
-            "model_size": "small",
+            "model_size": _state.model_size,
             "sample_rate": 16000,
             "mic_device": mic_device,
             "sys_device": sys_device,

@@ -302,6 +302,7 @@ class DualStreamCapture:
                 dtype="float32",
                 blocksize=block_size,
                 callback=callback,
+                extra_settings=sd.WasapiSettings(exclusive=False),
             ):
                 self._stop_event.wait()
         except Exception as e:

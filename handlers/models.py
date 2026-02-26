@@ -8,7 +8,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from handlers.utils import CATEGORIES
+from handlers.category_registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +43,13 @@ class ClassificationResult(BaseModel):
     @field_validator("category")
     @classmethod
     def coerce_invalid_category(cls, v: str) -> str:
-        if v not in CATEGORIES:
+        registry = get_registry()
+        if not registry.is_valid(v):
             logger.warning(
-                "Invalid category %r coerced to Misc (not in %s)", v, CATEGORIES
+                "Invalid category %r coerced to %s (not in registry)",
+                v, registry.catch_all(),
             )
-            return "Misc"
+            return registry.catch_all()
         return v
 
     @model_validator(mode="before")

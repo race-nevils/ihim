@@ -34,7 +34,6 @@ from data.jsonld import (
     update_jsonld_content
 )
 from handlers.utils import (
-    CATEGORIES,
     CONFIDENCE_THRESHOLD,
     slugify,
     sanitize_title,

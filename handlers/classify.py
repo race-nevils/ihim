@@ -10,7 +10,8 @@ from typing import Optional
 from handlers.tracing import observe, langfuse_context
 
 from adapters.ollama import OllamaAdapter
-from handlers.utils import get_classify_prompt, extract_title, CATEGORIES
+from handlers.utils import get_classify_prompt, extract_title
+from handlers.category_registry import get_registry
 from handlers.fallback import extract_date, validate_summary, detect_calendar_by_keywords
 
 logger = logging.getLogger(__name__)
@@ -203,7 +204,7 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
             # Check if it's a valid category (case-insensitive)
             for hint in category_hints:
                 matched_cat = next(
-                    (c for c in CATEGORIES if c.lower() == hint.lower()),
+                    (c for c in get_registry().all_names() if c.lower() == hint.lower()),
                     None
                 )
                 if matched_cat:

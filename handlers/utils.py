@@ -8,95 +8,25 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-# Valid categories (Misc is catch-all for low-confidence items)
-# Based on MECE principle: Mutually Exclusive, Collectively Exhaustive
-CATEGORIES = ["Tasks", "Projects", "People", "Ideas", "Reference", "Misc"]
-
 # Confidence threshold for routing to specific category vs Misc
 # Higher = more strict, more goes to Misc when uncertain
 CONFIDENCE_THRESHOLD = 0.8
 
-# LLM classification prompt - Decision tree for mutual exclusivity
-# Tasks = dated/calendar items, Projects = undated action items
-CLASSIFY_PROMPT = """Classify this note into exactly ONE category by following this decision tree IN ORDER:
-
-STEP 1: Is this about a SPECIFIC NAMED PERSON (check BOTH the title AND content - actual name like "Sarah", "Dr. Smith", relationship like "Mom", "Dad", contact info, conversation with someone)?
-  Note: Generic terms like "users", "customers", "clients", "people" are NOT specific people.
-  → YES: Category = "People"
-  → NO: Continue to Step 2
-
-STEP 2: Does it have a SPECIFIC DATE or TIME for an action, appointment, or deadline?
-  → YES: Category = "Tasks"
-  → NO: Continue to Step 3
-
-STEP 3: Is there an ACTION to complete but NO specific date? Look for:
-  - Action verbs: clean, call, buy, fix, build, send, check, update, add, remove, set up
-  - Complaint/bug patterns: "isn't working", "broken", "doesn't work", "not functioning", "failed"
-  - Intent/desire patterns: "I want", "I need", "should be", "needs to be", "we need to"
-  → YES to any: Category = "Projects"
-  → NO: Continue to Step 4
-
-STEP 4: Is this a MULTI-STEP initiative or thing being built (no specific deadline)?
-  → YES: Category = "Projects"
-  → NO: Continue to Step 5
-
-STEP 5: Is this EXPLORATION or BRAINSTORMING? (what if, maybe, wondering, idea, concept, no commitment)
-  → YES: Category = "Ideas"
-  → NO: Continue to Step 6
-
-STEP 6: Is this STATIC INFORMATION to remember? (facts, addresses, how-to, reference, documentation)
-  → YES: Category = "Reference"
-  → NO: Category = "Ideas" (default for unclear content)
-
-KEY DISTINCTION - Tasks vs Projects:
-- Tasks = has a specific date/time, goes on calendar, displayed chronologically
-- Projects = no specific date, "anytime" items that just need to get done eventually
-
-CALENDAR DETECTION (check independently of category):
-Does this note mention a SPECIFIC DATE or TIME for an event, appointment, meeting, or deadline?
-  → YES: Set "calendar" with extracted date info
-  → NO: Set "calendar" to null
-
-Calendar rules:
-- Date + time mentioned → all_day = false, include time
-- Date only, no time → all_day = true, time = null
-- No specific date → calendar = null
-- Use ISO format for date: YYYY-MM-DD
-- Use 24h format for time: HH:MM
-- If a time RANGE is given (e.g., "8am-10am", "8:30am to 10:30am"), set both "time" (start) and "end_time" (end)
-- If only start time, set "end_time" to null
-- Day name alone ("Friday") → resolve to the UPCOMING occurrence from today's date
-- "next Friday" → the Friday of NEXT week (always 7+ days away)
-- "this Friday" → the Friday of THIS week
-
-EXAMPLES:
-- "Dentist appointment February 2nd" → Tasks, calendar: {{"is_event": true, "title": "Dentist Appointment", "date": "2026-02-02", "time": null, "all_day": true}}
-- "Meeting with Sarah at 3pm on Feb 4th" → People, calendar: {{"is_event": true, "title": "Meeting with Sarah", "date": "2026-02-04", "time": "15:00", "all_day": false}}
-- "Tax documents due by Feb 16th" → Tasks, calendar: {{"is_event": true, "title": "Tax Documents Due", "date": "2026-02-16", "time": null, "all_day": true}}
-- "Need to clean oil from prop" → Projects, calendar: null (action but no date = Project)
-- "Build a waitlist signup feature" → Projects, calendar: null (multi-step, no deadline)
-- "The widget isn't working, I want it on the main dashboard" → Projects, calendar: null (complaint + intent = action item, no date)
-- "What if we used Redis?" → Ideas, calendar: null (no date, no action)
-- "Sarah's phone number is 555-1234" → People, calendar: null (no date)
-
-Return ONLY valid JSON:
-{{"category": "<Tasks|People|Projects|Ideas|Reference>", "confidence": <0.0-1.0>, "summary": "<1 sentence describing the note>", "calendar": null | {{"is_event": true, "title": "<short event title>", "date": "<YYYY-MM-DD>", "time": "<HH:MM>" | null, "end_time": "<HH:MM>" | null, "all_day": <true|false>}}}}
-
-Today's date: {{today}}
-
-Note: {content}
-
-JSON response:"""
-
 
 def get_classify_prompt(content: str, title: str = "") -> str:
-    """Format the classification prompt with today's date and title injected."""
+    """Format the classification prompt with today's date and title injected.
+
+    The prompt template is generated from categories.json via the registry.
+    """
+    from handlers.category_registry import get_registry
+
     today = date.today()
     today_str = f"{today.isoformat()} ({today.strftime('%A')})"
-    prompt = CLASSIFY_PROMPT.replace("{{today}}", today_str)
+    prompt = get_registry().generate_classify_prompt()
+    prompt = prompt.replace("{{today}}", today_str)
     if title:
-        return prompt.format(content=f"Title: {title}\n\n{content}")
-    return prompt.format(content=content)
+        return prompt.replace("{content}", f"Title: {title}\n\n{content}")
+    return prompt.replace("{content}", content)
 
 
 def slugify(text: str) -> str:

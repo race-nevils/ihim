@@ -1,4 +1,4 @@
-"""Embedding adapter for nomic-embed-text via Ollama."""
+"""Embedding adapter for Qwen3-Embedding via Ollama."""
 import logging
 import os
 import struct
@@ -9,8 +9,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # Model config
-EMBED_MODEL = "nomic-embed-text"
-EMBED_DIM = 768
+EMBED_MODEL = "qwen3-embedding:0.6b"
+EMBED_DIM = 1024
 
 
 class EmbeddingAdapter:
@@ -41,15 +41,15 @@ class EmbeddingAdapter:
         """Generate embedding vector for text.
 
         Args:
-            text: Input text to embed (nomic-embed-text supports up to 8192 tokens)
+            text: Input text to embed (Qwen3-Embedding supports up to 32K tokens)
 
         Returns:
-            List of 768 floats, or None on failure (non-blocking)
+            List of 1024 floats, or None on failure (non-blocking)
         """
         try:
             response = self.client.post(
                 f"{self.base_url}/api/embeddings",
-                json={"model": EMBED_MODEL, "prompt": text}
+                json={"model": EMBED_MODEL, "prompt": text, "keep_alive": "0"}
             )
             response.raise_for_status()
             embedding = response.json().get("embedding")

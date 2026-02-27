@@ -77,6 +77,11 @@ def transcribe_channel(
     speaker_label: str,
     model_size: str = "small",
     initial_prompt: Optional[str] = None,
+    condition_on_previous_text: bool = True,
+    compression_ratio_threshold: float = 2.4,
+    no_speech_threshold: float = 0.6,
+    hallucination_silence_threshold: Optional[float] = None,
+    temperature: float = 0.0,
 ) -> list[dict]:
     """Transcribe a single WAV file, returning labeled segments.
 
@@ -85,6 +90,14 @@ def transcribe_channel(
         speaker_label: Label for the speaker in output segments.
         model_size: Whisper model size (tiny/base/small/medium).
         initial_prompt: Optional text to prime the decoder (vocabulary terms).
+        condition_on_previous_text: Feed previous output as prompt for next window.
+            Set False for short dictation to prevent hallucination loops.
+        compression_ratio_threshold: Skip segments with compression ratio above
+            this value (catches repetitive hallucinated text). Default 2.4.
+        no_speech_threshold: Probability threshold for silence detection.
+        hallucination_silence_threshold: faster-whisper exclusive — skip silent
+            sections longer than this (seconds). None to disable.
+        temperature: Sampling temperature. 0.0 for greedy decoding.
 
     Returns list of:
         {"speaker": str, "start": float, "end": float, "text": str, "confidence": float}
@@ -98,9 +111,15 @@ def transcribe_channel(
             min_silence_duration_ms=500,
             speech_pad_ms=200,
         ),
+        condition_on_previous_text=condition_on_previous_text,
+        compression_ratio_threshold=compression_ratio_threshold,
+        no_speech_threshold=no_speech_threshold,
+        temperature=temperature,
     )
     if initial_prompt:
         transcribe_kwargs["initial_prompt"] = initial_prompt
+    if hallucination_silence_threshold is not None:
+        transcribe_kwargs["hallucination_silence_threshold"] = hallucination_silence_threshold
 
     segments_iter, info = model.transcribe(
         str(wav_path),

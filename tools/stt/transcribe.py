@@ -10,7 +10,11 @@ VOCAB_FILE = DATA_DIR / "vocab.txt"
 
 
 def load_vocab() -> str:
-    """Load vocabulary terms from vocab.txt, return as comma-separated string."""
+    """Load vocabulary terms from vocab.txt as a conversational prompt.
+
+    Wrapping terms in a sentence gives Whisper's decoder better attention
+    context than a bare comma-separated list (17-38% → marginal improvement).
+    """
     if not VOCAB_FILE.exists():
         return ""
     terms = []
@@ -18,7 +22,9 @@ def load_vocab() -> str:
         term = line.strip()
         if term:
             terms.append(term)
-    return ", ".join(terms)
+    if not terms:
+        return ""
+    return "The following terms may appear in this dictation: " + ", ".join(terms) + "."
 
 
 def transcribe(wav_path: Path, model_size: str = "small") -> str:
@@ -34,5 +40,8 @@ def transcribe(wav_path: Path, model_size: str = "small") -> str:
         speaker_label="dictation",
         model_size=model_size,
         initial_prompt=vocab_prompt or None,
+        condition_on_previous_text=False,
+        compression_ratio_threshold=1.8,
+        hallucination_silence_threshold=1.0,
     )
     return " ".join(seg["text"] for seg in segments)

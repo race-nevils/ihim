@@ -97,7 +97,7 @@ class STTEngine:
                 self._status = "listening"
                 return
 
-            # 3. LLM cleanup
+            # 3. Deterministic cleanup (no LLM, no VRAM)
             from tools.stt.cleanup import cleanup_transcript
             cleaned_text = cleanup_transcript(raw_text)
 
@@ -112,6 +112,7 @@ class STTEngine:
                 raw_transcript=raw_text,
                 cleaned_text=cleaned_text,
                 latency_ms=latency_ms,
+                cleanup_model="deterministic",
             )
 
             self._last_result = record
@@ -159,6 +160,7 @@ class STTEngine:
                 raw_transcript=raw_text,
                 cleaned_text=cleaned_text,
                 latency_ms=latency_ms,
+                cleanup_model="deterministic",
             )
 
             self._last_result = record

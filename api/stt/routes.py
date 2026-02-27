@@ -179,8 +179,10 @@ async def stt_status():
     from api.recorder.transcribe import _model_cache
 
     engine = get_engine()
+    last_id = engine.last_result["id"] if engine.last_result else None
     return StatusResponse(
         active=engine._listener is not None and engine._listener.is_running,
         status=engine.status,
         model_loaded="small" in _model_cache,
+        last_result_id=last_id,
     )

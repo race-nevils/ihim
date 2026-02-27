@@ -1,10 +1,12 @@
 /**
- * stt.js — Dictation panel (Dictate, History, Dictionary tabs)
+ * stt.js — Dictation panel (History, Dictionary tabs)
  * Uses <ihim-panel> for window lifecycle and <ihim-tabs> for tab management.
+ * Engine auto-starts on server boot; hotkey-driven workflow (no Start/Stop UI).
  */
 import { API, escapeHtml } from './app.js';
 
 let statusPollInterval = null;
+let lastDictationId = null;
 
 // =====================
 // Window lifecycle
@@ -16,6 +18,7 @@ export async function openSTTWindow() {
     win.open();
     if (typeof lucide !== 'undefined') lucide.createIcons();
     startStatusPolling();
+    loadHistory();  // History is the default tab — load immediately
 }
 
 export function closeSTTWindow() {
@@ -56,7 +59,6 @@ async function pollStatus() {
 
 function renderStatus(data) {
     const badge = document.getElementById('stt-status-badge');
-    const indicator = document.getElementById('stt-status-indicator');
     if (!badge) return;
 
     badge.classList.remove('status-idle', 'status-listening', 'status-recording', 'status-processing');
@@ -65,53 +67,25 @@ function renderStatus(data) {
         case 'listening':
             badge.textContent = 'LISTENING';
             badge.classList.add('status-listening');
-            if (indicator) indicator.textContent = 'Hold Right Ctrl to dictate...';
             break;
         case 'recording':
             badge.textContent = 'REC';
             badge.classList.add('status-recording');
-            if (indicator) indicator.textContent = 'Recording... release to process';
             break;
         case 'processing':
             badge.textContent = 'PROCESSING';
             badge.classList.add('status-processing');
-            if (indicator) indicator.textContent = 'Transcribing and cleaning up...';
             break;
         default:
             badge.textContent = 'IDLE';
             badge.classList.add('status-idle');
-            if (indicator) indicator.textContent = 'Click Start to begin listening';
             break;
     }
-}
 
-// =====================
-// Engine controls
-// =====================
-
-async function startEngine() {
-    try {
-        const res = await fetch(`${API}/api/stt/start`, { method: 'POST' });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-        pollStatus();
-    } catch (e) {
-        showSTTError(`Failed to start: ${e.message}`);
-    }
-}
-
-async function stopEngine() {
-    try {
-        const res = await fetch(`${API}/api/stt/stop`, { method: 'POST' });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-        pollStatus();
-    } catch (e) {
-        showSTTError(`Failed to stop: ${e.message}`);
+    // Auto-refresh history when a new dictation arrives
+    if (data.last_result_id && data.last_result_id !== lastDictationId) {
+        lastDictationId = data.last_result_id;
+        loadHistory();
     }
 }
 
@@ -355,11 +329,6 @@ export function initSTTEvents() {
 
     // Event delegation for all clicks within the panel
     win.addEventListener('click', (e) => {
-        // Start button
-        if (e.target.closest('#stt-start-btn')) { startEngine(); return; }
-        // Stop button
-        if (e.target.closest('#stt-stop-btn')) { stopEngine(); return; }
-
         // History actions
         const copyBtn = e.target.closest('.stt-copy-btn');
         if (copyBtn) { copyDictation(copyBtn.dataset.id); return; }

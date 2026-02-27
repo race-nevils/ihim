@@ -137,11 +137,60 @@ def list_audio_devices() -> dict:
 
 
 def _get_default_mic() -> dict:
-    """Return the default mic device info."""
+    """Return the default mic device info, preferring the WASAPI variant.
+
+    sd.default.device[0] may return an MME device.  Since _capture_mic()
+    passes WasapiSettings, we need the WASAPI version of the same hardware.
+    """
     sd = _get_sounddevice()
-    idx = sd.default.device[0]  # (input, output)
-    dev = sd.query_devices(idx)
-    return {"index": idx, "name": dev["name"], "sample_rate": dev["default_samplerate"]}
+    os_idx = sd.default.device[0]  # (input, output)
+    os_dev = sd.query_devices(os_idx)
+
+    # Find the WASAPI host-api index
+    hostapis = sd.query_hostapis()
+    wasapi_idx = next(
+        (i for i, h in enumerate(hostapis) if "WASAPI" in h["name"]), None
+    )
+
+    # If the OS default is already WASAPI, use it directly
+    if wasapi_idx is not None and os_dev["hostapi"] == wasapi_idx:
+        return {
+            "index": os_idx,
+            "name": os_dev["name"],
+            "sample_rate": os_dev["default_samplerate"],
+            "is_wasapi": True,
+        }
+
+    # Otherwise find the WASAPI device whose name matches the OS default
+    if wasapi_idx is not None:
+        os_name = os_dev["name"].lower()
+        devices = sd.query_devices()
+        for i, dev in enumerate(devices):
+            if (dev["hostapi"] == wasapi_idx
+                    and dev["max_input_channels"] > 0
+                    and "loopback" not in dev["name"].lower()
+                    and os_name in dev["name"].lower()):
+                logger.info(
+                    "Default mic remapped: MME #%d → WASAPI #%d (%s)",
+                    os_idx, i, dev["name"],
+                )
+                return {
+                    "index": i,
+                    "name": dev["name"],
+                    "sample_rate": dev["default_samplerate"],
+                    "is_wasapi": True,
+                }
+
+    # Fallback: use the OS default as-is (non-WASAPI)
+    logger.warning(
+        "No WASAPI variant found for default mic '%s' — using as-is", os_dev["name"]
+    )
+    return {
+        "index": os_idx,
+        "name": os_dev["name"],
+        "sample_rate": os_dev["default_samplerate"],
+        "is_wasapi": False,
+    }
 
 
 def _get_default_loopback() -> Optional[dict]:
@@ -203,10 +252,15 @@ class DualStreamCapture:
         if mic_device_index is not None:
             sd = _get_sounddevice()
             dev = sd.query_devices(mic_device_index)
+            hostapis = sd.query_hostapis()
+            wasapi_idx = next(
+                (i for i, h in enumerate(hostapis) if "WASAPI" in h["name"]), None
+            )
             self._mic_info = {
                 "index": mic_device_index,
                 "name": dev["name"],
                 "sample_rate": dev["default_samplerate"],
+                "is_wasapi": wasapi_idx is not None and dev["hostapi"] == wasapi_idx,
             }
         else:
             self._mic_info = _get_default_mic()
@@ -284,27 +338,35 @@ class DualStreamCapture:
     # ── Internal ──────────────────────────────────────────────────────
 
     def _capture_mic(self) -> None:
-        """Capture mic audio via sounddevice."""
+        """Capture mic audio via sounddevice (blocking read mode).
+
+        USB headsets (e.g. Corsair VIRTUOSO) hit PaError -9999 in callback
+        mode because PortAudio's callback path queries WDM-KS terminal
+        categories, which fails on certain USB audio descriptors.  Blocking
+        (read) mode bypasses that code path entirely.
+        """
         try:
             sd = _get_sounddevice()
             native_rate = int(self._mic_info["sample_rate"])
             block_size = int(native_rate * 0.5)  # 500ms blocks
 
-            def callback(indata, frames, time_info, status):
-                if status:
-                    logger.debug("mic status: %s", status)
-                self._mic_buffers.append(indata[:, 0].copy())
-
-            with sd.InputStream(
+            stream = sd.InputStream(
                 device=self._mic_info["index"],
                 samplerate=native_rate,
                 channels=1,
                 dtype="float32",
                 blocksize=block_size,
-                callback=callback,
-                extra_settings=sd.WasapiSettings(exclusive=False),
-            ):
-                self._stop_event.wait()
+            )
+            stream.start()
+            try:
+                while not self._stop_event.is_set():
+                    data, overflowed = stream.read(block_size)
+                    if overflowed:
+                        logger.debug("mic read overflow")
+                    self._mic_buffers.append(data[:, 0].copy())
+            finally:
+                stream.stop()
+                stream.close()
         except Exception as e:
             self._mic_error = str(e)
             logger.error("mic capture error: %s", e)

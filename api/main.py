@@ -143,6 +143,14 @@ async def lifespan(app):
         except Exception as e:
             print(f"Google Calendar: startup token check failed: {e}")
 
+    if STT_AVAILABLE:
+        try:
+            from tools.stt.engine import get_engine
+            get_engine().start_listening()
+            print("STT: hotkey listener auto-started")
+        except Exception as e:
+            print(f"STT: auto-start failed (non-fatal): {e}")
+
     yield
 
     # --- Shutdown ---
@@ -269,23 +277,49 @@ else:
 
 
 _index_html_path = UI_DIR / "index.html"
-_INDEX_HTML_RAW: bytes | None = _index_html_path.read_bytes() if _index_html_path.exists() else None
+
+
+def _build_import_map(boot_id: str) -> str:
+    """Generate an importmap that cache-busts ALL JS module imports.
+
+    Without this, only main.js gets ``?v=BOOT_ID``.  Sub-imports like
+    ``./stt.js`` use bare relative paths and Chrome aggressively caches
+    ES modules, ignoring no-cache headers on the module responses.
+    The importmap remaps every resolved URL to a versioned one.
+    """
+    js_dir = _static_dir / "js"
+    if not js_dir.exists():
+        return ""
+
+    imports = {}
+    for js_file in sorted(js_dir.rglob("*.js")):
+        rel_path = js_file.relative_to(_static_dir)
+        url_path = f"/static/{rel_path.as_posix()}"
+        imports[url_path] = f"{url_path}?v={boot_id}"
+
+    if not imports:
+        return ""
+
+    map_json = json.dumps({"imports": imports}, indent=2)
+    return f'<script type="importmap">\n{map_json}\n</script>'
 
 
 def _inject_boot_id(html_bytes: bytes) -> bytes:
-    """Replace __BOOT_ID__ placeholders and legacy ?v= params with current BOOT_ID."""
+    """Replace __BOOT_ID__ and __IMPORT_MAP__ placeholders with current values."""
     text = html_bytes.decode("utf-8")
+    text = text.replace("__IMPORT_MAP__", _build_import_map(BOOT_ID))
     text = text.replace("__BOOT_ID__", BOOT_ID)
     return text.encode("utf-8")
 
 
-# Pre-compute the versioned HTML at startup
-_INDEX_HTML: bytes | None = _inject_boot_id(_INDEX_HTML_RAW) if _INDEX_HTML_RAW else None
-
-
 def _static_fingerprint() -> str:
-    """Max mtime of all static files — changes when any file is edited on disk."""
+    """Max mtime of all UI files — changes when any file is edited on disk.
+
+    Scans both ``ui/static/`` (JS, CSS) and ``ui/index.html`` so the
+    auto-reload polling catches HTML-only changes too.
+    """
     max_mtime = 0.0
+    # Static assets (JS, CSS, images)
     if _static_dir.exists():
         for root, _dirs, files in os.walk(_static_dir):
             for f in files:
@@ -295,6 +329,14 @@ def _static_fingerprint() -> str:
                         max_mtime = mt
                 except OSError:
                     pass
+    # HTML template
+    if _index_html_path.exists():
+        try:
+            mt = os.path.getmtime(_index_html_path)
+            if mt > max_mtime:
+                max_mtime = mt
+        except OSError:
+            pass
     return str(int(max_mtime))
 
 

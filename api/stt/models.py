@@ -44,6 +44,7 @@ class StatusResponse(BaseModel):
     active: bool = Field(False, description="Whether the hotkey listener is active")
     status: str = Field("idle", description="Engine status: idle | listening | recording | processing")
     model_loaded: bool = Field(False, description="Whether the Whisper model is cached")
+    last_result_id: Optional[str] = Field(None, description="ID of the most recent dictation result")
 
 
 # ── Requests ──────────────────────────────────────────────────────────

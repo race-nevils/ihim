@@ -43,7 +43,8 @@ class OllamaAdapter:
         self,
         prompt: str,
         model: Optional[str] = None,
-        system: Optional[str] = None
+        system: Optional[str] = None,
+        keep_alive: Optional[str] = None,
     ) -> str:
         """Generate text response.
 
@@ -51,6 +52,7 @@ class OllamaAdapter:
             prompt: The user prompt
             model: Model name (defaults to FAST_MODEL)
             system: Optional system prompt
+            keep_alive: Ollama keep_alive duration (e.g. "0" to unload immediately)
 
         Returns:
             Generated text response
@@ -64,6 +66,8 @@ class OllamaAdapter:
         }
         if system:
             payload["system"] = system
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
 
         last_exc = None
         for attempt in range(3):

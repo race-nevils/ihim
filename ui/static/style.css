@@ -7363,21 +7363,6 @@ button:focus-visible {
     flex: 1;
 }
 
-/* Dictate tab */
-.stt-status-indicator {
-    text-align: center;
-    color: #a6adc8;
-    font-size: 14px;
-    padding: 24px 12px 16px;
-}
-
-.stt-controls {
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-    padding: 0 12px 12px;
-}
-
 .stt-btn {
     padding: 6px 16px;
     border: 1px solid rgba(108, 112, 134, 0.3);
@@ -7394,36 +7379,6 @@ button:focus-visible {
 .stt-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-}
-
-.stt-start-btn {
-    background: rgba(166, 227, 161, 0.15);
-    border-color: rgba(166, 227, 161, 0.3);
-    color: #a6e3a1;
-}
-.stt-start-btn:hover:not(:disabled) {
-    background: rgba(166, 227, 161, 0.25);
-}
-
-.stt-stop-btn {
-    background: rgba(243, 139, 168, 0.15);
-    border-color: rgba(243, 139, 168, 0.3);
-    color: #f38ba8;
-}
-
-.stt-hint {
-    text-align: center;
-    color: #585b70;
-    font-size: 11px;
-    padding: 4px 12px 12px;
-}
-.stt-hint kbd {
-    background: rgba(49, 50, 68, 0.8);
-    border: 1px solid rgba(108, 112, 134, 0.3);
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-size: 11px;
-    color: #a6adc8;
 }
 
 /* History tab */

@@ -636,26 +636,15 @@
         <ihim-tabs>
         <!-- Tabs -->
         <div class="stt-tabs" role="tablist" aria-label="STT Dictation">
-            <button class="stt-tab-btn active" data-tab="dictate" role="tab" id="stt-tab-dictate-btn" aria-selected="true" aria-controls="stt-tab-dictate" tabindex="0">Dictate</button>
-            <button class="stt-tab-btn" data-tab="history" role="tab" id="stt-tab-history-btn" aria-selected="false" aria-controls="stt-tab-history" tabindex="-1">History</button>
+            <button class="stt-tab-btn active" data-tab="history" role="tab" id="stt-tab-history-btn" aria-selected="true" aria-controls="stt-tab-history" tabindex="0">History</button>
             <button class="stt-tab-btn" data-tab="dictionary" role="tab" id="stt-tab-dictionary-btn" aria-selected="false" aria-controls="stt-tab-dictionary" tabindex="-1">Dictionary</button>
         </div>
 
-        <!-- Dictate Tab -->
-        <div id="stt-tab-dictate" class="stt-tab-content active" role="tabpanel" aria-labelledby="stt-tab-dictate-btn">
-            <div class="stt-body">
-                <div class="stt-status-indicator" id="stt-status-indicator">Click Start to begin listening</div>
-                <div class="stt-controls">
-                    <button class="stt-btn stt-start-btn" id="stt-start-btn">Start Listening</button>
-                    <button class="stt-btn stt-stop-btn" id="stt-stop-btn">Stop</button>
-                </div>
-                <div class="stt-hint">Hold <kbd>Right Ctrl</kbd> to record, release to transcribe</div>
-                <div class="stt-error" id="stt-error" role="alert" aria-live="assertive" style="display: none;"></div>
-            </div>
-        </div>
+        <!-- Error display (shared) -->
+        <div class="stt-error" id="stt-error" role="alert" aria-live="assertive" style="display: none;"></div>
 
         <!-- History Tab -->
-        <div id="stt-tab-history" class="stt-tab-content" role="tabpanel" aria-labelledby="stt-tab-history-btn">
+        <div id="stt-tab-history" class="stt-tab-content active" role="tabpanel" aria-labelledby="stt-tab-history-btn">
             <div class="stt-list-header">
                 <span class="stt-history-count" id="stt-history-count">0 dictations</span>
             </div>
@@ -793,6 +782,9 @@
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+
+    <!-- Import Map — cache-busts ALL JS module imports with BOOT_ID -->
+    __IMPORT_MAP__
 
     <!-- Application ES Modules -->
     <script type="module" src="/static/js/main.js?v=__BOOT_ID__"></script>

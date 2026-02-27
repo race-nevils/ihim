@@ -463,10 +463,11 @@ class InboxWatcher:
             try:
                 import httpx
                 from adapters.ollama import OllamaAdapter
-                from adapters.embeddings import EMBED_MODEL
                 base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
                 with httpx.Client(timeout=60.0) as client:
-                    # 1. Warm classification model
+                    # Warm classification model only — it fires first.
+                    # Embedding model loads after classify unloads (keep_alive=0),
+                    # so pre-warming it would just waste VRAM.
                     client.post(
                         f"{base_url}/api/generate",
                         json={
@@ -477,16 +478,6 @@ class InboxWatcher:
                         }
                     )
                     logger.info("Ollama warm-up: classification model ready")
-
-                    # 2. Warm embedding model (sequential to avoid VRAM thrash)
-                    client.post(
-                        f"{base_url}/api/embeddings",
-                        json={
-                            "model": EMBED_MODEL,
-                            "prompt": "warmup"
-                        }
-                    )
-                    logger.info("Ollama warm-up: embedding model ready")
                     self._warm_up_event.set()
             except Exception as e:
                 logger.debug(f"Ollama warm-up failed (non-fatal): {e}")

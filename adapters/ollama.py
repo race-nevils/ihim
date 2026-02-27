@@ -107,7 +107,8 @@ class OllamaAdapter:
             "prompt": prompt,
             "stream": False,
             "format": "json",
-            "options": {"temperature": 0}  # Deterministic output
+            "options": {"temperature": 0},  # Deterministic output
+            "keep_alive": "0",  # Unload immediately — frees VRAM for embedding model
         }
         if system:
             payload["system"] = system

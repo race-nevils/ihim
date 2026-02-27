@@ -1,36 +1,40 @@
 """Hold-to-record hotkey listener using pynput.
 
 Reuses stale-key guard pattern from tools/capture_widget/widget.pyw.
-Default hotkey: Ctrl+Shift (hold to record, release to process).
+Default hotkey: Right Ctrl + Right Shift chord (hold both to record,
+release either to process).
+
+Supports single-key mode (str) and chord mode (tuple of str).
 """
 
 import logging
 import threading
 import time
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
-# Default: Right Ctrl key (single key hold-to-record)
-DEFAULT_HOTKEY = "Key.ctrl_r"
+# Default: Right Ctrl + Right Shift chord (testing hotkey)
+DEFAULT_HOTKEY: Tuple[str, ...] = ("Key.ctrl_r", "Key.shift_r")
 
 
 class HotkeyListener:
     """Hold-to-record listener using pynput.
 
-    On key press → start audio capture.
-    On key release → trigger pipeline (transcribe → cleanup → inject → log).
+    Single-key mode: press target key → start, release → stop.
+    Chord mode: hold ALL chord keys → start, release ANY → stop.
     """
 
     def __init__(
         self,
         on_start: Callable[[], None],
         on_stop: Callable[[], None],
-        hotkey: str = DEFAULT_HOTKEY,
+        hotkey: Union[str, Tuple[str, ...]] = DEFAULT_HOTKEY,
     ):
         self._on_start = on_start
         self._on_stop = on_stop
         self._hotkey = hotkey
+        self._is_chord = isinstance(hotkey, (tuple, list))
         self._listener: Optional[object] = None
         self._recording = False
         self._lock = threading.Lock()
@@ -47,7 +51,13 @@ class HotkeyListener:
 
         from pynput import keyboard as pynput_keyboard
 
-        target_key = self._resolve_key(self._hotkey)
+        # Resolve target keys
+        if self._is_chord:
+            target_keys = frozenset(
+                self._resolve_key(k) for k in self._hotkey
+            )
+        else:
+            target_keys = frozenset([self._resolve_key(self._hotkey)])
 
         def on_press(key):
             try:
@@ -58,7 +68,8 @@ class HotkeyListener:
                 self._last_key_time = now
                 self._current_keys.add(key)
 
-                if key == target_key:
+                # Check if ALL target keys are currently held
+                if target_keys.issubset(self._current_keys):
                     with self._lock:
                         if not self._recording:
                             self._recording = True
@@ -69,7 +80,8 @@ class HotkeyListener:
         def on_release(key):
             try:
                 self._current_keys.discard(key)
-                if key == target_key:
+                # If recording and ANY target key released → stop
+                if key in target_keys:
                     with self._lock:
                         if self._recording:
                             self._recording = False
@@ -84,7 +96,8 @@ class HotkeyListener:
         )
         self._listener.daemon = True
         self._listener.start()
-        logger.info("Hotkey listener started: %s (hold to record)", self._hotkey)
+        hotkey_display = " + ".join(self._hotkey) if self._is_chord else self._hotkey
+        logger.info("Hotkey listener started: %s (hold to record)", hotkey_display)
 
     def stop(self) -> None:
         """Stop the hotkey listener."""

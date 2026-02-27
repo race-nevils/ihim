@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from tools.stt.audio import MicCapture
-from tools.stt.hotkey import HotkeyListener
+from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class STTEngine:
     on each hold-and-release cycle.
     """
 
-    def __init__(self, hotkey: str = "Key.ctrl_r"):
+    def __init__(self, hotkey=DEFAULT_HOTKEY):
         self._hotkey = hotkey
         self._mic = MicCapture()
         self._listener: Optional[HotkeyListener] = None

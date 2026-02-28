@@ -93,6 +93,11 @@ async function restoreDevicePreferences(devices) {
         if (saved.participant_name) {
             document.getElementById('recorder-participant-input').value = saved.participant_name;
         }
+        // Fallback: auto-select first system audio device if nothing selected
+        const sysSelect = document.getElementById('recorder-sys-select');
+        if (!sysSelect.value && devices.system_devices.length > 0) {
+            sysSelect.value = String(devices.system_devices[0].index);
+        }
     } catch (e) {
         console.warn('Failed to restore device preferences:', e);
     }
@@ -177,7 +182,7 @@ async function stopRecording() {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.detail || err.title || `HTTP ${res.status}`);
         }
-        // Poll will pick up state change and auto-switch to recordings tab
+        // Poll will pick up state change and auto-switch to history tab
     } catch (e) {
         stopBtn.disabled = false;
         stopBtn.textContent = 'Stop';
@@ -222,10 +227,14 @@ async function pollStatus() {
         const data = await res.json();
         renderStatus(data);
 
-        // Auto-switch to recordings tab when transcription completes
+        // Auto-switch to history tab when transcription completes
         if (previousStatus === 'transcribing' && data.status === 'idle') {
             const tabs = document.querySelector('#recorder-window ihim-tabs');
-            if (tabs) tabs.activate('recordings');
+            if (tabs) {
+                tabs.activate('history');
+                showHistoryList();
+                loadRecordings();
+            }
         }
         previousStatus = data.status;
     } catch (e) { /* silent — polling resilience */ }
@@ -369,18 +378,30 @@ function formatDuration(seconds) {
 }
 
 // =====================
+// History master-detail toggle
+// =====================
+
+function showHistoryList() {
+    document.getElementById('recorder-history-list').style.display = '';
+    document.getElementById('recorder-history-detail').style.display = 'none';
+    selectedRecordingId = null;
+}
+
+function showHistoryDetail() {
+    document.getElementById('recorder-history-list').style.display = 'none';
+    document.getElementById('recorder-history-detail').style.display = '';
+}
+
+// =====================
 // Transcript view
 // =====================
 
 async function loadTranscript(id) {
     selectedRecordingId = id;
-    const tabs = document.querySelector('#recorder-window ihim-tabs');
-    if (tabs) tabs.activate('transcript');
+    showHistoryDetail();
     const body = document.getElementById('recorder-transcript-body');
-    const toolbar = document.getElementById('recorder-transcript-toolbar');
     const meta = document.getElementById('recorder-transcript-meta');
     body.innerHTML = '<div class="recorder-loading">Loading transcript...</div>';
-    toolbar.style.display = 'flex';
 
     try {
         const res = await fetch(`${API}/api/recorder/recordings/${encodeURIComponent(id)}`);
@@ -437,12 +458,8 @@ async function deleteRecording(id) {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.detail || `HTTP ${res.status}`);
         }
-        selectedRecordingId = null;
-        document.getElementById('recorder-transcript-toolbar').style.display = 'none';
-        document.getElementById('recorder-transcript-body').innerHTML =
-            '<div class="recorder-placeholder">Select a recording to view its transcript.</div>';
-        const tabs = document.querySelector('#recorder-window ihim-tabs');
-        if (tabs) tabs.activate('recordings');
+        showHistoryList();
+        loadRecordings();
     } catch (e) {
         showRecorderError(`Failed to delete: ${e.message}`);
     }
@@ -481,7 +498,10 @@ export function initRecorderEvents() {
     if (tabs) {
         tabs.addEventListener('tab:change', (e) => {
             const tabName = e.detail.tab?.dataset?.tab;
-            if (tabName === 'recordings') loadRecordings();
+            if (tabName === 'history') {
+                showHistoryList();
+                loadRecordings();
+            }
         });
     }
 
@@ -496,8 +516,8 @@ export function initRecorderEvents() {
         if (e.target.closest('#recorder-refresh-btn')) { loadRecordings(); return; }
         // Back from transcript
         if (e.target.closest('#recorder-back-btn')) {
-            const tabs = win.querySelector('ihim-tabs');
-            if (tabs) tabs.activate('recordings');
+            showHistoryList();
+            loadRecordings();
             return;
         }
         // Delete recording

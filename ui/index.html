@@ -682,8 +682,7 @@
         <!-- Tabs -->
         <div class="recorder-tabs" id="recorder-tablist" role="tablist" aria-label="Meeting Recorder">
             <button class="recorder-tab-btn active" data-tab="record" role="tab" id="recorder-tab-record-btn" aria-selected="true" aria-controls="recorder-tab-record" tabindex="0">Record</button>
-            <button class="recorder-tab-btn" data-tab="recordings" role="tab" id="recorder-tab-recordings-btn" aria-selected="false" aria-controls="recorder-tab-recordings" tabindex="-1">Recordings</button>
-            <button class="recorder-tab-btn" data-tab="transcript" role="tab" id="recorder-tab-transcript-btn" aria-selected="false" aria-controls="recorder-tab-transcript" tabindex="-1">Transcript</button>
+            <button class="recorder-tab-btn" data-tab="history" role="tab" id="recorder-tab-history-btn" aria-selected="false" aria-controls="recorder-tab-history" tabindex="-1">History</button>
         </div>
 
         <!-- Record Tab -->
@@ -721,26 +720,26 @@
             </div>
         </div>
 
-        <!-- Recordings Tab -->
-        <div id="recorder-tab-recordings" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-recordings-btn">
-            <div class="recorder-list-header">
-                <span class="recorder-list-count" id="recorder-list-count">0 recordings</span>
-                <button class="recorder-btn recorder-refresh-btn" id="recorder-refresh-btn">Refresh</button>
+        <!-- History Tab — master-detail -->
+        <div id="recorder-tab-history" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-history-btn">
+            <!-- LIST VIEW (default) -->
+            <div id="recorder-history-list">
+                <div class="recorder-list-header">
+                    <span class="recorder-list-count" id="recorder-list-count">0 recordings</span>
+                    <button class="recorder-btn recorder-refresh-btn" id="recorder-refresh-btn">Refresh</button>
+                </div>
+                <div class="recorder-body recorder-list-body" id="recorder-recordings-body">
+                    <div class="recorder-loading">Loading recordings...</div>
+                </div>
             </div>
-            <div class="recorder-body recorder-list-body" id="recorder-recordings-body">
-                <div class="recorder-loading">Loading recordings...</div>
-            </div>
-        </div>
-
-        <!-- Transcript Tab -->
-        <div id="recorder-tab-transcript" class="recorder-tab-content" role="tabpanel" aria-labelledby="recorder-tab-transcript-btn">
-            <div class="recorder-transcript-toolbar" id="recorder-transcript-toolbar" style="display: none;">
-                <button class="recorder-btn recorder-back-btn" id="recorder-back-btn">&larr; Back</button>
-                <span class="recorder-transcript-meta" id="recorder-transcript-meta"></span>
-                <button class="recorder-btn recorder-delete-btn" id="recorder-delete-btn">Delete</button>
-            </div>
-            <div class="recorder-body recorder-transcript-body" id="recorder-transcript-body">
-                <div class="recorder-placeholder">Select a recording to view its transcript.</div>
+            <!-- DETAIL VIEW (hidden until recording clicked) -->
+            <div id="recorder-history-detail" style="display: none;">
+                <div class="recorder-transcript-toolbar" id="recorder-transcript-toolbar">
+                    <button class="recorder-btn recorder-back-btn" id="recorder-back-btn">&larr; Back</button>
+                    <span class="recorder-transcript-meta" id="recorder-transcript-meta"></span>
+                    <button class="recorder-btn recorder-delete-btn" id="recorder-delete-btn">Delete</button>
+                </div>
+                <div class="recorder-body recorder-transcript-body" id="recorder-transcript-body"></div>
             </div>
         </div>
         </ihim-tabs>

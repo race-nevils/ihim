@@ -27,11 +27,15 @@ from handlers.models import (
 
 from adapters.ollama import OllamaAdapter
 from adapters.embeddings import EmbeddingAdapter
-from data.database import insert_entry, update_entry, store_embedding
+from data.database import (
+    insert_entry, update_entry, store_embedding,
+    bulk_insert_relations, delete_relations_for_entry,
+)
 from data.jsonld import (
     create_brain_entry_jsonld,
     write_jsonld,
-    update_jsonld_content
+    update_jsonld,
+    update_jsonld_content,
 )
 from handlers.utils import (
     CONFIDENCE_THRESHOLD,
@@ -245,6 +249,19 @@ def store_new(
         except Exception as e:
             logger.error(f"Failed to store calendar fields for {note_id} (non-blocking): {e}")
 
+    # === WRITE 6: Relation extraction (Knowledge Graph) — non-fatal ===
+    _extract_and_store_relations(note_id, title, category, content, str(jsonld_path))
+
+    # === WRITE 7: Append Obsidian wikilinks — non-fatal ===
+    if obsidian_path and obsidian_path.exists():
+        try:
+            footer = _generate_related_footer(note_id)
+            if footer:
+                with open(obsidian_path, "a", encoding="utf-8") as f:
+                    f.write(footer)
+        except Exception as e:
+            logger.debug(f"Wikilink append failed for {note_id} (non-blocking): {e}")
+
     # Log metadata to Langfuse (enriched with rerouting details)
     langfuse_context.update_current_observation(
         metadata={
@@ -351,6 +368,25 @@ def update_existing(
                 logger.warning(f"Embedding update returned None for: {entry_id}")
         except Exception as e:
             logger.warning(f"Embedding update failed (non-blocking): {e}")
+
+    # === UPDATE 5: Re-extract relations (preserve manual) — non-fatal ===
+    _reextract_relations(entry_id, title, category, content, jsonld_path)
+
+    # === UPDATE 6: Refresh Obsidian wikilinks — non-fatal ===
+    if obsidian_path and obsidian_path.exists():
+        try:
+            footer = _generate_related_footer(entry_id)
+            if footer:
+                # Re-write obsidian file with updated footer
+                existing_text = obsidian_path.read_text(encoding="utf-8")
+                # Strip old ## Related section if present
+                import re as _re
+                existing_text = _re.sub(
+                    r'\n\n## Related\n(?:- \[\[.*\]\].*\n?)*', '', existing_text
+                )
+                obsidian_path.write_text(existing_text + footer, encoding="utf-8")
+        except Exception as e:
+            logger.debug(f"Wikilink update failed for {entry_id} (non-blocking): {e}")
 
     langfuse_context.update_current_observation(
         metadata={
@@ -529,6 +565,236 @@ def update_with_reclassify(
     )
 
     return obsidian_path, entry_id
+
+
+# ---------------------------------------------------------------------------
+# Obsidian Wikilink Generation (Knowledge Graph — Phase B)
+# ---------------------------------------------------------------------------
+
+def _generate_related_footer(
+    entry_id: str,
+    min_confidence: float = 0.5,
+) -> str:
+    """Build a `## Related` section with [[wikilinks]] for Obsidian.
+
+    Args:
+        entry_id: Entry to generate footer for
+        min_confidence: Minimum confidence to include
+
+    Returns:
+        Markdown string with ## Related section, or empty string if no relations
+    """
+    try:
+        from data.database import get_relations
+
+        relations = get_relations(entry_id, direction="both", min_confidence=min_confidence)
+        if not relations:
+            return ""
+
+        # Deduplicate by linked entry (prefer outgoing, higher confidence)
+        seen_entries = {}
+        for rel in relations:
+            if rel["direction"] == "outgoing":
+                linked_id = rel["target_id"]
+                linked_title = rel.get("target_title", linked_id)
+                linked_cat = rel.get("target_category", "")
+            else:
+                linked_id = rel["source_id"]
+                linked_title = rel.get("source_title", linked_id)
+                linked_cat = rel.get("source_category", "")
+
+            if linked_id not in seen_entries or rel["confidence"] > seen_entries[linked_id]["confidence"]:
+                seen_entries[linked_id] = {
+                    "title": linked_title,
+                    "category": linked_cat,
+                    "type": rel["relation_type"],
+                    "confidence": rel["confidence"],
+                }
+
+        if not seen_entries:
+            return ""
+
+        # Sort by confidence descending
+        sorted_entries = sorted(
+            seen_entries.values(),
+            key=lambda x: x["confidence"],
+            reverse=True,
+        )
+
+        lines = ["\n\n## Related\n"]
+        for entry in sorted_entries:
+            conf = round(entry["confidence"], 2)
+            lines.append(f"- [[{entry['title']}]] ({entry['type']}, {conf})")
+
+        return "\n".join(lines) + "\n"
+
+    except Exception as e:
+        logger.debug(f"Failed to generate related footer for {entry_id}: {e}")
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Relation extraction helpers (Knowledge Graph — Phase B)
+# ---------------------------------------------------------------------------
+
+def _extract_and_store_relations(
+    entry_id: str,
+    title: str,
+    category: str,
+    content: str,
+    jsonld_path: str,
+) -> None:
+    """Extract relations for a new entry and store them.
+
+    Non-fatal: if extraction fails, the entry still exists.
+    Writes relations to both SQLite and JSON-LD (source of truth).
+    Also writes backlinks to target entries.
+    """
+    try:
+        from handlers.relations import extract_relations, invalidate_entity_index
+
+        # Invalidate index so the new entry is included
+        invalidate_entity_index()
+
+        relations = extract_relations(entry_id, title, category, content)
+        if not relations:
+            return
+
+        # Convert to SQLite format and bulk insert
+        db_relations = []
+        for rel in relations:
+            target = rel.get("ihim:target", "")
+            target_id = target.replace("ihim:brain/", "") if target.startswith("ihim:brain/") else target
+            db_relations.append({
+                "source_id": entry_id,
+                "target_id": target_id,
+                "relation_type": rel.get("ihim:relationType", "relatedTo"),
+                "confidence": rel.get("ihim:confidence", 0.5),
+                "extraction_source": rel.get("ihim:source", "unknown"),
+                "reasoning": rel.get("ihim:reasoning"),
+            })
+
+        bulk_insert_relations(db_relations)
+
+        # Write relations to JSON-LD source of truth
+        if jsonld_path:
+            from pathlib import Path as _Path
+            update_jsonld(_Path(jsonld_path), {"ihim:relations": relations})
+
+        # Write backlinks to target entries
+        _write_backlinks(entry_id, title, relations)
+
+        logger.info(f"Stored {len(relations)} relations for {entry_id}")
+
+    except Exception as e:
+        logger.warning(f"Relation extraction failed for {entry_id} (non-blocking): {e}")
+
+
+def _reextract_relations(
+    entry_id: str,
+    title: str,
+    category: str,
+    content: str,
+    jsonld_path: Optional[str],
+) -> None:
+    """Re-extract relations after content update.
+
+    Q19: Preserves manual relations, deletes auto-extracted ones.
+    """
+    try:
+        from handlers.relations import extract_relations, invalidate_entity_index
+
+        # Delete old auto-extracted relations (preserves manual per Q19)
+        delete_relations_for_entry(entry_id)
+        invalidate_entity_index()
+
+        # Re-extract
+        relations = extract_relations(entry_id, title, category, content)
+        if not relations:
+            return
+
+        db_relations = []
+        for rel in relations:
+            target = rel.get("ihim:target", "")
+            target_id = target.replace("ihim:brain/", "") if target.startswith("ihim:brain/") else target
+            db_relations.append({
+                "source_id": entry_id,
+                "target_id": target_id,
+                "relation_type": rel.get("ihim:relationType", "relatedTo"),
+                "confidence": rel.get("ihim:confidence", 0.5),
+                "extraction_source": rel.get("ihim:source", "unknown"),
+                "reasoning": rel.get("ihim:reasoning"),
+            })
+
+        bulk_insert_relations(db_relations)
+
+        # Update JSON-LD
+        if jsonld_path:
+            from pathlib import Path as _Path
+            p = _Path(jsonld_path)
+            if p.exists():
+                update_jsonld(p, {"ihim:relations": relations})
+
+        _write_backlinks(entry_id, title, relations)
+        logger.info(f"Re-extracted {len(relations)} relations for {entry_id}")
+
+    except Exception as e:
+        logger.warning(f"Relation re-extraction failed for {entry_id} (non-blocking): {e}")
+
+
+def _write_backlinks(
+    source_id: str,
+    source_title: str,
+    relations: list[dict],
+) -> None:
+    """Write backlink relations to target entries' JSON-LD and SQLite.
+
+    When A→B is created, also check if B→A should exist as a backlink.
+    Uses 'mentions' type for backlinks with slightly lower confidence.
+    """
+    from data.database import get_entry_by_id, get_connection as _get_conn
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    for rel in relations:
+        try:
+            target = rel.get("ihim:target", "")
+            target_id = target.replace("ihim:brain/", "") if target.startswith("ihim:brain/") else target
+
+            # Check if reverse relation already exists
+            conn = _get_conn()
+            try:
+                existing = conn.execute(
+                    "SELECT id FROM entry_relations WHERE source_id = ? AND target_id = ?",
+                    (target_id, source_id)
+                ).fetchone()
+            finally:
+                conn.close()
+
+            if existing:
+                continue  # Reverse already exists
+
+            # Check if the source entry title appears in the target's content
+            target_entry = get_entry_by_id(target_id)
+            if not target_entry:
+                continue
+
+            target_content = target_entry.get("content", "")
+            if source_title.lower() in target_content.lower():
+                # Target mentions source: create backlink
+                backlink_confidence = min(rel.get("ihim:confidence", 0.5) * 0.9, 0.90)
+                bulk_insert_relations([{
+                    "source_id": target_id,
+                    "target_id": source_id,
+                    "relation_type": "mentions",
+                    "confidence": round(backlink_confidence, 3),
+                    "extraction_source": rel.get("ihim:source", "unknown"),
+                    "reasoning": f"Backlink: {source_title} detected in target content",
+                }])
+
+        except Exception as e:
+            logger.debug(f"Backlink check failed for {target}: {e}")
 
 
 # ---------------------------------------------------------------------------

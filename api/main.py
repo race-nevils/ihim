@@ -91,6 +91,8 @@ preferences_router, PREFERENCES_AVAILABLE = _try_import(
     "Preferences", lambda: __import__("api.preferences", fromlist=["router"]).router)
 stt_router, STT_AVAILABLE = _try_import(
     "STT", lambda: __import__("api.stt.routes", fromlist=["router"]).router)
+graph_router, GRAPH_AVAILABLE = _try_import(
+    "Knowledge Graph", lambda: __import__("api.graph.routes", fromlist=["router"]).router)
 
 # System topology & health (not yet a router — functions used inline below)
 try:
@@ -256,6 +258,7 @@ _routers = [
     (capture_router, CAPTURE_AVAILABLE),
     (preferences_router, PREFERENCES_AVAILABLE),
     (stt_router, STT_AVAILABLE),
+    (graph_router, GRAPH_AVAILABLE),
 ]
 
 for rtr, available in _routers:

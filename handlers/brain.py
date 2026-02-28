@@ -22,6 +22,7 @@ from handlers.dedup import find_existing, is_unchanged
 from handlers.classify import classify_content
 from handlers.storage import store_new, update_existing, log_receipt
 from data.database import update_entry
+from handlers.relations import invalidate_entity_index
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +340,9 @@ def handle(state: OrchestratorState) -> OrchestratorState:
             content, classification, source_file, source_filename
         )
         timing["store"] = round((time.time() - t0) * 1000)
+
+        # Invalidate entity index after new entry stored
+        invalidate_entity_index()
 
         # Auto-push to Google Calendar if event detected (atomic — DB write inside)
         t0 = time.time()

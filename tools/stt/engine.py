@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from tools.stt.audio import MicCapture
 from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
@@ -30,6 +30,26 @@ class STTEngine:
         self._lock = threading.Lock()
         self._last_result: Optional[dict] = None
         self._status = "idle"  # idle | listening | recording | processing
+        self._on_state_change: Optional[Callable[[str], None]] = None
+
+    def set_state_callback(self, cb: Callable[[str], None]) -> None:
+        """Register a callback fired on every status transition.
+
+        The callback receives the new status string.  Setting to None
+        removes the callback.  Thread-safe — the callback may be invoked
+        from any thread (hotkey listener, pipeline worker, main).
+        """
+        self._on_state_change = cb
+
+    def _set_status(self, status: str) -> None:
+        """Set status and fire the state-change callback (if any)."""
+        self._status = status
+        cb = self._on_state_change
+        if cb is not None:
+            try:
+                cb(status)
+            except Exception:
+                logger.debug("State-change callback error", exc_info=True)
 
     def start_listening(self) -> None:
         """Activate the hotkey listener."""
@@ -42,7 +62,7 @@ class STTEngine:
                 hotkey=self._hotkey,
             )
             self._listener.start()
-            self._status = "listening"
+            self._set_status("listening")
 
     def stop_listening(self) -> None:
         """Deactivate the hotkey listener."""
@@ -50,7 +70,7 @@ class STTEngine:
             if self._listener:
                 self._listener.stop()
                 self._listener = None
-            self._status = "idle"
+            self._set_status("idle")
 
     @property
     def status(self) -> str:
@@ -65,11 +85,11 @@ class STTEngine:
     def _on_record_start(self) -> None:
         """Called by hotkey listener on key press."""
         try:
-            self._status = "recording"
+            self._set_status("recording")
             self._mic.start()
         except Exception as e:
             logger.error("Failed to start mic capture: %s", e)
-            self._status = "listening"
+            self._set_status("listening")
 
     def _on_record_stop(self) -> None:
         """Called by hotkey listener on key release. Runs pipeline in background thread."""
@@ -81,7 +101,7 @@ class STTEngine:
 
     def _run_pipeline(self) -> None:
         """Full dictation pipeline: transcribe → cleanup → inject → log."""
-        self._status = "processing"
+        self._set_status("processing")
         start_time = time.time()
 
         try:
@@ -94,7 +114,7 @@ class STTEngine:
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")
-                self._status = "listening"
+                self._set_status("listening")
                 return
 
             # 3. Deterministic cleanup (no LLM, no VRAM)
@@ -131,14 +151,14 @@ class STTEngine:
                     wav_path.unlink()
             except Exception:
                 pass
-            self._status = "listening"
+            self._set_status("listening")
 
     def on_dictation_complete(self, wav_path: Path) -> Optional[dict]:
         """Manual pipeline trigger (for API use without hotkey).
 
         Returns the dictation record or None on failure.
         """
-        self._status = "processing"
+        self._set_status("processing")
         start_time = time.time()
 
         try:
@@ -170,7 +190,7 @@ class STTEngine:
             logger.error("Manual dictation pipeline failed: %s", e)
             return None
         finally:
-            self._status = "listening" if self._listener else "idle"
+            self._set_status("listening" if self._listener else "idle")
 
 
 # Module-level singleton

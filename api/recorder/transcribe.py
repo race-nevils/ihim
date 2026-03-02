@@ -10,7 +10,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 # Register NVIDIA CUDA DLL directories so ctranslate2 can find cuBLAS/cuDNN.
 # The nvidia-cublas-cu12 pip package installs DLLs into subdirectories that
@@ -72,6 +72,41 @@ def _get_model(model_size: str = "small"):
         return model
 
 
+def _deloop_text(text: str) -> str:
+    """Remove consecutively repeated n-grams (3+ words) from text.
+
+    Common Whisper failure: "Thank you. Thank you. Thank you. Thank you."
+    becomes "Thank you." after delooping.
+    """
+    words = text.split()
+    if len(words) < 6:
+        return text
+
+    # Try n-gram sizes from largest (half the text) down to 3 words
+    max_n = len(words) // 2
+    for n in range(max_n, 2, -1):
+        i = 0
+        result = []
+        while i < len(words):
+            # Check if the n-gram starting at i repeats immediately after
+            gram = words[i:i + n]
+            if len(gram) < n:
+                result.extend(words[i:])
+                break
+            # Count consecutive repetitions
+            reps = 1
+            j = i + n
+            while j + n <= len(words) and words[j:j + n] == gram:
+                reps += 1
+                j += n
+            result.extend(gram)
+            i = j if reps > 1 else i + 1
+        if len(result) < len(words):
+            words = result
+
+    return " ".join(words)
+
+
 def transcribe_channel(
     wav_path: Path,
     speaker_label: str,
@@ -80,8 +115,9 @@ def transcribe_channel(
     condition_on_previous_text: bool = True,
     compression_ratio_threshold: float = 2.4,
     no_speech_threshold: float = 0.6,
-    hallucination_silence_threshold: Optional[float] = None,
-    temperature: float = 0.0,
+    log_prob_threshold: float = -1.0,
+    hallucination_silence_threshold: Optional[float] = 2.0,
+    temperature: Union[float, tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
 ) -> list[dict]:
     """Transcribe a single WAV file, returning labeled segments.
 
@@ -95,9 +131,14 @@ def transcribe_channel(
         compression_ratio_threshold: Skip segments with compression ratio above
             this value (catches repetitive hallucinated text). Default 2.4.
         no_speech_threshold: Probability threshold for silence detection.
+        log_prob_threshold: Reject segments below this avg log probability.
+            Default -1.0 (explicit; matches faster-whisper default).
         hallucination_silence_threshold: faster-whisper exclusive — skip silent
-            sections longer than this (seconds). None to disable.
-        temperature: Sampling temperature. 0.0 for greedy decoding.
+            sections longer than this (seconds). Default 2.0 to suppress
+            hallucinated text during silence gaps.
+        temperature: Sampling temperature or tuple for fallback sequence.
+            Default (0.0, 0.2, 0.4, 0.6, 0.8, 1.0) — greedy first, falls
+            back to higher temperatures if quality checks fail on a segment.
 
     Returns list of:
         {"speaker": str, "start": float, "end": float, "text": str, "confidence": float}
@@ -114,6 +155,7 @@ def transcribe_channel(
         condition_on_previous_text=condition_on_previous_text,
         compression_ratio_threshold=compression_ratio_threshold,
         no_speech_threshold=no_speech_threshold,
+        log_prob_threshold=log_prob_threshold,
         temperature=temperature,
     )
     if initial_prompt:
@@ -128,7 +170,7 @@ def transcribe_channel(
 
     results = []
     for seg in segments_iter:
-        text = seg.text.strip()
+        text = _deloop_text(seg.text.strip())
         if not text:
             continue
         results.append({
@@ -173,6 +215,7 @@ def transcribe_dual(
     mic_label: str = "the operator",
     sys_label: str = "Other",
     model_size: str = "small",
+    initial_prompt: Optional[str] = None,
 ) -> dict:
     """Full transcription pipeline: both channels → merge → format.
 
@@ -184,8 +227,8 @@ def transcribe_dual(
             "sys_segments_count": int,
         }
     """
-    mic_segments = transcribe_channel(mic_wav, mic_label, model_size)
-    sys_segments = transcribe_channel(sys_wav, sys_label, model_size)
+    mic_segments = transcribe_channel(mic_wav, mic_label, model_size, initial_prompt=initial_prompt)
+    sys_segments = transcribe_channel(sys_wav, sys_label, model_size, initial_prompt=initial_prompt)
 
     merged = merge_transcripts(mic_segments, sys_segments)
     formatted = format_transcript(merged)

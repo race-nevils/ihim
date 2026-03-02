@@ -177,13 +177,22 @@ async def recorder_stop(request: Request):
     sidecar_status = "complete"
     transcription_error = None
 
+    # Read initial prompt from preferences (recorder.initial_prompt)
+    from api.preferences import _read_prefs
+    prefs = _read_prefs()
+    initial_prompt = (prefs.get("recorder", {}).get("initial_prompt") or "").strip() or None
+
     try:
         from api.recorder.transcribe import transcribe_dual
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
-            lambda: transcribe_dual(mic_path, sys_path, model_size=_state.model_size),
+            lambda: transcribe_dual(
+                mic_path, sys_path,
+                model_size=_state.model_size,
+                initial_prompt=initial_prompt,
+            ),
         )
         segments = result["segments"]
         transcript = result["transcript"]
@@ -210,6 +219,12 @@ async def recorder_stop(request: Request):
             "sample_rate": 16000,
             "mic_device": mic_device,
             "sys_device": sys_device,
+            "temperature": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            "compression_ratio_threshold": 2.4,
+            "no_speech_threshold": 0.6,
+            "log_prob_threshold": -1.0,
+            "hallucination_silence_threshold": 2.0,
+            "initial_prompt": initial_prompt,
         },
         "speakers": {"mic": "the operator", "system": _state.participant_name or "Other"},
         "segments": segments,

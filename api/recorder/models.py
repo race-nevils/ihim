@@ -92,6 +92,12 @@ class RecordingDetail(BaseModel):
 class StopResponse(BaseModel):
     recording_id: str
     duration_seconds: float
+    status: str = "pending_transcription"
+
+
+class TranscribeResponse(BaseModel):
+    recording_id: str
+    duration_seconds: float
     segments_count: int
     transcript_preview: str
     status: str = "complete"

@@ -227,8 +227,8 @@ async function pollStatus() {
         const data = await res.json();
         renderStatus(data);
 
-        // Auto-switch to history tab when transcription completes
-        if (previousStatus === 'transcribing' && data.status === 'idle') {
+        // Auto-switch to history tab when stop completes (recording → idle)
+        if (previousStatus === 'recording' && data.status === 'idle') {
             const tabs = document.querySelector('#recorder-window ihim-tabs');
             if (tabs) {
                 tabs.activate('history');
@@ -384,6 +384,8 @@ function formatDuration(seconds) {
 function showHistoryList() {
     document.getElementById('recorder-history-list').style.display = '';
     document.getElementById('recorder-history-detail').style.display = 'none';
+    const transcribeBtn = document.getElementById('recorder-transcribe-btn');
+    if (transcribeBtn) transcribeBtn.style.display = 'none';
     selectedRecordingId = null;
 }
 
@@ -415,12 +417,34 @@ async function loadTranscript(id) {
         const duration = data.duration_seconds ? formatDuration(data.duration_seconds) : '';
         meta.textContent = `${label}${duration ? ` (${duration})` : ''}`;
 
+        const transcribeBtn = document.getElementById('recorder-transcribe-btn');
+
+        // Handle transcription status
+        if (data.status === 'pending_transcription') {
+            transcribeBtn.style.display = '';
+            transcribeBtn.textContent = 'Transcribe';
+            transcribeBtn.disabled = false;
+            body.innerHTML = '<div class="recorder-placeholder">Recording saved. Click <strong>Transcribe</strong> to process.</div>';
+            return;
+        }
+        if (data.status === 'transcription_failed') {
+            transcribeBtn.style.display = '';
+            transcribeBtn.textContent = 'Retry';
+            transcribeBtn.disabled = false;
+            const errMsg = data.transcription_error ? escapeHtml(data.transcription_error) : 'Unknown error';
+            body.innerHTML = `<div class="recorder-error-inline">Transcription failed: ${errMsg}</div>
+                <div class="recorder-placeholder">Click <strong>Retry</strong> to try again.</div>`;
+            return;
+        }
+
+        // Complete or other — hide transcribe button, show segments
+        transcribeBtn.style.display = 'none';
+
         if (!data.segments || data.segments.length === 0) {
             body.innerHTML = '<div class="recorder-placeholder">No transcript segments available.</div>';
             return;
         }
 
-        const speakerMap = data.speakers || {};
         body.innerHTML = data.segments.map(seg => {
             const speaker = escapeHtml(seg.speaker || 'Unknown');
             const speakerClass = speaker.toLowerCase() === 'owner' ? 'speaker-mic' :
@@ -444,6 +468,33 @@ function formatTimestamp(seconds) {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// =====================
+// Manual transcription
+// =====================
+
+async function transcribeRecording(id) {
+    const transcribeBtn = document.getElementById('recorder-transcribe-btn');
+    const body = document.getElementById('recorder-transcript-body');
+    transcribeBtn.disabled = true;
+    transcribeBtn.textContent = 'Transcribing...';
+    body.innerHTML = '<div class="recorder-loading">Transcribing... This may take a minute or two.</div>';
+
+    try {
+        const res = await fetch(`${API}/api/recorder/transcribe/${encodeURIComponent(id)}`, { method: 'POST' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || err.title || `HTTP ${res.status}`);
+        }
+        // Reload the full detail view to show segments
+        await loadTranscript(id);
+    } catch (e) {
+        transcribeBtn.disabled = false;
+        transcribeBtn.textContent = 'Retry';
+        body.innerHTML = `<div class="recorder-error-inline">Transcription failed: ${escapeHtml(e.message)}</div>
+            <div class="recorder-placeholder">Click <strong>Retry</strong> to try again.</div>`;
+    }
 }
 
 // =====================
@@ -519,6 +570,10 @@ export function initRecorderEvents() {
             showHistoryList();
             loadRecordings();
             return;
+        }
+        // Transcribe recording
+        if (e.target.closest('#recorder-transcribe-btn') && selectedRecordingId) {
+            transcribeRecording(selectedRecordingId); return;
         }
         // Delete recording
         if (e.target.closest('#recorder-delete-btn') && selectedRecordingId) {

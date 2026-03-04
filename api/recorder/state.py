@@ -106,7 +106,14 @@ class RecorderState:
         with self._state_lock:
             if self._status != RecorderStatus.recording:
                 raise RuntimeError(f"Cannot stop: state is {self._status.value}")
-            self._status = RecorderStatus.transcribing
+            self._status = RecorderStatus.idle
+            self._recording_id = None
+            self._label = None
+            self._participant_name = None
+            self._started_at = None
+            self._mic_device = None
+            self._sys_device = None
+            self._model_size = "small"
 
     def finish_transcription(self) -> None:
         with self._state_lock:

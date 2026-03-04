@@ -5,8 +5,7 @@
         "width": 600,
         "height": 50,
         "opacity": 0.95,
-        "position": "center_top",
-        "offset_y": 100
+        "position": "center"
     },
     "appearance": {
         "bg_color": "#1e1e2e",

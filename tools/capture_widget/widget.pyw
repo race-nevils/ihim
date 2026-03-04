@@ -397,25 +397,44 @@ class CaptureWidget:
         """Show from tray menu click."""
         self.root.after(0, self.show)
 
-    def _force_foreground(self):
+    def _force_foreground_win32(self) -> bool:
         """Force the input window to the foreground using Win32 API.
 
-        Windows blocks background processes from stealing focus via
-        ForegroundLockTimeout. This bypasses that by attaching to the
-        foreground thread's input queue before calling SetForegroundWindow.
+        Uses the ALT key trick (synthetic keybd_event) to reset Windows'
+        ForegroundLockTimeout before calling SetForegroundWindow. This is
+        the same technique AutoHotkey uses internally and works reliably
+        on Windows 10/11 where AttachThreadInput alone often fails.
         """
         user32 = ctypes.windll.user32
         kernel32 = ctypes.windll.kernel32
         hwnd = int(self.input_window.winfo_id())
         foreground_hwnd = user32.GetForegroundWindow()
+
+        if foreground_hwnd == hwnd:
+            return True
+
         foreground_tid = user32.GetWindowThreadProcessId(foreground_hwnd, None)
         current_tid = kernel32.GetCurrentThreadId()
-        if foreground_tid != current_tid:
+
+        # ALT key trick: resets ForegroundLockTimeout on Win10/11
+        VK_MENU = 0x12
+        KEYEVENTF_KEYUP = 0x0002
+        user32.keybd_event(VK_MENU, 0, 0, 0)
+        user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+
+        attached = False
+        if foreground_tid and foreground_tid != current_tid:
             user32.AttachThreadInput(foreground_tid, current_tid, True)
+            attached = True
+
         user32.SetForegroundWindow(hwnd)
         user32.BringWindowToTop(hwnd)
-        if foreground_tid != current_tid:
+        user32.SetFocus(hwnd)
+
+        if attached:
             user32.AttachThreadInput(foreground_tid, current_tid, False)
+
+        return user32.GetForegroundWindow() == hwnd
 
     def show(self):
         """Show the capture input window."""
@@ -429,16 +448,25 @@ class CaptureWidget:
         self._set_placeholder()
         self.input_window.deiconify()
         self.input_window.lift()
-        self._force_foreground()
-        # Delay focus to ensure window is fully rendered
+        # Win32 focus deferred to _focus_entry (after window is painted)
         self.root.after(50, self._focus_entry)
-        # Start mouse listener for click-outside-to-close
         self._start_mouse_listener()
 
-    def _focus_entry(self):
-        """Set focus to title entry widget after window is visible."""
-        self.title_entry.focus_force()  # Start with title field
-        # Clear placeholder (entry already has focus, so simulate focus-in)
+    def _focus_entry(self, attempt=0):
+        """Set focus to title entry with Win32 foreground + retry loop.
+
+        Called 50ms after show() to ensure the window is painted before
+        attempting Win32 focus. Retries up to 3 times at 30ms intervals
+        if foreground acquisition fails (~140ms worst case).
+        """
+        if not self._is_visible:
+            return
+        self.input_window.update_idletasks()  # flush paint
+        success = self._force_foreground_win32()
+        if not success and attempt < 3:
+            self.root.after(30, lambda: self._focus_entry(attempt + 1))
+            return
+        self.title_entry.focus_force()
         if self.title_entry.get() == self.title_placeholder:
             self.title_entry.delete(0, tk.END)
             self.title_entry.config(fg=self.config["appearance"]["fg_color"])

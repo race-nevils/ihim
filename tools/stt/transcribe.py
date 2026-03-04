@@ -27,7 +27,7 @@ def load_vocab() -> str:
     return "The following terms may appear in this dictation: " + ", ".join(terms) + "."
 
 
-def transcribe(wav_path: Path, model_size: str = "small") -> str:
+def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
     """Transcribe a WAV file using Whisper with vocabulary priming.
 
     Returns the raw transcript as a single string.

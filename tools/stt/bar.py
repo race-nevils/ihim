@@ -135,10 +135,13 @@ class DictationBar:
     def _apply_state(self, state: str):
         """Apply a state transition on the main thread."""
         self._state = state
-        if state == "recording":
+        if state in ("recording", "warning"):
             self._resize_to(self._wcfg["recording_width"], self._wcfg["recording_height"])
         else:
             self._resize_to(self._wcfg["idle_width"], self._wcfg["idle_height"])
+        # Auto-clear error state after 2 seconds
+        if state == "error":
+            self.root.after(2000, lambda: self._apply_state("idle") if self._state == "error" else None)
         # Immediate redraw
         self._draw()
 
@@ -167,15 +170,24 @@ class DictationBar:
 
         state = self._state
 
-        bg = self._acfg["bg_recording"] if state == "recording" else self._acfg["bg_idle"]
+        if state in ("recording", "warning"):
+            bg = self._acfg["bg_recording"]
+        else:
+            bg = self._acfg["bg_idle"]
 
         # Draw pill shape (two semicircles + rectangle)
         self._draw_pill(c, 0, 0, w, h, r, bg)
 
         if state == "recording":
             self._draw_recording(c, w, h)
+        elif state == "warning":
+            self._draw_warning(c, w, h)
         elif state == "processing":
             self._draw_processing(c, w, h)
+        elif state == "loading":
+            self._draw_loading(c, w, h)
+        elif state == "error":
+            self._draw_error(c, w, h)
         else:
             self._draw_idle(c, w, h)
 
@@ -280,5 +292,93 @@ class DictationBar:
             text="Processing\u2026",
             fill=text_color,
             font=(self._acfg["font_family"], self._acfg["font_size"] - 1),
+            anchor="center",
+        )
+
+    # -- loading (first press after idle timeout) --
+
+    def _draw_loading(self, c: tk.Canvas, w: int, h: int):
+        accent = self._acfg.get("accent_loading", "#f9e2af")
+        text_color = self._acfg["text_color"]
+
+        # Yellow dot (left)
+        dot_r = 5
+        cx = 24
+        cy = h // 2
+        c.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r, fill=accent, outline="")
+
+        # "Loading..." label
+        c.create_text(
+            w // 2 + 6, h // 2,
+            text="Loading\u2026",
+            fill=text_color,
+            font=(self._acfg["font_family"], self._acfg["font_size"] - 1),
+            anchor="center",
+        )
+
+    # -- warning (5 min recording mark) --
+
+    def _draw_warning(self, c: tk.Canvas, w: int, h: int):
+        accent_w = self._acfg.get("accent_warning", "#fab387")
+        text_color = self._acfg["text_color"]
+
+        # Pulsing orange dot (left)
+        pulse = 0.6 + 0.4 * abs(math.sin(self._pulse_phase))
+        dot_r = int(6 * pulse)
+        cx = 28
+        cy = h // 2
+        c.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r, fill=accent_w, outline="")
+
+        # "Wrapping up..." label
+        c.create_text(
+            90, h // 2,
+            text="Wrapping up\u2026",
+            fill=text_color,
+            font=(self._acfg["font_family"], self._acfg["font_size"] - 1),
+            anchor="center",
+        )
+
+        # Volume meter (still visible during warning)
+        with self._rms_lock:
+            rms = self._rms
+
+        bar_count = 5
+        bar_w = 6
+        bar_gap = 4
+        meter_w = bar_count * bar_w + (bar_count - 1) * bar_gap
+        meter_x = w - meter_w - 28
+        max_bar_h = h - 18
+
+        for i in range(bar_count):
+            threshold = (i + 0.5) / bar_count
+            level = max(0.0, min(1.0, rms / max(threshold, 0.01)))
+            bar_h = max(4, int(max_bar_h * level))
+            bx = meter_x + i * (bar_w + bar_gap)
+            by = cy - bar_h // 2
+            c.create_rectangle(
+                bx, by, bx + bar_w, by + bar_h,
+                fill=accent_w,
+                outline="",
+            )
+
+    # -- error (pipeline failure) --
+
+    def _draw_error(self, c: tk.Canvas, w: int, h: int):
+        accent_e = self._acfg.get("accent_error", "#f38ba8")
+        text_color = self._acfg["text_color"]
+
+        # Red X (left)
+        cx = 24
+        cy = h // 2
+        xr = 6
+        c.create_line(cx - xr, cy - xr, cx + xr, cy + xr, fill=accent_e, width=2)
+        c.create_line(cx - xr, cy + xr, cx + xr, cy - xr, fill=accent_e, width=2)
+
+        # "Error" label
+        c.create_text(
+            w // 2 + 6, h // 2,
+            text="Error",
+            fill=accent_e,
+            font=(self._acfg["font_family"], self._acfg["font_size"] - 1, "bold"),
             anchor="center",
         )

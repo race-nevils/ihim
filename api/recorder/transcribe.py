@@ -72,6 +72,29 @@ def _get_model(model_size: str = "small"):
         return model
 
 
+def is_model_loaded(model_size: str = "small") -> bool:
+    """Check if a Whisper model is currently cached in memory."""
+    return model_size in _model_cache
+
+
+def unload_model(model_size: str = "small") -> bool:
+    """Unload a cached Whisper model to free VRAM.
+
+    CTranslate2 models release GPU memory when garbage-collected.
+    Returns True if a model was unloaded, False if nothing was cached.
+    """
+    import gc
+
+    with _model_lock:
+        if model_size not in _model_cache:
+            return False
+        del _model_cache[model_size]
+
+    gc.collect()
+    print(f"[recorder] Unloaded model '{model_size}' — VRAM freed.")
+    return True
+
+
 def transcribe_channel(
     wav_path: Path,
     speaker_label: str,

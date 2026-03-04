@@ -44,12 +44,36 @@ class TrayIcon:
         self._bar = bar
         self._icon: pystray.Icon | None = None
 
+    def _is_startup_checked(self, item) -> bool:
+        """Check state for the 'Start on Login' menu item."""
+        try:
+            from tools.stt.startup_helper import is_startup_enabled
+            return is_startup_enabled()
+        except Exception:
+            return False
+
+    def _on_startup_toggle(self, icon=None, item=None):
+        """Toggle startup on login."""
+        try:
+            from tools.stt.startup_helper import is_startup_enabled, enable_startup, disable_startup
+            if is_startup_enabled():
+                disable_startup()
+            else:
+                enable_startup()
+        except Exception:
+            pass
+
     def start(self) -> None:
         """Create and run the tray icon in a daemon thread."""
         menu = pystray.Menu(
             pystray.MenuItem("STT Dictation", None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Show / Hide", self._on_show_hide, default=True),
+            pystray.MenuItem(
+                "Start on Login",
+                self._on_startup_toggle,
+                checked=self._is_startup_checked,
+            ),
             pystray.MenuItem("Exit", self._on_exit),
         )
         self._icon = pystray.Icon(

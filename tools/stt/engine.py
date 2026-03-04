@@ -1,7 +1,8 @@
 """Dictation pipeline orchestrator — record → transcribe → cleanup → inject → log.
 
-Ties together audio capture, Whisper transcription, LLM cleanup, text injection,
-and JSONL logging. Manages the hotkey listener lifecycle.
+Ties together audio capture, Whisper transcription, deterministic cleanup,
+clipboard injection, and JSONL logging. Manages the hotkey listener lifecycle,
+VRAM lazy loading/unloading, recording timeouts, and app-context detection.
 """
 
 import logging
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from tools.stt.audio import MicCapture
+from tools.stt.config import load_config
 from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
 
 logger = logging.getLogger(__name__)
@@ -23,14 +25,19 @@ class STTEngine:
     on each hold-and-release cycle.
     """
 
-    def __init__(self, hotkey=DEFAULT_HOTKEY):
+    def __init__(self, hotkey=DEFAULT_HOTKEY, config: Optional[dict] = None):
         self._hotkey = hotkey
+        self._cfg = config or load_config()
         self._mic = MicCapture()
         self._listener: Optional[HotkeyListener] = None
         self._lock = threading.Lock()
         self._last_result: Optional[dict] = None
-        self._status = "idle"  # idle | listening | recording | processing
+        self._status = "idle"  # idle | listening | recording | processing | loading | warning | error
         self._on_state_change: Optional[Callable[[str], None]] = None
+        self._app_context: str = "prose"  # captured at record start
+        self._idle_timer: Optional[threading.Timer] = None
+        self._warning_timer: Optional[threading.Timer] = None
+        self._timeout_timer: Optional[threading.Timer] = None
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
         """Register a callback fired on every status transition.
@@ -70,6 +77,10 @@ class STTEngine:
             if self._listener:
                 self._listener.stop()
                 self._listener = None
+            self._cancel_recording_timers()
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
             self._set_status("idle")
 
     @property
@@ -82,17 +93,99 @@ class STTEngine:
     def last_result(self) -> Optional[dict]:
         return self._last_result
 
+    def _cancel_recording_timers(self) -> None:
+        """Cancel warning and timeout timers."""
+        for timer in (self._warning_timer, self._timeout_timer):
+            if timer is not None:
+                timer.cancel()
+        self._warning_timer = None
+        self._timeout_timer = None
+
+    def _reset_idle_timer(self) -> None:
+        """Reset the VRAM idle unload timer."""
+        if self._idle_timer is not None:
+            self._idle_timer.cancel()
+        timeout = self._cfg.get("idle_timeout_s", 600)
+        self._idle_timer = threading.Timer(timeout, self._on_idle_timeout)
+        self._idle_timer.daemon = True
+        self._idle_timer.start()
+
+    def _on_idle_timeout(self) -> None:
+        """Unload the Whisper model to free VRAM after inactivity."""
+        logger.info("Idle timeout reached — unloading Whisper model to free VRAM")
+        try:
+            from api.recorder.transcribe import unload_model
+            model_name = self._cfg.get("model", "large-v3-turbo")
+            unload_model(model_name)
+        except Exception as e:
+            logger.debug("Model unload failed (may not be loaded): %s", e)
+
+    def _on_recording_warning(self) -> None:
+        """Called when recording nears the time limit."""
+        logger.info("Recording warning: approaching time limit")
+        self._set_status("warning")
+        try:
+            from tools.stt.sounds import play_warning
+            play_warning(self._cfg)
+        except Exception:
+            pass
+
+    def _on_recording_timeout(self) -> None:
+        """Called when recording hits the max time limit — auto-stop."""
+        logger.info("Recording timeout: auto-stopping after max duration")
+        self._cancel_recording_timers()
+        try:
+            self._mic.stop()
+        except Exception:
+            pass
+        threading.Thread(
+            target=self._run_pipeline,
+            daemon=True,
+            name="stt-pipeline-timeout",
+        ).start()
+
     def _on_record_start(self) -> None:
         """Called by hotkey listener on key press."""
         try:
+            # Capture app context BEFORE recording (stt pill will have focus during recording)
+            from tools.stt.app_context import get_active_app_context
+            self._app_context = get_active_app_context()
+            logger.debug("App context at record start: %s", self._app_context)
+
+            # Cancel idle timer while recording
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
+
+            # Check if model needs loading
+            from api.recorder.transcribe import is_model_loaded
+            model_name = self._cfg.get("model", "large-v3-turbo")
+            if not is_model_loaded(model_name):
+                self._set_status("loading")
+
             self._set_status("recording")
             self._mic.start()
+
+            # Start recording timers
+            rec_cfg = self._cfg.get("recording", {})
+            warn_s = rec_cfg.get("warning_seconds", 300)
+            max_s = rec_cfg.get("max_seconds", 360)
+
+            self._warning_timer = threading.Timer(warn_s, self._on_recording_warning)
+            self._warning_timer.daemon = True
+            self._warning_timer.start()
+
+            self._timeout_timer = threading.Timer(max_s, self._on_recording_timeout)
+            self._timeout_timer.daemon = True
+            self._timeout_timer.start()
+
         except Exception as e:
             logger.error("Failed to start mic capture: %s", e)
             self._set_status("listening")
 
     def _on_record_stop(self) -> None:
         """Called by hotkey listener on key release. Runs pipeline in background thread."""
+        self._cancel_recording_timers()
         threading.Thread(
             target=self._run_pipeline,
             daemon=True,
@@ -103,35 +196,48 @@ class STTEngine:
         """Full dictation pipeline: transcribe → cleanup → inject → log."""
         self._set_status("processing")
         start_time = time.time()
+        wav_path = None
 
         try:
             # 1. Stop mic and get WAV path
             wav_path = self._mic.stop()
 
-            # 2. Transcribe
+            # 2. Transcribe with configured model
             from tools.stt.transcribe import transcribe
-            raw_text = transcribe(wav_path)
+            model_name = self._cfg.get("model", "large-v3-turbo")
+            raw_text = transcribe(wav_path, model_size=model_name)
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")
                 self._set_status("listening")
+                self._reset_idle_timer()
                 return
 
-            # 3. Deterministic cleanup (no LLM, no VRAM)
+            # 3. Deterministic cleanup (no LLM, no VRAM) — context-aware
             from tools.stt.cleanup import cleanup_transcript
-            cleaned_text = cleanup_transcript(raw_text)
+            cleaned_text = cleanup_transcript(raw_text, context=self._app_context)
 
             # 4. Inject text into active window
             from tools.stt.inject import inject_text
-            inject_text(cleaned_text)
+            inj_cfg = self._cfg.get("injection", {})
+            method = inj_cfg.get("method", "auto")
+            inject_text(cleaned_text, method=method)
 
-            # 5. Log to JSONL
+            # 5. Success sound
+            try:
+                from tools.stt.sounds import play_success
+                play_success(self._cfg)
+            except Exception:
+                pass
+
+            # 6. Log to JSONL
             latency_ms = int((time.time() - start_time) * 1000)
             from tools.stt.logger import log_dictation
             record = log_dictation(
                 raw_transcript=raw_text,
                 cleaned_text=cleaned_text,
                 latency_ms=latency_ms,
+                whisper_model=model_name,
                 cleanup_model="deterministic",
             )
 
@@ -143,15 +249,24 @@ class STTEngine:
 
         except Exception as e:
             logger.error("Dictation pipeline failed: %s", e)
+            self._set_status("error")
+            try:
+                from tools.stt.sounds import play_error
+                play_error(self._cfg)
+            except Exception:
+                pass
+            # Let error state show for 2s before returning to listening
+            time.sleep(2)
 
         finally:
             # Clean up temp WAV
             try:
-                if 'wav_path' in dir() and wav_path.exists():
+                if wav_path is not None and wav_path.exists():
                     wav_path.unlink()
             except Exception:
                 pass
             self._set_status("listening")
+            self._reset_idle_timer()
 
     def on_dictation_complete(self, wav_path: Path) -> Optional[dict]:
         """Manual pipeline trigger (for API use without hotkey).
@@ -163,16 +278,18 @@ class STTEngine:
 
         try:
             from tools.stt.transcribe import transcribe
-            raw_text = transcribe(wav_path)
+            model_name = self._cfg.get("model", "large-v3-turbo")
+            raw_text = transcribe(wav_path, model_size=model_name)
 
             if not raw_text.strip():
                 return None
 
             from tools.stt.cleanup import cleanup_transcript
-            cleaned_text = cleanup_transcript(raw_text)
+            cleaned_text = cleanup_transcript(raw_text, context=self._app_context)
 
             from tools.stt.inject import inject_text
-            inject_text(cleaned_text)
+            inj_cfg = self._cfg.get("injection", {})
+            inject_text(cleaned_text, method=inj_cfg.get("method", "auto"))
 
             latency_ms = int((time.time() - start_time) * 1000)
             from tools.stt.logger import log_dictation
@@ -180,6 +297,7 @@ class STTEngine:
                 raw_transcript=raw_text,
                 cleaned_text=cleaned_text,
                 latency_ms=latency_ms,
+                whisper_model=model_name,
                 cleanup_model="deterministic",
             )
 

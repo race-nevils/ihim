@@ -56,9 +56,11 @@ def list_audio_devices() -> dict:
 
     Returns dict with 'mic_devices' and 'system_devices' lists.
     Each entry: {index, name, channels, sample_rate, is_loopback}
+    Also returns 'errors' list with any enumeration failures (for diagnostics).
     """
     mic_devices = []
     system_devices = []
+    errors = []
 
     # Mic devices via sounddevice (WASAPI only — avoids duplicates from MME/DirectSound/WDM-KS)
     try:
@@ -79,6 +81,7 @@ def list_audio_devices() -> dict:
                 })
     except Exception as e:
         logger.warning("Failed to enumerate mic devices: %s", e)
+        errors.append(f"mic: {e}")
 
     # System audio (WASAPI loopback) via PyAudioWPatch
     try:
@@ -108,6 +111,7 @@ def list_audio_devices() -> dict:
             p.terminate()
     except Exception as e:
         logger.warning("Failed to enumerate WASAPI loopback devices: %s", e)
+        errors.append(f"wasapi: {e}")
 
     # Fallback: scan all PyAudioWPatch devices for loopback
     if not system_devices:
@@ -132,8 +136,12 @@ def list_audio_devices() -> dict:
                 p.terminate()
         except Exception as e:
             logger.warning("Fallback WASAPI scan failed: %s", e)
+            errors.append(f"fallback: {e}")
 
-    return {"mic_devices": mic_devices, "system_devices": system_devices}
+    result = {"mic_devices": mic_devices, "system_devices": system_devices}
+    if errors:
+        result["errors"] = errors
+    return result
 
 
 def _get_default_mic() -> dict:

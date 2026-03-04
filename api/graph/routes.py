@@ -7,9 +7,11 @@ Endpoints:
     GET  /timeline/{entry_id}      — Temporal evolution of connections
     GET  /drift                    — Recurring themes across unlinked entries
     GET  /stats                    — Counts, averages, distributions
-    GET  /health                   — SEO-informed graph health
+    GET  /health                   — SEO-informed graph health (freshness-weighted hubs)
     GET  /bridges                  — High betweenness centrality entries
     GET  /orphans                  — Zero-relation entries
+    GET  /stale                    — Stale entries for triage review
+    POST /triage                   — Binary triage action (refresh/fade)
     POST /relations                — Manual curation (add relation)
     DELETE /relations/{id}         — Remove relation
     PATCH /relations/{id}          — Retype/reconfidence
@@ -58,6 +60,11 @@ class RelationCreate(BaseModel):
 class RelationPatch(BaseModel):
     relation_type: Optional[str] = None
     confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+
+
+class TriageAction(BaseModel):
+    entry_id: str = Field(..., description="Brain entry ID to triage")
+    action: str = Field(..., description="'refresh' or 'fade'", pattern="^(refresh|fade)$")
 
 
 # =============================================================================
@@ -418,20 +425,8 @@ async def graph_health():
         # Clustering coefficient (per category)
         clustering = _compute_clustering_coefficient(conn)
 
-        # Hub detection (entries with most relations)
-        hubs = conn.execute("""
-            SELECT eid, COUNT(*) as degree, e.title, e.category
-            FROM (
-                SELECT source_id as eid FROM entry_relations
-                UNION ALL
-                SELECT target_id as eid FROM entry_relations
-            ) r
-            JOIN entries e ON e.id = r.eid
-            GROUP BY eid
-            ORDER BY degree DESC
-            LIMIT 15
-        """).fetchall()
-        hub_list = [dict(h) for h in hubs]
+        # Hub detection — freshness-weighted ranking
+        hub_list = _compute_freshness_weighted_hubs(conn, limit=15)
 
         # Bridge detection (entries connecting different categories)
         bridges = _find_bridges(conn)
@@ -574,6 +569,64 @@ async def patch_relation(request: Request, relation_id: int, body: RelationPatch
         conn.close()
 
 
+@router.get("/stale")
+async def get_stale_entries(
+    threshold: float = Query(0.3, ge=0.0, le=1.0,
+                             description="Freshness below this = stale"),
+):
+    """Stale entries in triage categories (Research, Projects) for human review."""
+    from handlers.freshness import get_stale_entries as _get_stale
+
+    entries = _get_stale(threshold=threshold)
+    return {"stale_entries": entries, "count": len(entries)}
+
+
+@router.post("/triage")
+async def triage_entry(request: Request, body: TriageAction):
+    """Binary triage: refresh (reset freshness) or fade (deprioritize).
+
+    Refresh: updates updated_at to now → freshness resets to ~1.0
+    Fade: sets deprioritized=1 → excluded from hub ranking. Reversible via refresh.
+    """
+    conn = get_connection()
+    try:
+        entry = conn.execute(
+            "SELECT id, title, category FROM entries WHERE id = ?",
+            (body.entry_id,)
+        ).fetchone()
+        if not entry:
+            return problem(404, "Entry not found", instance=request.url.path)
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        if body.action == "refresh":
+            conn.execute(
+                "UPDATE entries SET updated_at = ?, deprioritized = 0 WHERE id = ?",
+                (now, body.entry_id)
+            )
+            conn.commit()
+            return {
+                "entry_id": body.entry_id,
+                "action": "refresh",
+                "title": entry["title"],
+                "message": "Entry refreshed — freshness reset, deprioritized cleared",
+            }
+        else:  # fade
+            conn.execute(
+                "UPDATE entries SET deprioritized = 1 WHERE id = ?",
+                (body.entry_id,)
+            )
+            conn.commit()
+            return {
+                "entry_id": body.entry_id,
+                "action": "fade",
+                "title": entry["title"],
+                "message": "Entry faded — excluded from hub ranking, still in TF-IDF",
+            }
+    finally:
+        conn.close()
+
+
 @router.post("/bootstrap")
 async def bootstrap_graph(
     request: Request,
@@ -606,6 +659,66 @@ async def bootstrap_graph(
 # =============================================================================
 # Graph Algorithm Helpers
 # =============================================================================
+
+def _compute_freshness_weighted_hubs(conn, limit: int = 15) -> list[dict]:
+    """Compute hub rankings weighted by entry freshness.
+
+    Instead of raw degree (which favors old docs with many stale connections),
+    each connection contributes its freshness score. Deprioritized entries are
+    excluded entirely.
+
+    Returns:
+        List of hub dicts with id, title, category, weighted_degree, raw_degree
+    """
+    from handlers.freshness import compute_freshness
+
+    # Get all entries (id, title, category, first_seen_at, deprioritized)
+    entries = {}
+    for row in conn.execute(
+        "SELECT id, title, category, first_seen_at, COALESCE(deprioritized, 0) as deprioritized FROM entries"
+    ).fetchall():
+        entries[row["id"]] = {
+            "title": row["title"],
+            "category": row["category"],
+            "first_seen_at": row["first_seen_at"] or "",
+            "deprioritized": row["deprioritized"],
+        }
+
+    # Get all relations
+    relations = conn.execute(
+        "SELECT source_id, target_id FROM entry_relations"
+    ).fetchall()
+
+    # Accumulate weighted + raw degree per entry
+    weighted = defaultdict(float)
+    raw = defaultdict(int)
+
+    for row in relations:
+        src, tgt = row["source_id"], row["target_id"]
+        for eid in (src, tgt):
+            info = entries.get(eid)
+            if not info or info["deprioritized"]:
+                continue
+            # Weight = freshness of the entry itself
+            freshness = compute_freshness(info["first_seen_at"], info["category"])
+            weighted[eid] += freshness
+            raw[eid] += 1
+
+    # Build sorted list
+    hubs = []
+    for eid, w_deg in weighted.items():
+        info = entries[eid]
+        hubs.append({
+            "eid": eid,
+            "title": info["title"],
+            "category": info["category"],
+            "weighted_degree": round(w_deg, 2),
+            "degree": raw[eid],
+        })
+
+    hubs.sort(key=lambda x: x["weighted_degree"], reverse=True)
+    return hubs[:limit]
+
 
 def _sample_avg_shortest_path(conn, sample_size: int = 30) -> float:
     """Estimate average shortest path via sampled BFS."""

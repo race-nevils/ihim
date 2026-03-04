@@ -15,7 +15,7 @@ Design decisions from KNOWLEDGE-GRAPH.md (SEO-informed):
     Q4:  One relation per pair, most specific type wins
     Q15: LLM prompt includes title + category + content
     Q19: Selective re-extraction (preserve manual unless targeted)
-    Q27: Corpus stopwords auto-generated (terms in >50% entries filtered)
+    Q27: Corpus stopwords auto-generated (terms in >30% entries filtered)
 """
 
 import logging
@@ -173,7 +173,7 @@ class EntityIndex:
     def _compute_tfidf(self, entries: list[dict]):
         """Compute TF-IDF vectors for all entries.
 
-        Q27: Terms appearing in >50% of entries are corpus stopwords.
+        Q27: Terms appearing in >30% of entries are corpus stopwords.
         """
         # Tokenize all documents
         doc_tokens: dict[str, list[str]] = {}
@@ -195,8 +195,8 @@ class EntityIndex:
             for term in unique_terms:
                 df_counter[term] += 1
 
-        # Q27: Corpus stopwords — terms in >50% of entries
-        threshold = doc_count * 0.5
+        # Q27: Corpus stopwords — terms in >30% of entries
+        threshold = doc_count * 0.3
         self._corpus_stopwords = {
             term for term, count in df_counter.items()
             if count > threshold
@@ -240,7 +240,7 @@ _TOKEN_RE = re.compile(r'[a-z0-9]+')
 
 def _tokenize(text: str) -> list[str]:
     """Tokenize text into lowercase alphanumeric terms."""
-    return _TOKEN_RE.findall(text.lower())
+    return [t for t in _TOKEN_RE.findall(text.lower()) if len(t) >= 3]
 
 
 # =============================================================================
@@ -348,19 +348,36 @@ def get_first_name_matches(
 # Layer 3: TF-IDF Cosine Similarity
 # =============================================================================
 
+def _shared_prefix(title_a: str, title_b: str) -> bool:
+    """Detect entries from the same split doc (shared title prefix before ' - ').
+
+    Examples:
+        "Mission Control Rigidity Audit - POINT #1" and
+        "Mission Control Rigidity Audit - POINT #2" → True
+        "Mission Control" and "Mission Control Rigidity Audit" → False
+    """
+    if " - " not in title_a or " - " not in title_b:
+        return False
+    prefix_a = title_a.split(" - ", 1)[0].strip()
+    prefix_b = title_b.split(" - ", 1)[0].strip()
+    return prefix_a == prefix_b and len(prefix_a) >= 5
+
+
 def get_tfidf_matches(
     entry_id: str,
     top_n: int = 10,
-    threshold: float = 0.06,
+    threshold: float = 0.15,
 ) -> list[dict]:
     """Find entries with similar TF-IDF vectors via cosine similarity.
 
     Layer 3: Variable confidence (similarity score). Finds topical overlap.
+    Sibling suppression: skips targets that share a title prefix with the
+    source (fragments of the same split doc).
 
     Args:
         entry_id: Source entry ID
         top_n: Maximum number of matches to return
-        threshold: Minimum cosine similarity (0.06 works well for sparse vectors)
+        threshold: Minimum cosine similarity (0.15 cuts weak generic matches)
 
     Returns:
         List of relation dicts sorted by similarity descending
@@ -377,8 +394,15 @@ def get_tfidf_matches(
     if source_norm == 0:
         return []
 
+    source_title = index._entry_titles.get(entry_id, "")
+
     for target_id, target_vec in index._tfidf_vectors.items():
         if target_id == entry_id:
+            continue
+
+        # Sibling suppression: skip fragments of the same split doc
+        target_title = index._entry_titles.get(target_id, "")
+        if _shared_prefix(source_title, target_title):
             continue
 
         # Cosine similarity (dot product / (norm_a * norm_b))
@@ -400,7 +424,7 @@ def get_tfidf_matches(
     matches = []
 
     for target_id, sim in similarities[:top_n]:
-        # Map similarity to confidence: 0.06-1.0 -> 0.50-0.90
+        # Map similarity to confidence: 0.15-1.0 -> 0.50-0.90
         confidence = min(0.50 + (sim * 0.40 / 0.5), 0.90)
         matches.append({
             "@type": "ihim:Relation",

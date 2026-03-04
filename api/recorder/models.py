@@ -56,6 +56,7 @@ class DeviceInfo(BaseModel):
 class DevicesResponse(BaseModel):
     mic_devices: list[DeviceInfo]
     system_devices: list[DeviceInfo]
+    errors: list[str] = Field(default_factory=list, description="Enumeration errors (diagnostic)")
 
 
 class SegmentOut(BaseModel):

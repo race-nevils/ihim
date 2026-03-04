@@ -69,13 +69,21 @@ async def recorder_status():
 
 @router.get("/devices", response_model=DevicesResponse)
 async def recorder_devices(request: Request):
-    """List available mic and WASAPI loopback devices."""
+    """List available mic and WASAPI loopback devices.
+
+    Runs in thread pool — PortAudio/WASAPI on Windows caches device state
+    per-thread at COM initialization time.  A fresh thread gets fresh COM,
+    so hot-plugged devices (USB headsets, etc.) are always discovered.
+    """
     try:
         from api.recorder.capture import list_audio_devices
-        raw = list_audio_devices()
+
+        loop = asyncio.get_event_loop()
+        raw = await loop.run_in_executor(None, list_audio_devices)
         return DevicesResponse(
             mic_devices=[DeviceInfo(**d) for d in raw["mic_devices"]],
             system_devices=[DeviceInfo(**d) for d in raw["system_devices"]],
+            errors=raw.get("errors", []),
         )
     except Exception as e:
         logger.error("Failed to enumerate audio devices: %s", e)

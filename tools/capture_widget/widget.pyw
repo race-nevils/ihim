@@ -12,6 +12,7 @@ Usage:
     # or
     python widget.pyw
 """
+import ctypes
 import atexit
 import json
 import logging
@@ -53,8 +54,7 @@ DEFAULT_CONFIG = {
         "width": 600,
         "height": 50,
         "opacity": 0.95,
-        "position": "center_top",
-        "offset_y": 100
+        "position": "center"
     },
     "appearance": {
         "bg_color": "#1e1e2e",
@@ -204,13 +204,9 @@ class CaptureWidget:
         win_width = cfg["width"]
         win_height = cfg["height"] + 40  # Extra height for title field
 
-        # X is always centered
+        # Always center on screen
         x = (screen_width - win_width) // 2
-        # Y depends on position setting
-        if cfg["position"] == "center":
-            y = (screen_height - win_height) // 2
-        else:  # "center_top" or default
-            y = cfg.get("offset_y", 100)
+        y = (screen_height - win_height) // 2
 
         self.input_window.geometry(f"{win_width}x{win_height}+{x}+{y}")
 
@@ -401,6 +397,26 @@ class CaptureWidget:
         """Show from tray menu click."""
         self.root.after(0, self.show)
 
+    def _force_foreground(self):
+        """Force the input window to the foreground using Win32 API.
+
+        Windows blocks background processes from stealing focus via
+        ForegroundLockTimeout. This bypasses that by attaching to the
+        foreground thread's input queue before calling SetForegroundWindow.
+        """
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        hwnd = int(self.input_window.winfo_id())
+        foreground_hwnd = user32.GetForegroundWindow()
+        foreground_tid = user32.GetWindowThreadProcessId(foreground_hwnd, None)
+        current_tid = kernel32.GetCurrentThreadId()
+        if foreground_tid != current_tid:
+            user32.AttachThreadInput(foreground_tid, current_tid, True)
+        user32.SetForegroundWindow(hwnd)
+        user32.BringWindowToTop(hwnd)
+        if foreground_tid != current_tid:
+            user32.AttachThreadInput(foreground_tid, current_tid, False)
+
     def show(self):
         """Show the capture input window."""
         # Debounce: prevent rapid triggers (200ms cooldown)
@@ -413,7 +429,7 @@ class CaptureWidget:
         self._set_placeholder()
         self.input_window.deiconify()
         self.input_window.lift()
-        self.input_window.focus_force()
+        self._force_foreground()
         # Delay focus to ensure window is fully rendered
         self.root.after(50, self._focus_entry)
         # Start mouse listener for click-outside-to-close

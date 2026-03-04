@@ -45,8 +45,29 @@ def ensure_venv():
         os.execv(str(venv_python), [str(venv_python), __file__] + sys.argv[1:])
 
 
+def check_and_install_deps():
+    """Verify critical packages are installed; auto-install if missing."""
+    critical = ["fastapi", "uvicorn", "sounddevice", "pyaudiowpatch", "numpy"]
+    missing = []
+    for pkg in critical:
+        try:
+            __import__(pkg)
+        except ImportError:
+            missing.append(pkg)
+
+    if missing:
+        print(f"  Missing packages: {', '.join(missing)}")
+        print("  Auto-installing from requirements.txt...")
+        req_file = Path(__file__).parent / "requirements.txt"
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "-r", str(req_file), "-q"
+        ])
+        print("  Done.")
+
+
 def main():
     ensure_venv()
+    check_and_install_deps()
 
     import webbrowser
     import time

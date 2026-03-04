@@ -71,9 +71,7 @@ _FILLER_PHRASES = [
     r"\blet me rephrase\b",
     r"\bwhat I meant was\b",
     r"\bwhat I meant is\b",
-    r"\bno wait\b",
     r"\byou know\b",
-    r"\bi mean\b",
     r"\bkind of\b",
     r"\bsort of\b",
 ]
@@ -91,7 +89,6 @@ _FILLER_WORDS = [
     r"\bah+\b",
     r"\boh\b",
     r"\bbasically\b",
-    r"\bactually\b",
     r"\bliterally\b",
     r"\bright\b(?=[,.]?\s)",   # "right" only when followed by pause/punctuation
     r"\blike\s*,",              # "like" as filler + trailing comma
@@ -116,6 +113,120 @@ _SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([.,!?;:])")
 
 # Sentence boundary: end of sentence → capitalize next word
 _SENTENCE_START_RE = re.compile(r"(?:^|[.!?]\s+)(\w)")
+
+
+# ── Backtrack detection ──────────────────────────────────────────────
+# Trigger phrases that indicate the speaker wants to redo the last sentence.
+# Processed BEFORE filler removal so triggers aren't stripped first.
+_BACKTRACK_TRIGGERS = [
+    "scratch that",
+    "wait no",
+    "no wait",
+    "i mean",
+    "actually",
+]
+
+# Build a single regex: match from the last sentence boundary through the trigger
+_BACKTRACK_RE = re.compile(
+    r"(?:^|(?<=[.!?]\s))"          # sentence start or after sentence-ending punct
+    r"[^.!?]*?"                     # content before the trigger (non-greedy)
+    r"\b(?:" + "|".join(re.escape(t) for t in _BACKTRACK_TRIGGERS) + r")\b"
+    r"\s*[,:]?\s*",                 # optional comma/colon after trigger
+    re.IGNORECASE,
+)
+
+
+def _apply_backtrack(text: str) -> str:
+    """Drop everything from the last sentence boundary through a backtrack trigger.
+
+    Example: "Send the email to John, scratch that, send it to Sarah"
+           → "Send it to Sarah"
+    """
+    # Process iteratively — multiple backtracks possible
+    changed = True
+    while changed:
+        new_text = _BACKTRACK_RE.sub("", text, count=1)
+        changed = new_text != text
+        text = new_text
+    return text.strip()
+
+
+# ── Smart formatting ────────────────────────────────────────────────
+
+# Numbered list: "one [text] two [text] three [text]"
+# Only triggers when ordinals appear at start of text or after sentence-ending punct.
+_ORDINAL_WORDS = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+    "first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
+    "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9", "tenth": "10",
+}
+
+# Match sequences like "one buy groceries two clean house three do laundry"
+_NUMBERED_LIST_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in _ORDINAL_WORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+# Bullet list: "bullet [text] bullet [text]" or "dash [text] dash [text]"
+_BULLET_TRIGGER_RE = re.compile(
+    r"\b(bullet|dash)\b",
+    re.IGNORECASE,
+)
+
+
+def _apply_smart_formatting(text: str) -> str:
+    """Detect numbered and bullet list patterns, format them.
+
+    Numbered lists: "one buy groceries two clean house" → "1. Buy groceries\\n2. Clean house"
+    Bullet lists: "bullet buy groceries bullet clean house" → "- Buy groceries\\n- Clean house"
+    """
+    # --- Bullet lists ---
+    bullet_parts = _BULLET_TRIGGER_RE.split(text)
+    if len(bullet_parts) >= 5:  # At least 2 bullets (split produces: [before, trigger, text, trigger, text, ...])
+        items = []
+        for i in range(2, len(bullet_parts), 2):
+            item = bullet_parts[i].strip().rstrip(".,;")
+            if item:
+                items.append(item)
+        if len(items) >= 2:
+            prefix = bullet_parts[0].strip()
+            formatted = "\n".join(f"- {it[0].upper() + it[1:]}" for it in items if it)
+            return (prefix + "\n" + formatted).strip() if prefix else formatted
+
+    # --- Numbered lists ---
+    # Find all ordinal word positions
+    matches = list(_NUMBERED_LIST_RE.finditer(text))
+    if len(matches) >= 3:
+        # Check if ordinals form a sequence (1, 2, 3, ...)
+        nums = []
+        for m in matches:
+            word = m.group(1).lower()
+            if word in _ORDINAL_WORDS:
+                nums.append((int(_ORDINAL_WORDS[word]), m))
+
+        # Must be consecutive starting from 1 or have at least 3 in sequence
+        if len(nums) >= 3:
+            # Sort by number value
+            nums.sort(key=lambda x: x[0])
+            # Check for consecutive sequence
+            is_sequence = all(nums[i][0] == nums[i-1][0] + 1 for i in range(1, len(nums)))
+
+            if is_sequence:
+                items = []
+                for i, (num, match) in enumerate(nums):
+                    start = match.end()
+                    end = nums[i + 1][1].start() if i + 1 < len(nums) else len(text)
+                    item = text[start:end].strip().rstrip(".,;")
+                    if item:
+                        items.append(f"{num}. {item[0].upper() + item[1:]}")
+
+                if len(items) >= 3:
+                    prefix = text[:nums[0][1].start()].strip()
+                    formatted = "\n".join(items)
+                    return (prefix + "\n" + formatted).strip() if prefix else formatted
+
+    return text
 
 
 # ── New pipeline functions ────────────────────────────────────────────
@@ -198,22 +309,29 @@ def _remove_false_starts(text: str) -> str:
     return result
 
 
-def cleanup_transcript(raw_text: str) -> str:
+def cleanup_transcript(raw_text: str, context: str = "prose") -> str:
     """Clean up a raw Whisper transcript using deterministic rules.
+
+    Args:
+        raw_text: Raw transcript from Whisper.
+        context:  App context hint — "prose", "code", "terminal", or "chat".
+                  Adjusts cleanup aggressiveness.
 
     Pipeline:
      1. Strip Whisper hallucination artifacts
      2. Collapse stutters (s-s-stuttering → stuttering)
      3. Convert verbal punctuation (period → .)
-     4. Remove filler words/phrases
-     5. Remove false starts (I went to the— I went to the store)
-     6. Collapse repeated words
-     7. Clean punctuation artifacts
-     8. Normalize whitespace
-     9. Fix "i" → "I"
-    10. Capitalize first character
-    11. Capitalize after sentence-ending punctuation
-    12. Ensure trailing punctuation
+     4. Apply backtrack detection (scratch that, wait no, etc.)
+     5. Remove filler words/phrases (skipped in "chat" context)
+     6. Remove false starts (I went to the— I went to the store)
+     7. Collapse repeated words
+     8. Smart formatting (numbered/bullet lists)
+     9. Clean punctuation artifacts
+    10. Normalize whitespace
+    11. Fix "i" → "I"
+    12. Capitalize first character
+    13. Capitalize after sentence-ending punctuation
+    14. Ensure trailing punctuation (skipped in "terminal" context)
     """
     if not raw_text or not raw_text.strip():
         return ""
@@ -231,38 +349,45 @@ def cleanup_transcript(raw_text: str) -> str:
     # 3. Apply verbal punctuation commands
     text = _apply_punctuation_commands(text)
 
-    # 4. Remove fillers
-    text = _FILLER_RE.sub("", text)
-    text = _SORRY_RE.sub("", text)
+    # 4. Backtrack detection (before filler removal — triggers overlap with fillers)
+    text = _apply_backtrack(text)
 
-    # 5. Remove false starts
+    # 5. Remove fillers (skip in chat context — casual tone OK)
+    if context != "chat":
+        text = _FILLER_RE.sub("", text)
+        text = _SORRY_RE.sub("", text)
+
+    # 6. Remove false starts
     text = _remove_false_starts(text)
 
-    # 6. Collapse repeated words
+    # 7. Collapse repeated words
     text = _REPEATED_WORD_RE.sub(r"\1", text)
 
-    # 7. Clean up punctuation artifacts from filler removal
+    # 8. Smart formatting (numbered/bullet lists)
+    text = _apply_smart_formatting(text)
+
+    # 9. Clean up punctuation artifacts from filler removal
     text = _MULTI_COMMA_RE.sub(", ", text)
     text = _SPACE_BEFORE_PUNCT_RE.sub(r"\1", text)
 
-    # 8. Normalize whitespace (preserve newlines from punctuation commands)
+    # 10. Normalize whitespace (preserve newlines from punctuation commands)
     text = re.sub(r"[^\S\n]+", " ", text)
     text = text.strip()
 
-    # 9. Fix standalone "i" → "I"
+    # 11. Fix standalone "i" → "I"
     text = re.sub(r"\bi\b", "I", text)
 
-    # 10. Capitalize first character
+    # 12. Capitalize first character
     if text:
         text = text[0].upper() + text[1:]
 
-    # 11. Capitalize after sentence-ending punctuation
+    # 13. Capitalize after sentence-ending punctuation
     def _cap(m):
         return m.group(0)[:-1] + m.group(1).upper()
     text = _SENTENCE_START_RE.sub(_cap, text)
 
-    # 12. Ensure trailing punctuation
-    if text and text[-1] not in ".!?\n":
+    # 14. Ensure trailing punctuation (skip for terminal — commands don't end with .)
+    if context != "terminal" and text and text[-1] not in ".!?\n":
         text += "."
 
     return text

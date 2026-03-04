@@ -38,10 +38,11 @@ logger = logging.getLogger("stt.app")
 # ------------------------------------------------------------------
 # Imports (after path setup)
 # ------------------------------------------------------------------
-from tools.stt.bar import DictationBar      # noqa: E402
-from tools.stt.config import load_config     # noqa: E402
-from tools.stt.engine import STTEngine     # noqa: E402
-from tools.stt.tray import TrayIcon          # noqa: E402
+from tools.stt.bar import DictationBar          # noqa: E402
+from tools.stt.config import load_config         # noqa: E402
+from tools.stt.engine import STTEngine         # noqa: E402
+from tools.stt.inject import start_recall_listener, stop_recall_listener  # noqa: E402
+from tools.stt.tray import TrayIcon              # noqa: E402
 
 
 def _rms_from_buffers(capture) -> float:
@@ -71,7 +72,7 @@ def main() -> None:
 
     # 2. Create the engine with the configured hotkey
     hotkey = tuple(cfg["hotkey"]) if isinstance(cfg["hotkey"], list) else cfg["hotkey"]
-    engine = STTEngine(hotkey=hotkey)
+    engine = STTEngine(hotkey=hotkey, config=cfg)
 
     # 3. Wire engine state → bar state
     def on_state_change(status: str):
@@ -94,8 +95,9 @@ def main() -> None:
 
     def on_state_with_rms(status: str):
         _orig_cb(status)
-        if status == "recording":
-            poll_rms()
+        if status in ("recording", "warning"):
+            if _rms_poll_id[0] is None:
+                poll_rms()
         else:
             if _rms_poll_id[0] is not None:
                 bar.root.after_cancel(_rms_poll_id[0])
@@ -108,9 +110,13 @@ def main() -> None:
     tray = TrayIcon(bar)
     tray.start()
 
-    # 6. Cleanup
+    # 6. Alt+Shift+Z recall hotkey
+    start_recall_listener()
+
+    # 7. Cleanup
     def cleanup():
         engine.stop_listening()
+        stop_recall_listener()
         tray.stop()
 
     atexit.register(cleanup)
@@ -122,13 +128,13 @@ def main() -> None:
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
 
-    # 7. Start engine (activates hotkey listener)
+    # 8. Start engine (activates hotkey listener)
     engine.start_listening()
 
     logger.info("STT dictation bar running  (hotkey: %s)", hotkey)
     logger.info("Hold hotkey to record, release to transcribe+inject")
 
-    # 8. Mainloop (blocks until bar.quit())
+    # 9. Mainloop (blocks until bar.quit())
     try:
         bar.run()
     finally:

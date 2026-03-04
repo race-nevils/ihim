@@ -137,6 +137,39 @@ def _deloop_text(text: str) -> str:
     return " ".join(words)
 
 
+def is_model_loaded(model_size: str = "small") -> bool:
+    """Check if a Whisper model is currently cached in memory.
+
+    Checks all cache keys (which include device/compute_type) for matching model_size.
+    """
+    return any(key[0] == model_size if isinstance(key, tuple) else key == model_size
+               for key in _model_cache)
+
+
+def unload_model(model_size: str = "small") -> bool:
+    """Unload a cached Whisper model to free VRAM.
+
+    CTranslate2 models release GPU memory when garbage-collected.
+    Returns True if a model was unloaded, False if nothing was cached.
+    """
+    import gc
+
+    with _model_lock:
+        # Find and remove all cache entries for this model_size
+        keys_to_remove = [
+            key for key in _model_cache
+            if (isinstance(key, tuple) and key[0] == model_size) or key == model_size
+        ]
+        if not keys_to_remove:
+            return False
+        for key in keys_to_remove:
+            del _model_cache[key]
+
+    gc.collect()
+    print(f"[recorder] Unloaded model '{model_size}' — VRAM freed.")
+    return True
+
+
 def transcribe_channel(
     wav_path: Path,
     speaker_label: str,

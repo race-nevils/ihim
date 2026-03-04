@@ -27,47 +27,77 @@ if sys.platform == "win32":
 _model_cache: dict = {}
 _model_lock = threading.Lock()
 
-# Minimum free VRAM (MB) required to load Whisper on GPU.
-# "small" model needs ~2GB; leave headroom for CUDA overhead.
-_MIN_VRAM_MB = 2500
+# VRAM required (MB) for float16 by model size.
+# Measured empirically: model footprint + CUDA overhead.
+_VRAM_FLOAT16 = {
+    "tiny": 500, "tiny.en": 500,
+    "base": 700, "base.en": 700,
+    "small": 1500, "small.en": 1500,
+    "medium": 3000, "medium.en": 3000,
+    "large-v3": 4500,
+}
+
+# Absolute minimum VRAM for any GPU usage (tiny/base models).
+_MIN_VRAM_MB = 1000
 
 
-def _pick_device() -> tuple[str, str]:
-    """Choose device and compute type based on available VRAM.
+def _get_free_vram() -> int:
+    """Query free VRAM in MB via nvidia-smi. Raises on failure."""
+    result = subprocess.run(
+        ["nvidia-smi", "--query-gpu=memory.free",
+         "--format=csv,noheader,nounits"],
+        capture_output=True, text=True, timeout=5,
+    )
+    return int(result.stdout.strip())
 
-    Returns ("cuda", "float16") if enough VRAM is free,
-    otherwise ("cpu", "int8") as a safe fallback.
+
+def _pick_device(model_size: str = "small") -> tuple[str, str]:
+    """Choose device and compute type based on available VRAM and model size.
+
+    Selection logic (highest quality first):
+    1. float16 on CUDA — if enough VRAM for the specific model + 500MB headroom
+    2. int8_float16 on CUDA — if >= 3000MB free (fits any model with quantization)
+    3. float16 on CUDA — if >= MIN_VRAM for small models (fallback for tiny/base/small)
+    4. CPU int8 — safe fallback when GPU unavailable or insufficient
     """
     try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.free",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
-        )
-        free_mb = int(result.stdout.strip())
-        if free_mb >= _MIN_VRAM_MB:
+        free_mb = _get_free_vram()
+        needed = _VRAM_FLOAT16.get(model_size, 4500)
+
+        if free_mb >= needed + 500:  # full model fits with headroom
             return ("cuda", "float16")
-        print(f"[recorder] Low VRAM ({free_mb}MB free), falling back to CPU")
+        if free_mb >= 3000:  # enough for int8_float16 of any model
+            return ("cuda", "int8_float16")
+        if free_mb >= _MIN_VRAM_MB:  # enough for small models in float16
+            return ("cuda", "float16")
+
+        print(f"[recorder] Low VRAM ({free_mb}MB free, need {needed}+500MB), falling back to CPU")
     except Exception:
         print("[recorder] Could not query GPU, falling back to CPU")
     return ("cpu", "int8")
 
 
 def _get_model(model_size: str = "small"):
-    """Lazy-load and cache a faster-whisper model."""
-    if model_size in _model_cache:
-        return _model_cache[model_size]
+    """Lazy-load and cache a faster-whisper model.
+
+    Cache key is (model_size, device, compute_type) so the same model
+    at different compute types are cached separately.
+    """
+    device, compute_type = _pick_device(model_size)
+    cache_key = (model_size, device, compute_type)
+
+    if cache_key in _model_cache:
+        return _model_cache[cache_key]
 
     with _model_lock:
-        if model_size in _model_cache:
-            return _model_cache[model_size]
+        if cache_key in _model_cache:
+            return _model_cache[cache_key]
 
         from faster_whisper import WhisperModel
 
-        device, compute_type = _pick_device()
         print(f"[recorder] Loading faster-whisper '{model_size}' on {device} ({compute_type})...")
         model = WhisperModel(model_size, device=device, compute_type=compute_type)
-        _model_cache[model_size] = model
+        _model_cache[cache_key] = model
         print(f"[recorder] Model '{model_size}' loaded on {device}.")
         return model
 

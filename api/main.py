@@ -617,52 +617,64 @@ $log = "{log_path}"
 
 Start-Sleep -Seconds 1
 
+# Step 1: Find ALL PIDs on port 7777
 $connections = Get-NetTCPConnection -LocalPort 7777 -ErrorAction SilentlyContinue
-$allPids = $connections | Where-Object {{ $_.OwningProcess -gt 0 }} | Select-Object -ExpandProperty OwningProcess -Unique
+$portPids = @($connections | Where-Object {{ $_.OwningProcess -gt 0 }} | Select-Object -ExpandProperty OwningProcess -Unique)
 
-"[$(Get-Date)] Found PIDs on port 7777: $($allPids -join ', ')" | Out-File $log -Append
+"[$(Get-Date)] Found PIDs on port 7777: $($portPids -join ', ')" | Out-File $log -Append
 
-$realProcesses = @()
-$zombieSockets = @()
-
-foreach ($pid in $allPids) {{
-    $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-    if ($proc) {{
-        $realProcesses += $pid
-        "[$(Get-Date)] PID $pid is REAL ($($proc.ProcessName))" | Out-File $log -Append
-
-        $parent = (Get-CimInstance Win32_Process -Filter "ProcessId = $pid" -ErrorAction SilentlyContinue).ParentProcessId
-        if ($parent -and $parent -gt 0) {{
-            $parentProc = Get-Process -Id $parent -ErrorAction SilentlyContinue
-            if ($parentProc -and $parentProc.ProcessName -eq 'python') {{
-                $realProcesses += $parent
-                "[$(Get-Date)] Including parent PID $parent" | Out-File $log -Append
-            }}
+# Step 2: Collect all PIDs to kill (port holders + their parents)
+$killPids = @()
+foreach ($pid in $portPids) {{
+    $killPids += $pid
+    # Walk up to find uvicorn reload watcher parent
+    $parent = (Get-CimInstance Win32_Process -Filter "ProcessId = $pid" -ErrorAction SilentlyContinue).ParentProcessId
+    if ($parent -and $parent -gt 4) {{
+        $parentName = (Get-CimInstance Win32_Process -Filter "ProcessId = $parent" -ErrorAction SilentlyContinue).Name
+        if ($parentName -match 'python') {{
+            $killPids += $parent
+            "[$(Get-Date)] Including parent PID $parent ($parentName)" | Out-File $log -Append
         }}
-    }} else {{
-        $zombieSockets += $pid
-        "[$(Get-Date)] PID $pid is ZOMBIE (dead process, socket leak)" | Out-File $log -Append
     }}
 }}
+$killPids = @($killPids | Sort-Object -Unique)
 
-$realProcesses = $realProcesses | Sort-Object -Unique
-
-if ($realProcesses.Count -gt 0) {{
-    "[$(Get-Date)] Killing $($realProcesses.Count) real processes" | Out-File $log -Append
-    foreach ($pid in $realProcesses) {{
-        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-        "[$(Get-Date)] Killed PID $pid" | Out-File $log -Append
+# Step 3: Kill process trees with taskkill (no real/zombie distinction)
+if ($killPids.Count -gt 0) {{
+    "[$(Get-Date)] Killing $($killPids.Count) PIDs with taskkill /T /F" | Out-File $log -Append
+    foreach ($pid in $killPids) {{
+        "[$(Get-Date)] taskkill /T /F /PID $pid" | Out-File $log -Append
+        & taskkill /T /F /PID $pid 2>&1 | Out-File $log -Append
     }}
 }} else {{
-    "[$(Get-Date)] No real processes to kill" | Out-File $log -Append
+    "[$(Get-Date)] No PIDs found on port 7777" | Out-File $log -Append
 }}
 
-Start-Sleep -Seconds 3
+# Step 4: Verify port is clear (retry up to 3 times)
+$maxAttempts = 3
+for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {{
+    Start-Sleep -Seconds 2
+    $remaining = Get-NetTCPConnection -LocalPort 7777 -ErrorAction SilentlyContinue
+    $remainingPids = @($remaining | Where-Object {{ $_.OwningProcess -gt 0 }} | Select-Object -ExpandProperty OwningProcess -Unique)
 
-if ($zombieSockets.Count -gt 0) {{
-    "[$(Get-Date)] WARNING: $($zombieSockets.Count) zombie sockets detected" | Out-File $log -Append
+    if ($remainingPids.Count -eq 0) {{
+        "[$(Get-Date)] Port 7777 is clear (attempt $attempt)" | Out-File $log -Append
+        break
+    }}
+
+    "[$(Get-Date)] Port still held by PIDs: $($remainingPids -join ', ') (attempt $attempt/$maxAttempts)" | Out-File $log -Append
+    foreach ($pid in $remainingPids) {{
+        & taskkill /T /F /PID $pid 2>&1 | Out-File $log -Append
+    }}
 }}
 
+# Final check
+$finalCheck = Get-NetTCPConnection -LocalPort 7777 -ErrorAction SilentlyContinue
+if ($finalCheck) {{
+    "[$(Get-Date)] WARNING: Port 7777 still not clear after $maxAttempts attempts" | Out-File $log -Append
+}}
+
+# Step 5: Start new server
 "[$(Get-Date)] Starting new server" | Out-File $log -Append
 $env:IHIM_SUPERVISED = "1"
 Start-Process -FilePath '{python_path}' -ArgumentList 'run.py' -WorkingDirectory '{ihim_dir}' -WindowStyle Hidden

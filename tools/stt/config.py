@@ -68,7 +68,11 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def load_config() -> dict:
-    """Load config from stt_bar.json, falling back to defaults."""
+    """Load config from stt_bar.json, falling back to defaults.
+
+    Creates stt_bar.json with defaults on first run so the operator can
+    easily customize hotkeys/timeouts/appearance.
+    """
     if CONFIG_PATH.exists():
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -76,6 +80,10 @@ def load_config() -> dict:
             return _deep_merge(DEFAULT_CONFIG, user_config)
         except Exception:
             logger.warning("Failed to load %s, using defaults", CONFIG_PATH, exc_info=True)
+    else:
+        # First run — write defaults to disk for easy customization
+        save_config(DEFAULT_CONFIG)
+        logger.info("Created default config at %s", CONFIG_PATH)
     return DEFAULT_CONFIG.copy()
 
 

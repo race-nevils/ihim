@@ -98,6 +98,7 @@ class CaptureWidget:
 
         # Debounce state
         self._is_visible = False
+        self._has_content_placeholder = True
         self._last_show_time = 0
         self._last_key_time = 0
 
@@ -202,7 +203,7 @@ class CaptureWidget:
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         win_width = cfg["width"]
-        win_height = cfg["height"] + 40  # Extra height for title field
+        win_height = cfg["height"] + 100  # Extra height for title + multi-line content
 
         # Always center on screen
         x = (screen_width - win_width) // 2
@@ -241,21 +242,24 @@ class CaptureWidget:
         )
         self.title_entry.pack(fill=tk.X, pady=(0, 5))
 
-        # Content entry (main input)
-        self.entry = tk.Entry(
+        # Content text area (multi-line input)
+        self.entry = tk.Text(
             frame,
             font=entry_font,
             bg=appearance["bg_color"],
             fg=appearance["fg_color"],
             insertbackground=appearance["fg_color"],  # Cursor color
             relief=tk.FLAT,
-            highlightthickness=0
+            highlightthickness=0,
+            wrap=tk.WORD,
+            height=4,
+            undo=True,
         )
         self.entry.pack(fill=tk.BOTH, expand=True)
 
         # Placeholder text
         self.title_placeholder = "Title (optional)..."
-        self.placeholder = appearance.get("placeholder", "Capture thought...")
+        self.placeholder = appearance.get("placeholder", "Capture thought... (Shift+Enter for new line)")
         self._set_placeholder()
 
         # Bindings for title entry
@@ -264,8 +268,9 @@ class CaptureWidget:
         self.title_entry.bind("<FocusIn>", self._on_title_focus_in)
         self.title_entry.bind("<FocusOut>", self._on_title_focus_out)
 
-        # Bindings for content entry
+        # Bindings for content text area
         self.entry.bind("<Return>", self._on_submit)
+        self.entry.bind("<Shift-Return>", self._on_newline)
         self.entry.bind("<Escape>", self._on_cancel)
         self.entry.bind("<FocusIn>", self._on_focus_in)
         self.entry.bind("<FocusOut>", self._on_focus_out)
@@ -277,9 +282,10 @@ class CaptureWidget:
         self.title_entry.insert(0, self.title_placeholder)
         self.title_entry.config(fg="#6c7086")  # Dimmed color for placeholder
         # Content placeholder
-        self.entry.delete(0, tk.END)
-        self.entry.insert(0, self.placeholder)
+        self.entry.delete("1.0", tk.END)
+        self.entry.insert("1.0", self.placeholder)
         self.entry.config(fg="#6c7086")  # Dimmed color for placeholder
+        self._has_content_placeholder = True
 
     def _on_title_focus_in(self, event):
         """Clear title placeholder on focus."""
@@ -298,23 +304,27 @@ class CaptureWidget:
         """Handle Enter in title field - move to content."""
         self.entry.focus_set()
         # Clear content placeholder if present
-        if self.entry.get() == self.placeholder:
-            self.entry.delete(0, tk.END)
+        if self._has_content_placeholder:
+            self.entry.delete("1.0", tk.END)
             self.entry.config(fg=self.config["appearance"]["fg_color"])
+            self._has_content_placeholder = False
         return "break"
 
     def _on_focus_in(self, event):
         """Clear placeholder on focus."""
-        if self.entry.get() == self.placeholder:
-            self.entry.delete(0, tk.END)
+        if self._has_content_placeholder:
+            self.entry.delete("1.0", tk.END)
             self.entry.config(fg=self.config["appearance"]["fg_color"])
+            self._has_content_placeholder = False
 
     def _on_focus_out(self, event):
         """Restore placeholder if empty."""
-        if not self.entry.get():
-            self.entry.delete(0, tk.END)
-            self.entry.insert(0, self.placeholder)
+        content = self.entry.get("1.0", "end-1c").strip()
+        if not content:
+            self.entry.delete("1.0", tk.END)
+            self.entry.insert("1.0", self.placeholder)
             self.entry.config(fg="#6c7086")
+            self._has_content_placeholder = True
 
     def _create_tray_icon(self):
         """Create system tray icon."""
@@ -480,7 +490,7 @@ class CaptureWidget:
         self.input_window.withdraw()
         # Clear both fields
         self.title_entry.delete(0, tk.END)
-        self.entry.delete(0, tk.END)
+        self.entry.delete("1.0", tk.END)
         self._set_placeholder()
 
     def _start_mouse_listener(self):
@@ -523,12 +533,17 @@ class CaptureWidget:
                 win_y <= y <= win_y + win_height):
             self.hide()
 
+    def _on_newline(self, event):
+        """Handle Shift+Enter - insert newline in content."""
+        self.entry.insert(tk.INSERT, "\n")
+        return "break"
+
     def _on_submit(self, event):
         """Handle Enter key - save to inbox."""
         title = self.title_entry.get().strip()
         if title == self.title_placeholder:
             title = ""
-        text = self.entry.get().strip()
+        text = self.entry.get("1.0", "end-1c").strip()
         if text and text != self.placeholder:
             self._save_to_inbox(text, title)
         self.hide()

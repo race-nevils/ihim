@@ -295,6 +295,11 @@ async def transcribe_recording(recording_id: str, request: Request):
         segments = result["segments"]
         transcript = result["transcript"]
         sidecar_status = "complete" if segments else "no_transcript"
+
+        # Free VRAM in background — don't block the response
+        import threading
+        from api.recorder.transcribe import unload_model
+        threading.Thread(target=unload_model, args=(model_size,), daemon=True).start()
     except Exception as e:
         logger.error("Transcription failed for %s: %s", recording_id, e)
         sidecar["status"] = "transcription_failed"

@@ -89,6 +89,10 @@ services:
     image: docker.io/clickhouse/clickhouse-server
     restart: always
     user: "101:101"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}

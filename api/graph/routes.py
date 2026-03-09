@@ -454,7 +454,13 @@ async def graph_health():
             "hubs": hub_list[:12],
             "bridges": bridges[:10],
             "freshness": freshness,
-            "distribution": stats["by_type"],
+            "distribution": {
+                "by_type": stats["by_type"],
+                "by_source": stats["by_source"],
+                "confidence_histogram": stats["confidence_histogram"],
+                "relations_per_category": stats["relations_per_category"],
+                "avg_confidence_by_layer": stats["avg_confidence_by_layer"],
+            },
         }
 
         # Overall health

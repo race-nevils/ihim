@@ -36,6 +36,10 @@ class InboxSource:
     path: Path
     cleanup: str = "move"
     exclude_folders: set = field(default_factory=set)
+    extensions: set = field(default_factory=lambda: {".md"})
+    recursive: bool = False
+    structured: bool = False
+    default_category: str | None = None
 
 
 class InboxWatcher:
@@ -52,7 +56,7 @@ class InboxWatcher:
         self.sources = sources
         self.processed_path = Path(processed_path)
         self.poll_interval = poll_interval
-        self.file_pattern = file_pattern
+        self.file_pattern = file_pattern  # Legacy fallback for _recover_failed_files
         self.cleanup_days = cleanup_days
         self._running = False
         self.tracker = FileTracker()
@@ -120,9 +124,15 @@ class InboxWatcher:
         """
         if not self.failed_path.exists():
             return
+        # Recover files matching any source extension
+        all_extensions = set()
+        for source in self.sources:
+            all_extensions.update(source.extensions)
         recovered = 0
-        for f in self.failed_path.glob(self.file_pattern):
+        for f in self.failed_path.iterdir():
             if not f.is_file() or f.name.endswith("_error.txt"):
+                continue
+            if f.suffix.lower() not in all_extensions:
                 continue
             # Strip timestamp prefix (YYYYMMDD-HHMMSS_) to get original name
             original_name = f.name
@@ -171,18 +181,24 @@ class InboxWatcher:
         logger.warning(f"Moved to failed/ after {FileTracker.MAX_RETRIES} retries: {file_path.name}")
 
     def scan_sources(self) -> list[tuple[Path, InboxSource]]:
-        """Scan all inbox sources for files."""
+        """Scan all inbox sources for files.
+
+        Uses per-source extension filtering and optional recursion.
+        """
         results = []
         for source in self.sources:
             if not source.path.exists():
                 continue
-            for file_path in source.path.glob(self.file_pattern):
+            pattern = "**/*" if source.recursive else "*"
+            for file_path in source.path.glob(pattern):
                 if not file_path.is_file():
+                    continue
+                if file_path.suffix.lower() not in source.extensions:
                     continue
                 if self._is_excluded(file_path, source):
                     continue
-                # Only process root level files
-                if file_path.parent != source.path:
+                # Non-recursive sources: only root-level files
+                if not source.recursive and file_path.parent != source.path:
                     continue
                 results.append((file_path, source))
         return results
@@ -251,6 +267,11 @@ class InboxWatcher:
     def process_files(self, processor: Callable) -> list[dict]:
         """Process files through the brain handler.
 
+        Three processing paths:
+        1. Adapter path: source.structured + adapter found → decompose into entries via ingest()
+        2. Structured path: source.structured + no adapter → direct ingest() with default_category
+        3. Standard path: LLM classification via orchestrator
+
         Uses FileTracker for debounce:
         1. Update all file states based on modification time
         2. Only process files in READY state (stable for 10s)
@@ -258,32 +279,34 @@ class InboxWatcher:
         """
         results = []
 
-        # First pass: update all file states
+        # First pass: update all file states + track source mapping
+        file_source_map: dict[Path, InboxSource] = {}
         for file_path, source in self.scan_sources():
             try:
+                file_source_map[file_path] = source
                 mtime = file_path.stat().st_mtime
                 state = self.tracker.update(file_path, mtime)
 
                 if state == FileState.SETTLING:
                     logger.debug(f"Settling: {file_path.name}")
-                    self._warm_ollama()
+                    # Only warm Ollama for non-structured sources (LLM path)
+                    if not source.structured:
+                        self._warm_ollama()
             except Exception as e:
                 logger.error(f"Failed to stat {file_path.name}: {e}")
 
         # Second pass: process only READY files
         for file_path in self.tracker.get_ready():
             original_name = file_path.name
+            source = file_source_map.get(file_path)
 
             # Mark as PROCESSING immediately to prevent race condition
-            # Other poll cycles will see PROCESSING and skip this file
             self.tracker.mark_processing(file_path)
 
-            # B2: Fresh heartbeat BEFORE the blocking LLM call.
-            # Even if Ollama cold-starts (30-50s), heartbeat timestamp
-            # is recent enough to keep dashboard showing "healthy".
+            # Fresh heartbeat BEFORE blocking calls
             self._write_heartbeat([])
 
-            # B3: Log file age for latency diagnostics
+            # Log file age for latency diagnostics
             try:
                 file_age = time.time() - file_path.stat().st_mtime
                 logger.info(f"Processing {original_name} (file age: {file_age:.0f}s)")
@@ -292,6 +315,56 @@ class InboxWatcher:
 
             _proc_elapsed_ms = 0
             try:
+                # === ADAPTER PATH: structured source with a registered adapter ===
+                if source and source.structured:
+                    from workers.inbox_watcher.adapters import get_adapter
+                    adapter = get_adapter(file_path)
+
+                    if adapter:
+                        _proc_t0 = time.time()
+                        batch_results = self._process_adapter_entries(
+                            file_path, source, adapter
+                        )
+                        _proc_elapsed_ms = round((time.time() - _proc_t0) * 1000)
+
+                        # Mark as processed
+                        content_hash = self._get_content_hash(file_path)
+                        self.tracker.mark_processed(file_path, content_hash)
+                        self._total_processing_ms += _proc_elapsed_ms
+
+                        results.append({
+                            "file": original_name,
+                            "action_type": "adapter_batch",
+                            "result": {"action": "adapter_batch"},
+                            "batch": batch_results,
+                            "processing_ms": _proc_elapsed_ms,
+                        })
+                        continue
+
+                    # === STRUCTURED PATH: no adapter, direct ingest with default_category ===
+                    _proc_t0 = time.time()
+                    result = processor(
+                        self.read_file_content(file_path),
+                        str(file_path),
+                        category=source.default_category,
+                    )
+                    _proc_elapsed_ms = round((time.time() - _proc_t0) * 1000)
+                    action = result.get("result", {}).get("action", "unknown")
+
+                    content_hash = self._get_content_hash(file_path)
+                    self.tracker.mark_processed(file_path, content_hash)
+                    self._files_processed += 1
+                    self._total_processing_ms += _proc_elapsed_ms
+
+                    results.append({
+                        "file": original_name,
+                        "result": result,
+                        "action_type": action,
+                        "processing_ms": _proc_elapsed_ms,
+                    })
+                    continue
+
+                # === STANDARD PATH: LLM classification via orchestrator ===
                 content = self.read_file_content(file_path)
 
                 if not content:
@@ -309,8 +382,6 @@ class InboxWatcher:
                 action = result.get("result", {}).get("action", "unknown")
 
                 # Check if the HANDLER returned an error action
-                # (brain handler catches exceptions internally, returns {"action": "error"})
-                # Note: state-level "error" field may contain non-fatal warnings
                 if action == "error":
                     error_msg = result.get("error", result.get("result", {}).get("error", "unknown"))
                     logger.warning(f"Processor returned error for {original_name}: {error_msg}")
@@ -340,10 +411,8 @@ class InboxWatcher:
                             results.append({"file": original_name, "error": f"db_verify_failed: {processed_id}"})
                             continue
                     except sqlite3.OperationalError as db_err:
-                        # DB locked or similar — don't penalize the file, but make it visible
                         logger.warning(f"DB verification skipped for {original_name} (OperationalError): {db_err}")
                     except Exception as db_err:
-                        # Other DB errors — still skip verification but log
                         logger.warning(f"DB verification skipped for {original_name}: {db_err}")
 
                 # Mark as processed (stays in inbox for potential re-editing)
@@ -375,14 +444,71 @@ class InboxWatcher:
 
         return results
 
+    def _process_adapter_entries(self, file_path: Path, source: InboxSource, adapter) -> dict:
+        """Process a structured file through an adapter, yielding multiple brain entries.
+
+        Returns a summary dict with created/skipped/error counts.
+        """
+        from data.ingest import ingest
+
+        created = 0
+        skipped = 0
+        errors = 0
+
+        try:
+            for entry_data in adapter.extract_entries(file_path):
+                try:
+                    result = ingest(
+                        source=file_path,
+                        category=entry_data["category"],
+                        title=entry_data["title"],
+                        summary=entry_data["summary"],
+                        section=entry_data.get("source_id"),
+                        content_override=entry_data["content"],
+                    )
+                    status = result.get("status", "error")
+                    if status == "created":
+                        created += 1
+                    elif status == "duplicate":
+                        skipped += 1
+                    else:
+                        errors += 1
+                        logger.warning(f"Adapter entry failed: {entry_data.get('title', '?')}: {result}")
+                except Exception as e:
+                    errors += 1
+                    logger.error(f"Adapter entry exception: {entry_data.get('title', '?')}: {e}")
+        except Exception as e:
+            errors += 1
+            logger.error(f"Adapter extraction failed for {file_path.name}: {e}")
+
+        total = created + skipped + errors
+        self._files_processed += created
+        self._files_errored += errors
+
+        logger.info(
+            f"Adapter batch complete for {file_path.name}: "
+            f"{created} created, {skipped} skipped, {errors} errors (total: {total})"
+        )
+
+        return {"created": created, "skipped": skipped, "errors": errors, "total": total}
+
     def watch(self, processor: Callable, on_process: Optional[Callable] = None):
         """Start watching the inbox continuously."""
         self._recover_failed_files()
         self._running = True
         print("Watching sources:")
         for source in self.sources:
-            exclude_info = f", excluding: {', '.join(source.exclude_folders)}" if source.exclude_folders else ""
-            print(f"  - {source.path}{exclude_info}")
+            extras = []
+            if source.exclude_folders:
+                extras.append(f"excluding: {', '.join(source.exclude_folders)}")
+            if source.extensions != {".md"}:
+                extras.append(f"ext: {', '.join(sorted(source.extensions))}")
+            if source.recursive:
+                extras.append("recursive")
+            if source.structured:
+                extras.append("structured")
+            extra_str = f" ({', '.join(extras)})" if extras else ""
+            print(f"  - {source.path}{extra_str}")
         print(f"Poll interval: {self.poll_interval}s")
         print(f"Debounce: {FileTracker.SETTLE_SECONDS}s settle before process")
         print(f"Archive: after {FileTracker.STALE_SECONDS // 3600}hr idle")
@@ -416,7 +542,11 @@ class InboxWatcher:
                         action = result.get("action_type", "unknown")
                         category = file_result.get("category", "")
 
-                        if action == "classified":
+                        if action == "adapter_batch":
+                            batch = result.get("batch", {})
+                            c, s, e = batch.get("created", 0), batch.get("skipped", 0), batch.get("errors", 0)
+                            print(f"[BATCH] {result['file']}: {c} created, {s} skipped, {e} errors")
+                        elif action == "classified":
                             print(f"[NEW] {result['file']} -> {category}")
                         elif action in ("updated", "updated_reclassified"):
                             print(f"[UPDATE] {result['file']} -> {category}")

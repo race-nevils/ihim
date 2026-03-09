@@ -155,15 +155,47 @@ OBSIDIAN_INBOX = InboxSource(
 )
 
 
+def _derive_title_from_filename(source_file: str) -> str:
+    """Derive a human-readable title from a filename."""
+    stem = Path(source_file).stem
+    # Replace separators with spaces, title-case
+    title = stem.replace("-", " ").replace("_", " ")
+    return title.title()
+
+
 def create_processor(orchestrator):
-    """Create a processor function that uses the orchestrator."""
-    def processor(content: str, source_file: str) -> dict:
-        state = {
-            "input_text": content,
-            "source_file": source_file
-        }
-        result = orchestrator.invoke(state)
-        return result
+    """Create a processor function that uses the orchestrator.
+
+    Supports two paths:
+    - Standard: LLM classification via orchestrator (category=None)
+    - Structured: Direct ingest with pre-determined category (category=str)
+    """
+    def processor(content: str, source_file: str, category: str = None) -> dict:
+        if category:
+            # Structured path: bypass LLM, direct ingest
+            from data.ingest import ingest
+            result = ingest(
+                source=Path(source_file),
+                category=category,
+                title=_derive_title_from_filename(source_file),
+                summary="",
+                content_override=content,
+            )
+            return {
+                "result": {
+                    "action": result["status"],
+                    "processed_id": result.get("entry_id"),
+                    "category": category,
+                }
+            }
+        else:
+            # Standard path: LLM classification
+            state = {
+                "input_text": content,
+                "source_file": source_file
+            }
+            result = orchestrator.invoke(state)
+            return result
     return processor
 
 

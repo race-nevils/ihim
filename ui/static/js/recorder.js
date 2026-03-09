@@ -246,7 +246,6 @@ function renderStatus(data) {
     const stopBtn = document.getElementById('recorder-stop-btn');
     const resetBtn = document.getElementById('recorder-reset-btn');
     const liveStatus = document.getElementById('recorder-live-status');
-    const liveDevices = document.getElementById('recorder-live-devices');
 
     // Badge
     badge.classList.remove('status-idle', 'status-recording', 'status-transcribing', 'status-error');
@@ -259,12 +258,6 @@ function renderStatus(data) {
             stopBtn.textContent = 'Stop';
             resetBtn.style.display = 'none';
             liveStatus.style.display = 'flex';
-            if (data.mic_device || data.sys_device) {
-                const parts = [];
-                if (data.mic_device) parts.push(`Mic: ${escapeHtml(data.mic_device)}`);
-                if (data.sys_device) parts.push(`Sys: ${escapeHtml(data.sys_device)}`);
-                liveDevices.innerHTML = parts.join(' &middot; ');
-            }
             // Start elapsed timer from server's started_at
             if (data.started_at && !elapsedTimer) {
                 startElapsedTimer(new Date(data.started_at));

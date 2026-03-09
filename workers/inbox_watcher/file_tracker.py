@@ -34,6 +34,7 @@ class TrackedFile:
     processing_since: float | None = None  # Timestamp when PROCESSING started
     retry_count: int = 0       # Consecutive processing failures
     retry_after: float = 0.0   # Don't retry before this timestamp
+    cleanup: str = "move"      # From InboxSource — "move" or "none"
 
 
 class FileTracker:
@@ -69,12 +70,13 @@ class FileTracker:
     def __init__(self):
         self.files: dict[Path, TrackedFile] = {}
 
-    def update(self, path: Path, mtime: float) -> FileState:
+    def update(self, path: Path, mtime: float, cleanup: str = "move") -> FileState:
         """Update file state based on modification time.
 
         Args:
             path: File path
             mtime: Current modification time (from stat)
+            cleanup: Cleanup mode from InboxSource ("move" or "none")
 
         Returns:
             Current state after update
@@ -83,7 +85,7 @@ class FileTracker:
 
         if path not in self.files:
             # New file detected - start in SETTLING
-            self.files[path] = TrackedFile(path, FileState.SETTLING, mtime)
+            self.files[path] = TrackedFile(path, FileState.SETTLING, mtime, cleanup=cleanup)
             return FileState.SETTLING
 
         tracked = self.files[path]

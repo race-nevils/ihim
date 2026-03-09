@@ -232,6 +232,15 @@ class InboxWatcher:
         archived = 0
 
         for file_path in self.tracker.get_stale():
+            tracked = self.tracker.files.get(file_path)
+
+            # cleanup="none" sources: just drop from tracker, don't touch the file
+            if tracked and tracked.cleanup == "none":
+                self.tracker.remove(file_path)
+                archived += 1
+                logger.debug(f"Cleared stale tracker entry (cleanup=none): {file_path.name}")
+                continue
+
             if not file_path.exists():
                 # File already deleted/moved externally — remove from tracker to prevent leak
                 self.tracker.remove(file_path)
@@ -285,7 +294,7 @@ class InboxWatcher:
             try:
                 file_source_map[file_path] = source
                 mtime = file_path.stat().st_mtime
-                state = self.tracker.update(file_path, mtime)
+                state = self.tracker.update(file_path, mtime, cleanup=source.cleanup)
 
                 if state == FileState.SETTLING:
                     logger.debug(f"Settling: {file_path.name}")
@@ -369,8 +378,11 @@ class InboxWatcher:
 
                 if not content:
                     logger.info(f"Empty file, archiving immediately: {original_name}")
-                    self.move_to_processed(file_path)
-                    self.tracker.remove(file_path)
+                    if source and source.cleanup == "none":
+                        self.tracker.remove(file_path)
+                    else:
+                        self.move_to_processed(file_path)
+                        self.tracker.remove(file_path)
                     results.append({"file": original_name, "action_type": "skipped", "result": {"action": "skipped"}, "processing_ms": 0})
                     continue
 
@@ -469,8 +481,10 @@ class InboxWatcher:
                     status = result.get("status", "error")
                     if status == "created":
                         created += 1
-                    elif status == "duplicate":
+                    elif status in ("duplicate", "split_managed"):
                         skipped += 1
+                    elif status == "updated":
+                        created += 1
                     else:
                         errors += 1
                         logger.warning(f"Adapter entry failed: {entry_data.get('title', '?')}: {result}")

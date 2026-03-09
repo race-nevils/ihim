@@ -77,6 +77,7 @@ async def get_neighborhood(
     entry_id: str,
     hops: int = Query(1, ge=1, le=5),
     min_confidence: float = Query(0.0, ge=0.0, le=1.0),
+    relation_type: Optional[str] = Query(None, description="Filter by relation type"),
 ):
     """Get connected entries within N hops of a given entry."""
     conn = get_connection()
@@ -108,7 +109,9 @@ async def get_neighborhood(
                     JOIN entries e_t ON e_t.id = r.target_id
                     WHERE (r.source_id = ? OR r.target_id = ?)
                     AND r.confidence >= ?
-                """, (node_id, node_id, min_confidence)).fetchall()
+                    AND (? IS NULL OR r.relation_type = ?)
+                """, (node_id, node_id, min_confidence,
+                      relation_type, relation_type)).fetchall()
 
                 for row in rows:
                     neighbor_id = row["target_id"] if row["source_id"] == node_id else row["source_id"]
@@ -290,7 +293,12 @@ async def get_clusters(min_size: int = Query(2, ge=1)):
 
 
 @router.get("/timeline/{entry_id}")
-async def get_timeline(request: Request, entry_id: str):
+async def get_timeline(
+    request: Request,
+    entry_id: str,
+    since: Optional[str] = Query(None, description="ISO date lower bound"),
+    until: Optional[str] = Query(None, description="ISO date upper bound"),
+):
     """Temporal evolution of an entry's connections."""
     conn = get_connection()
     try:
@@ -300,16 +308,25 @@ async def get_timeline(request: Request, entry_id: str):
         if not entry:
             return problem(404, "Entry not found", instance=request.url.path)
 
-        rows = conn.execute("""
+        query = """
             SELECT r.*, e.title as linked_title, e.created_at as linked_created_at
             FROM entry_relations r
             JOIN entries e ON e.id = CASE
                 WHEN r.source_id = ? THEN r.target_id
                 ELSE r.source_id
             END
-            WHERE r.source_id = ? OR r.target_id = ?
-            ORDER BY r.created_at
-        """, (entry_id, entry_id, entry_id)).fetchall()
+            WHERE (r.source_id = ? OR r.target_id = ?)
+        """
+        params = [entry_id, entry_id, entry_id]
+        if since:
+            query += " AND r.created_at >= ?"
+            params.append(since)
+        if until:
+            query += " AND r.created_at <= ?"
+            params.append(until)
+        query += " ORDER BY r.created_at"
+
+        rows = conn.execute(query, params).fetchall()
 
         timeline = []
         for row in rows:
@@ -337,12 +354,16 @@ async def get_timeline(request: Request, entry_id: str):
 
 
 @router.get("/drift")
-async def get_drift(limit: int = Query(20, ge=1, le=100)):
+async def get_drift(
+    limit: int = Query(20, ge=1, le=100),
+    window_days: Optional[int] = Query(None, ge=1, le=365, description="Only entries created within N days"),
+    min_occurrences: int = Query(5, ge=1, description="Minimum shared terms to qualify as drift"),
+):
     """Find recurring themes across unlinked entries (potential missing relations)."""
     conn = get_connection()
     try:
         # Get orphan entries (no relations)
-        orphans = conn.execute("""
+        query = """
             SELECT e.id, e.title, e.category, e.content
             FROM entries e
             WHERE e.id NOT IN (
@@ -350,8 +371,15 @@ async def get_drift(limit: int = Query(20, ge=1, le=100)):
                 UNION
                 SELECT target_id FROM entry_relations
             )
-            LIMIT ?
-        """, (limit,)).fetchall()
+        """
+        params = []
+        if window_days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=window_days)).isoformat()
+            query += " AND e.created_at >= ?"
+            params.append(cutoff)
+        query += " LIMIT ?"
+        params.append(limit)
+        orphans = conn.execute(query, params).fetchall()
 
         # Simple keyword overlap analysis between orphans
         from handlers.relations import _tokenize
@@ -364,8 +392,7 @@ async def get_drift(limit: int = Query(20, ge=1, le=100)):
             for b in orphan_list[i+1:]:
                 b_tokens = set(_tokenize(b.get("content", "") or ""))
                 overlap = a_tokens & b_tokens
-                # Filter common words
-                if len(overlap) > 5:
+                if len(overlap) > min_occurrences:
                     drift_pairs.append({
                         "entry_a": {"id": a["id"], "title": a["title"]},
                         "entry_b": {"id": b["id"], "title": b["title"]},
@@ -434,6 +461,29 @@ async def graph_health():
         # Freshness: average age of relations
         freshness = _compute_freshness(conn)
 
+        # Largest component % — lightweight inline union-find
+        all_ids = [row[0] for row in conn.execute("SELECT id FROM entries").fetchall()]
+        uf_parent = {eid: eid for eid in all_ids}
+
+        def _uf_find(x):
+            while uf_parent[x] != x:
+                uf_parent[x] = uf_parent[uf_parent[x]]
+                x = uf_parent[x]
+            return x
+
+        for row in conn.execute("SELECT source_id, target_id FROM entry_relations").fetchall():
+            s, t = row["source_id"], row["target_id"]
+            if s in uf_parent and t in uf_parent:
+                ps, pt = _uf_find(s), _uf_find(t)
+                if ps != pt:
+                    uf_parent[ps] = pt
+
+        comp_sizes = defaultdict(int)
+        for eid in all_ids:
+            comp_sizes[_uf_find(eid)] += 1
+        largest_comp = max(comp_sizes.values()) if comp_sizes else 0
+        largest_pct = round(largest_comp / total_entries, 3) if total_entries > 0 else 0.0
+
         health = {
             "overall": "healthy",
             "metrics": {
@@ -444,6 +494,8 @@ async def graph_health():
                 "clustering_coefficient": {"value": clustering["global"],
                                            "target": "0.4-0.7",
                                            "per_category": clustering["per_category"]},
+                "largest_component_pct": {"value": largest_pct, "target": 0.8,
+                                          "status": "healthy" if largest_pct >= 0.8 else "warning"},
                 "total_relations": total_relations,
                 "total_entries": total_entries,
                 "avg_degree": avg_degree,
@@ -825,8 +877,9 @@ def _find_bridges(conn) -> list[dict]:
         adj[row["target_id"]].add(row["source_id"])
 
     entry_info = {}
-    for row in conn.execute("SELECT id, title, category FROM entries").fetchall():
-        entry_info[row["id"]] = {"title": row["title"], "category": row["category"]}
+    for row in conn.execute("SELECT id, title, category, modified_at FROM entries").fetchall():
+        entry_info[row["id"]] = {"title": row["title"], "category": row["category"],
+                                  "modified_at": row["modified_at"]}
 
     bridges = []
     for node, neighbors in adj.items():
@@ -842,6 +895,12 @@ def _find_bridges(conn) -> list[dict]:
                 neighbor_cats.add(n_cat)
 
         if len(neighbor_cats) >= 2:
+            modified_at = info.get("modified_at")
+            try:
+                age_days = (datetime.now(timezone.utc) - datetime.fromisoformat(
+                    modified_at.replace("Z", "+00:00"))).days if modified_at else None
+            except (ValueError, TypeError):
+                age_days = None
             bridges.append({
                 "id": node,
                 "title": info.get("title", ""),
@@ -849,6 +908,9 @@ def _find_bridges(conn) -> list[dict]:
                 "cross_category_connections": len(neighbor_cats),
                 "categories_connected": sorted(neighbor_cats),
                 "total_connections": len(neighbors),
+                "modified_at": modified_at,
+                "age_days": age_days,
+                "stale": age_days is not None and age_days > 90,
             })
 
     bridges.sort(key=lambda x: x["cross_category_connections"], reverse=True)

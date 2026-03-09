@@ -17,6 +17,10 @@
     "restore_delay_s": 0.05,
     "recall_hotkey": "alt+shift+z"
   },
+  "audio_retention": {
+    "enabled": false,
+    "format": "flac"
+  },
   "sounds": {
     "enabled": true,
     "success": true,

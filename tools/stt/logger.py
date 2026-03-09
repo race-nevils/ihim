@@ -14,6 +14,10 @@ DATA_DIR = Path(__file__).parent / "data"
 DICTATIONS_FILE = DATA_DIR / "dictations.jsonl"
 CORRECTIONS_FILE = DATA_DIR / "corrections.jsonl"
 
+TRAINING_DIR = DATA_DIR / "voice-training"
+MANIFEST_FILE = TRAINING_DIR / "manifest.jsonl"
+METADATA_FILE = TRAINING_DIR / "metadata.json"
+
 # Vocab reload interval — check for new terms every N dictations.
 _VOCAB_RELOAD_INTERVAL = 10
 _dictation_count = 0
@@ -29,27 +33,37 @@ def log_dictation(
     latency_ms: int,
     whisper_model: str = "small",
     cleanup_model: str = "llama3.2:3b",
+    dictation_id: Optional[str] = None,
+    audio_path: Optional[str] = None,
+    duration_s: float = 0.0,
 ) -> dict:
     """Append a dictation record to the JSONL log.
 
     Returns the logged record dict (includes generated id).
+    If audio_path is provided, also appends a manifest entry for
+    voice model training.
     """
     _ensure_data_dir()
 
     record = {
-        "id": uuid.uuid4().hex[:8],
+        "id": dictation_id or uuid.uuid4().hex[:8],
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "raw_transcript": raw_transcript,
         "cleaned_text": cleaned_text,
         "whisper_model": whisper_model,
         "cleanup_model": cleanup_model,
         "latency_ms": latency_ms,
+        "audio_path": audio_path,
         "correction": None,
         "flagged": False,
     }
 
     with DICTATIONS_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
+
+    # Append manifest entry if audio was retained
+    if audio_path:
+        _append_manifest(record, duration_s)
 
     logger.info("Dictation logged: %s (%dms)", record["id"], latency_ms)
     return record
@@ -130,6 +144,9 @@ def mark_correction(dictation_id: str, corrected_text: str) -> Optional[dict]:
 
         # Auto-learn vocabulary from correction
         _learn_vocab_from_correction(updated_record)
+
+        # Propagate correction to voice training manifest
+        _update_manifest_correction(dictation_id, corrected_text)
 
     return updated_record
 
@@ -269,6 +286,91 @@ def _save_correction_pair(record: dict) -> None:
         logger.debug("Correction pair saved for fine-tuning: %s", pair["id"])
     except Exception as exc:
         logger.debug("Failed to save correction pair: %s", exc)
+
+
+def _append_manifest(record: dict, duration_s: float) -> None:
+    """Append a training manifest entry linking audio to transcript."""
+    TRAINING_DIR.mkdir(parents=True, exist_ok=True)
+
+    audio_path = record.get("audio_path", "")
+    # Store relative path from training dir (segments/xxx.flac)
+    try:
+        rel_path = str(Path(audio_path).relative_to(TRAINING_DIR))
+    except (ValueError, TypeError):
+        rel_path = audio_path
+
+    entry = {
+        "id": record["id"],
+        "audio_path": rel_path,
+        "raw_transcript": record.get("raw_transcript", ""),
+        "corrected_text": None,
+        "timestamp": record.get("timestamp"),
+        "duration_s": round(duration_s, 2),
+        "whisper_model": record.get("whisper_model"),
+    }
+
+    try:
+        with MANIFEST_FILE.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+        _update_metadata(duration_s)
+        logger.debug("Manifest entry added: %s", entry["id"])
+    except Exception as exc:
+        logger.debug("Failed to write manifest entry: %s", exc)
+
+
+def _update_metadata(duration_s: float) -> None:
+    """Update voice-training metadata.json with running stats."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    meta = {"total_segments": 0, "total_duration_s": 0.0,
+            "date_range": [today, today], "format": "flac"}
+    if METADATA_FILE.exists():
+        try:
+            meta = json.loads(METADATA_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    meta["total_segments"] = meta.get("total_segments", 0) + 1
+    meta["total_duration_s"] = round(
+        meta.get("total_duration_s", 0.0) + duration_s, 2
+    )
+    date_range = meta.get("date_range", [today, today])
+    if not date_range:
+        date_range = [today, today]
+    date_range[1] = today
+    meta["date_range"] = date_range
+
+    try:
+        METADATA_FILE.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.debug("Failed to update metadata: %s", exc)
+
+
+def _update_manifest_correction(dictation_id: str, corrected_text: str) -> None:
+    """Update a manifest entry's corrected_text field."""
+    if not MANIFEST_FILE.exists():
+        return
+
+    lines = MANIFEST_FILE.read_text(encoding="utf-8").splitlines()
+    new_lines = []
+    updated = False
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+            if entry.get("id") == dictation_id:
+                entry["corrected_text"] = corrected_text
+                updated = True
+            new_lines.append(json.dumps(entry))
+        except json.JSONDecodeError:
+            new_lines.append(line)
+
+    if updated:
+        MANIFEST_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        logger.debug("Manifest correction updated: %s", dictation_id)
 
 
 def trigger_vocab_reload() -> None:

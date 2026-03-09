@@ -6,8 +6,12 @@ VRAM lazy loading/unloading, recording timeouts, and app-context detection.
 """
 
 import logging
+import shutil
+import subprocess
 import threading
 import time
+import uuid
+import wave
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -16,6 +20,63 @@ from tools.stt.config import load_config
 from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
 
 logger = logging.getLogger(__name__)
+
+TRAINING_DIR = Path(__file__).parent / "data" / "voice-training"
+
+
+def _get_wav_duration(wav_path: Path) -> float:
+    """Return WAV file duration in seconds."""
+    try:
+        with wave.open(str(wav_path), "rb") as wf:
+            return wf.getnframes() / wf.getframerate()
+    except Exception:
+        return 0.0
+
+
+def _maybe_retain_audio(
+    wav_path: Path, dictation_id: str, cfg: dict
+) -> tuple[Optional[Path], float]:
+    """Retain audio as FLAC for voice model training if enabled.
+
+    Returns (saved_path, duration_s) or (None, 0.0) if retention disabled.
+    """
+    retention = cfg.get("audio_retention", {})
+    if not retention.get("enabled", False):
+        return None, 0.0
+
+    segments_dir = TRAINING_DIR / "segments"
+    segments_dir.mkdir(parents=True, exist_ok=True)
+
+    duration_s = _get_wav_duration(wav_path)
+    fmt = retention.get("format", "flac")
+    out_path = segments_dir / f"{dictation_id}.{fmt}"
+
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", str(wav_path), "-ac", "1", "-ar", "16000",
+             str(out_path)],
+            capture_output=True, timeout=30,
+        )
+        if result.returncode == 0:
+            logger.info("Audio retained: %s (%.1fs)", out_path.name, duration_s)
+            return out_path, duration_s
+        logger.warning("ffmpeg failed (rc=%d), falling back to WAV copy",
+                       result.returncode)
+    except FileNotFoundError:
+        logger.warning("ffmpeg not found, falling back to WAV copy")
+    except Exception as exc:
+        logger.warning("Audio retention failed: %s, falling back to WAV copy", exc)
+
+    # Fallback: copy WAV directly
+    wav_out = segments_dir / f"{dictation_id}.wav"
+    try:
+        shutil.copy2(str(wav_path), str(wav_out))
+        logger.info("Audio retained (WAV fallback): %s (%.1fs)",
+                     wav_out.name, duration_s)
+        return wav_out, duration_s
+    except Exception as exc:
+        logger.warning("WAV fallback also failed: %s", exc)
+        return None, 0.0
 
 
 class STTEngine:
@@ -197,6 +258,7 @@ class STTEngine:
         self._set_status("processing")
         start_time = time.time()
         wav_path = None
+        dictation_id = uuid.uuid4().hex[:8]
 
         try:
             # 1. Stop mic and get WAV path
@@ -230,7 +292,12 @@ class STTEngine:
             except Exception:
                 pass
 
-            # 6. Log to JSONL
+            # 6. Retain audio for voice model training (before WAV cleanup)
+            audio_path, duration_s = _maybe_retain_audio(
+                wav_path, dictation_id, self._cfg
+            )
+
+            # 7. Log to JSONL + manifest
             latency_ms = int((time.time() - start_time) * 1000)
             from tools.stt.logger import log_dictation
             record = log_dictation(
@@ -239,6 +306,9 @@ class STTEngine:
                 latency_ms=latency_ms,
                 whisper_model=model_name,
                 cleanup_model="deterministic",
+                dictation_id=dictation_id,
+                audio_path=str(audio_path) if audio_path else None,
+                duration_s=duration_s,
             )
 
             self._last_result = record

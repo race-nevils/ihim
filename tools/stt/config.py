@@ -28,6 +28,10 @@ DEFAULT_CONFIG = {
         "restore_delay_s": 0.05,
         "recall_hotkey": "alt+shift+z",
     },
+    "audio_retention": {
+        "enabled": False,
+        "format": "flac",
+    },
     "sounds": {
         "enabled": True,
         "success": True,

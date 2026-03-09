@@ -154,6 +154,50 @@ OBSIDIAN_INBOX = InboxSource(
     exclude_folders={".obsidian", "iHIM Memory", "processed"}
 )
 
+# Structured sources — files stay in place, dedup via content_hash
+RESEARCH_SOURCE = InboxSource(
+    path=WORKSPACE_ROOT / "research",
+    cleanup="none",
+    extensions={".md"},
+    recursive=True,
+    structured=True,
+    default_category="Research",
+    exclude_folders={".git", "__pycache__", "archive", "node_modules"},
+)
+
+EDGEFLOW_SOURCE = InboxSource(
+    path=WORKSPACE_ROOT / "EdgeFlow AI LLC",
+    cleanup="none",
+    extensions={".md"},
+    structured=True,
+    default_category="Business",
+)
+
+LEGAL_SOURCE = InboxSource(
+    path=WORKSPACE_ROOT / "Legal",
+    cleanup="none",
+    extensions={".md"},
+    recursive=True,
+    structured=True,
+    default_category="Legal",
+)
+
+YT_SOURCE = InboxSource(
+    path=WORKSPACE_ROOT / "YT Transcriptions",
+    cleanup="none",
+    extensions={".txt", ".md"},
+    structured=True,
+    default_category="Reference",
+)
+
+MEETING_SUMMARY_SOURCE = InboxSource(
+    path=WORKSPACE_ROOT / "Meeting Summary",
+    cleanup="none",
+    extensions={".md"},
+    structured=True,
+    default_category="Meetings",
+)
+
 
 def _derive_title_from_filename(source_file: str) -> str:
     """Derive a human-readable title from a filename."""
@@ -210,7 +254,11 @@ def main():
 
     # Create watcher with both sources
     watcher = InboxWatcher(
-        sources=[DESKTOP_INBOX, OBSIDIAN_INBOX],
+        sources=[
+            DESKTOP_INBOX, OBSIDIAN_INBOX,
+            RESEARCH_SOURCE, EDGEFLOW_SOURCE,
+            LEGAL_SOURCE, YT_SOURCE, MEETING_SUMMARY_SOURCE,
+        ],
         processed_path=PROCESSED_PATH,
         poll_interval=2.0,
         cleanup_days=14  # Auto-delete processed files older than 14 days

@@ -6975,11 +6975,6 @@ button:focus-visible {
     color: #dc143c;
     letter-spacing: 0.05em;
 }
-.recorder-live-devices {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
 /* Controls */
 .recorder-controls {
     display: flex;
@@ -7094,8 +7089,6 @@ button:focus-visible {
     color: var(--text-secondary);
 }
 .recorder-list-body {
-    max-height: 50vh;
-    overflow-y: auto;
 }
 
 .recorder-list-item {
@@ -7177,8 +7170,6 @@ button:focus-visible {
 
 /* Transcript body */
 .recorder-transcript-body {
-    max-height: 55vh;
-    overflow-y: auto;
 }
 
 .recorder-segment {

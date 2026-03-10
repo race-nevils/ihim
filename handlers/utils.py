@@ -57,50 +57,51 @@ def compute_content_hash(content: str) -> str:
     return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
 
 
-def extract_date_from_filename(filename: str) -> Optional[str]:
-    """Extract date from the operator's compressed filename patterns.
+def _resolve_two_digit_year(yy: int) -> int:
+    """Resolve 2-digit year: 00-49 → 2000s, 50-99 → 1900s."""
+    if yy <= 49:
+        return 2000 + yy
+    return 1900 + yy
 
-    Patterns:
-        382026  → 3/8/2026  (M + DD + YYYY, 6 digits)
-        3926    → 3/9/26    (M + D + YY, 4 digits)
-        03082026 → 03/08/2026 (MMDDYYYY, 8 digits)
+
+def extract_date_from_filename(filename: str) -> Optional[str]:
+    """Extract date from filename prefix. Flexible input, uniform output.
+
+    Accepts any of these at the start of the filename:
+        03082026 Gratitude     → 2026-03-08  (MMDDYYYY, 8 digits)
+        3/11/26 Gratitude      → 2026-03-11  (M/DD/YY with slashes)
+        3-11-2026 Gratitude    → 2026-03-11  (M-DD-YYYY with dashes)
+        3.8.26 Gratitude       → 2026-03-08  (M.D.YY with dots)
+        03/08/2026 Gratitude   → 2026-03-08  (MM/DD/YYYY)
+
+    2-digit year: 00-49 → 2000s, 50-99 → 1900s.
 
     Returns YYYY-MM-DD or None.
     """
-    stem = Path(filename).stem
-    # Extract leading numeric portion
-    m = re.match(r'^(\d+)', stem)
-    if not m:
-        return None
+    # Work with the raw filename (strip extension manually) so that
+    # separators like / aren't eaten by Path() as directory components.
+    basename = Path(filename).name if '/' not in filename and '\\' not in filename else filename
+    stem = re.sub(r'\.[^.]+$', '', basename)
 
-    digits = m.group(1)
-    month = day = year = None
-
-    if len(digits) == 8:
-        # MMDDYYYY: 03082026 → 03/08/2026
+    # Pattern 1: 8 consecutive digits (MMDDYYYY) — the canonical format
+    m = re.match(r'^(\d{8})\b', stem)
+    if m:
+        digits = m.group(1)
         month, day, year = int(digits[0:2]), int(digits[2:4]), int(digits[4:8])
-    elif len(digits) == 7:
-        # MDDYYYY: 3082026 → 3/08/2026
-        month, day, year = int(digits[0]), int(digits[1:3]), int(digits[3:7])
-    elif len(digits) == 6:
-        # MDYYYY: 382026 → 3/8/2026
-        month, day, year = int(digits[0]), int(digits[1]), int(digits[2:6])
-    elif len(digits) == 5:
-        # MDDYY: 31026 → 3/10/26
-        month, day = int(digits[0]), int(digits[1:3])
-        year = 2000 + int(digits[3:5])
-    elif len(digits) == 4:
-        # MDYY: 3926 → 3/9/26
-        month, day = int(digits[0]), int(digits[1])
-        year = 2000 + int(digits[2:4])
-    else:
-        return None
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return f"{year:04d}-{month:02d}-{day:02d}"
 
-    # Validate ranges
-    if not (1 <= month <= 12 and 1 <= day <= 31 and 2020 <= year <= 2099):
-        return None
+    # Pattern 2: Separated format (slashes, dashes, or dots)
+    # M/D/YY, M/D/YYYY, MM/DD/YY, MM/DD/YYYY — any separator
+    m = re.match(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\b', stem)
+    if m:
+        month, day, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if year < 100:
+            year = _resolve_two_digit_year(year)
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return f"{year:04d}-{month:02d}-{day:02d}"
 
-    return f"{year:04d}-{month:02d}-{day:02d}"
+    return None
 
 
 def extract_title(content: str, source_filename: Optional[str] = None) -> str:

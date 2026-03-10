@@ -81,65 +81,50 @@ class CategoryRegistry:
     # --- Code generation methods ---
 
     def generate_classify_prompt(self) -> str:
-        """Build the LLM classification decision tree from config.
+        """Build the LLM classification prompt from config.
 
-        Produces a prompt functionally equivalent to the hardcoded CLASSIFY_PROMPT
-        in handlers/utils.py for backward compatibility.
+        Produces a flat category list (not a sequential decision tree).
+        The LLM sees all categories simultaneously and picks the best fit.
         """
-        # Gather classifiable categories with a step, sorted by step
-        stepped = [
-            c for c in self._categories.values()
-            if c.classifier_step is not None and not c.is_system_only
-        ]
-        stepped.sort(key=lambda c: c.classifier_step)
-
-        # Build decision tree steps
-        steps = []
-        total_steps = len(stepped)
-        for i, cat in enumerate(stepped):
-            step_num = i + 1
-            question = cat.classifier_question or f"Does this belong in {cat.name}?"
-            if step_num < total_steps:
-                next_step = step_num + 1
-                step_text = (
-                    f"STEP {step_num}: {question}\n"
-                    f"  → YES: Category = \"{cat.name}\"\n"
-                    f"  → NO: Continue to Step {next_step}"
-                )
-            else:
-                # Last step — default fallback to Ideas for unclear content
-                step_text = (
-                    f"STEP {step_num}: {question}\n"
-                    f"  → YES: Category = \"{cat.name}\"\n"
-                    f"  → NO: Category = \"Ideas\" (default for unclear content)"
-                )
-            steps.append(step_text)
-
-        decision_tree = "\n\n".join(steps)
-
-        # Build valid category list for JSON output (excludes catch-all and system-only)
-        valid_cats = "|".join(self.classifiable_names())
-
-        # Build examples from config
-        example_lines = []
-        for cat in stepped:
-            for ex in cat.examples:
-                # Map examples to their expected output
-                example_lines.append(f"- \"{ex}\" → {cat.name}")
-
-        examples_text = "\n".join(example_lines) if example_lines else ""
-
-        # Key distinctions (Tasks vs Projects is critical for the classifier)
-        distinctions = (
-            "KEY DISTINCTION - Tasks vs Projects:\n"
-            "- Tasks = has a specific date/time, goes on calendar, displayed chronologically\n"
-            "- Projects = no specific date, \"anytime\" items that just need to get done eventually"
+        # Build flat category sections sorted by sort_order
+        sorted_cats = sorted(
+            (c for c in self._categories.values()
+             if not c.is_system_only and not c.is_catch_all),
+            key=lambda c: c.sort_order,
         )
 
+        sections = []
+        for cat in sorted_cats:
+            question = cat.classifier_question or f"Does this belong in {cat.name}?"
+            lines = [f"{cat.name} — {cat.description}"]
+            if cat.examples:
+                lines.append("  Examples: " + "; ".join(f'"{ex}"' for ex in cat.examples))
+            lines.append(f"  Ask: {question}")
+            sections.append("\n".join(lines))
+
+        # Append Misc explicitly as the catch-all
+        catch_all = self.catch_all()
+        sections.append(
+            f"{catch_all} — None of the above fit well\n"
+            f"  Use when: The note doesn't clearly belong in any specific category, or you're unsure."
+        )
+
+        category_list = "\n\n".join(sections)
+
+        # Valid categories for JSON output: classifiable + catch-all
+        valid_cats = "|".join(self.classifiable_names() + [catch_all])
+
         prompt = (
-            f"Classify this note into exactly ONE category by following this decision tree IN ORDER:\n\n"
-            f"{decision_tree}\n\n"
-            f"{distinctions}\n\n"
+            f"Classify this note into exactly ONE category. Pick the BEST fit from the list below.\n\n"
+            f"CATEGORIES:\n\n"
+            f"{category_list}\n\n"
+            f"RULES:\n"
+            f"- Pick the SINGLE best-fit category based on the PRIMARY purpose of the note\n"
+            f"- KEY DISTINCTION: Tasks = has specific date/time; Projects = undated actions\n"
+            f"- Daily gratitude, blessings, thankfulness → Faith (even if food or health is mentioned)\n"
+            f"- Health = physical wellness as the PRIMARY topic (workouts, medical, meal plans)\n"
+            f"- If genuinely unsure, choose Misc — don't force a bad fit\n"
+            f"- TITLE DATES: If the title contains a date (e.g., \"3/9/26 Gratitude\"), that is when the note was WRITTEN — it is NOT a calendar event. Only create calendar events from dates in the note BODY.\n\n"
             f"CALENDAR DETECTION (check independently of category):\n"
             f"Does this note mention a SPECIFIC DATE or TIME for an event, appointment, meeting, or deadline?\n"
             f"  → YES: Set \"calendar\" with extracted date info\n"

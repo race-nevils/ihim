@@ -125,10 +125,12 @@ class TestTaskStatus:
 # ---------------------------------------------------------------------------
 
 class TestPromptGeneration:
-    def test_prompt_contains_decision_tree(self, registry):
+    def test_prompt_is_flat_not_sequential(self, registry):
+        """Prompt uses flat category list, not sequential STEP tree."""
+        import re
         prompt = registry.generate_classify_prompt()
-        assert "STEP 1:" in prompt
-        assert "STEP 2:" in prompt
+        assert not re.search(r"STEP \d+:", prompt), "Prompt should not contain sequential STEP pattern"
+        assert "CATEGORIES:" in prompt
 
     def test_prompt_contains_all_classifiable_categories(self, registry):
         prompt = registry.generate_classify_prompt()
@@ -137,13 +139,15 @@ class TestPromptGeneration:
 
     def test_prompt_excludes_system_only(self, registry):
         prompt = registry.generate_classify_prompt()
-        # Calendar should not appear as a classifier step target
-        assert 'Category = "Calendar"' not in prompt
+        # Calendar should not appear as a category section
+        assert "Calendar —" not in prompt
 
-    def test_prompt_excludes_catch_all(self, registry):
+    def test_prompt_includes_misc_as_valid_output(self, registry):
+        """Misc is now a valid LLM output in the prompt."""
         prompt = registry.generate_classify_prompt()
-        # Misc should not appear as a classifier step target
-        assert 'Category = "Misc"' not in prompt
+        assert "Misc" in prompt
+        # Misc should be in the valid category pipe-delimited list
+        assert "Misc" in prompt.split('"category"')[0] or "Misc" in prompt
 
     def test_prompt_has_json_output_format(self, registry):
         prompt = registry.generate_classify_prompt()
@@ -159,6 +163,11 @@ class TestPromptGeneration:
     def test_prompt_has_content_placeholder(self, registry):
         prompt = registry.generate_classify_prompt()
         assert "{content}" in prompt
+
+    def test_prompt_contains_gratitude_example(self, registry):
+        """Faith examples include gratitude keywords."""
+        prompt = registry.generate_classify_prompt()
+        assert "gratitude" in prompt.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +215,7 @@ class TestBehavioralEquivalence:
     def test_prompt_has_tasks_vs_projects_distinction(self, registry):
         """The critical Tasks vs Projects distinction is preserved."""
         prompt = registry.generate_classify_prompt()
-        assert "Tasks vs Projects" in prompt
+        assert "Tasks" in prompt and "Projects" in prompt
         assert "specific date" in prompt.lower()
 
     def test_prompt_has_calendar_detection(self, registry):

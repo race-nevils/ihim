@@ -41,7 +41,8 @@ from handlers.utils import (
     CONFIDENCE_THRESHOLD,
     slugify,
     sanitize_title,
-    compute_content_hash
+    compute_content_hash,
+    extract_date_from_filename,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,11 +147,23 @@ def store_new(
     confidence = cls.confidence
 
     # Generate identifiers
-    timestamp = datetime.now(timezone.utc)
-    date_str = timestamp.strftime("%Y%m%d")
+    processing_timestamp = datetime.now(timezone.utc)
+
+    # Date resolution: filename > processing time
+    content_date = None
+    if source_filename:
+        content_date = extract_date_from_filename(source_filename)
+
+    if content_date:
+        date_str = content_date.replace("-", "")
+        date_created_iso = f"{content_date}T00:00:00+00:00"
+    else:
+        date_str = processing_timestamp.strftime("%Y%m%d")
+        date_created_iso = processing_timestamp.isoformat()
+
     slug = slugify(title)
     prefix = "misc" if category == "Misc" else "brain"
-    note_id = f"{prefix}-{timestamp.strftime('%Y%m%d%H%M%S')}-{slug[:8]}"
+    note_id = f"{prefix}-{processing_timestamp.strftime('%Y%m%d%H%M%S')}-{slug[:8]}"
     content_hash = compute_content_hash(content)
 
     # === WRITE 1: JSON-LD (Source of Truth) ===
@@ -166,7 +179,8 @@ def store_new(
                 source_file=source_file,
                 classifier=OllamaAdapter.FAST_MODEL,
                 slug=slug,
-                date_str=date_str
+                date_str=date_str,
+                date_created=date_created_iso,
             )
             # Store original suggested category if routed to Misc
             if category == "Misc" and original_category != "Misc":
@@ -192,7 +206,7 @@ def store_new(
                 "source_filename": source_filename,
                 "content_hash": content_hash,
                 "jsonld_path": str(jsonld_path),
-                "first_seen_at": timestamp.isoformat()
+                "first_seen_at": processing_timestamp.isoformat()
             })
             logger.info(f"Written to SQLite: {note_id}")
         except Exception as e:
@@ -220,7 +234,7 @@ def store_new(
                 counter += 1
 
             fm = _build_frontmatter(note_id, str(jsonld_path), category,
-                                    timestamp.isoformat(), content_hash)
+                                    date_created_iso, content_hash)
             obsidian_path.write_text(fm + content, encoding="utf-8")
             logger.info(f"Written to Obsidian: {obsidian_path}")
         except Exception as e:

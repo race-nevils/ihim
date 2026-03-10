@@ -57,6 +57,52 @@ def compute_content_hash(content: str) -> str:
     return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
 
 
+def extract_date_from_filename(filename: str) -> Optional[str]:
+    """Extract date from the operator's compressed filename patterns.
+
+    Patterns:
+        382026  → 3/8/2026  (M + DD + YYYY, 6 digits)
+        3926    → 3/9/26    (M + D + YY, 4 digits)
+        03082026 → 03/08/2026 (MMDDYYYY, 8 digits)
+
+    Returns YYYY-MM-DD or None.
+    """
+    stem = Path(filename).stem
+    # Extract leading numeric portion
+    m = re.match(r'^(\d+)', stem)
+    if not m:
+        return None
+
+    digits = m.group(1)
+    month = day = year = None
+
+    if len(digits) == 8:
+        # MMDDYYYY: 03082026 → 03/08/2026
+        month, day, year = int(digits[0:2]), int(digits[2:4]), int(digits[4:8])
+    elif len(digits) == 7:
+        # MDDYYYY: 3082026 → 3/08/2026
+        month, day, year = int(digits[0]), int(digits[1:3]), int(digits[3:7])
+    elif len(digits) == 6:
+        # MDYYYY: 382026 → 3/8/2026
+        month, day, year = int(digits[0]), int(digits[1]), int(digits[2:6])
+    elif len(digits) == 5:
+        # MDDYY: 31026 → 3/10/26
+        month, day = int(digits[0]), int(digits[1:3])
+        year = 2000 + int(digits[3:5])
+    elif len(digits) == 4:
+        # MDYY: 3926 → 3/9/26
+        month, day = int(digits[0]), int(digits[1])
+        year = 2000 + int(digits[2:4])
+    else:
+        return None
+
+    # Validate ranges
+    if not (1 <= month <= 12 and 1 <= day <= 31 and 2020 <= year <= 2099):
+        return None
+
+    return f"{year:04d}-{month:02d}-{day:02d}"
+
+
 def extract_title(content: str, source_filename: Optional[str] = None) -> str:
     """Extract title from frontmatter or filename - DO NOT generate or infer.
 

@@ -8,6 +8,8 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <link rel="stylesheet" href="/static/style.css?v=__BOOT_ID__">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#00d4ff">
 </head>
 
 <body>
@@ -840,6 +842,13 @@
             if (!document.hidden) checkForChanges();
         });
     })();
+    </script>
+
+    <!-- Service Worker registration (PWA) -->
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
     </script>
 
 </body>

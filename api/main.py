@@ -19,6 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, ValidationError
 from datetime import datetime, timezone
 from typing import Optional
+import asyncio
 import os
 import sys
 import json
@@ -133,9 +134,20 @@ BOOT_ID = uuid.uuid4().hex[:8]
 # APP SETUP
 # =============================================================================
 
+import logging as _logging
+_logger = _logging.getLogger(__name__)
+
+# Server start time for uptime tracking
+_server_started_at = None
+
+
 @asynccontextmanager
 async def lifespan(app):
     """Startup/shutdown lifecycle for iHIM."""
+    global _server_started_at
+    import time
+    _server_started_at = time.monotonic()
+
     # --- Startup ---
     if CALENDAR_AVAILABLE:
         try:
@@ -155,14 +167,51 @@ async def lifespan(app):
 
     yield
 
-    # --- Shutdown ---
+    # --- Shutdown (comprehensive cleanup) ---
+    _logger.info("Server shutdown initiated — cleaning up resources...")
+
+    # 1. Close Ollama adapter (httpx.AsyncClient)
     if CHAT_AVAILABLE:
         try:
             from api.chat.routes import ollama_adapter
             await ollama_adapter.close()
-            print("AsyncOllamaAdapter closed.")
+            _logger.info("Shutdown: AsyncOllamaAdapter closed")
         except Exception as e:
-            print(f"AsyncOllamaAdapter shutdown failed (non-fatal): {e}")
+            _logger.warning("Shutdown: AsyncOllamaAdapter close failed: %s", e)
+
+    # 2. Kill all terminal sessions
+    if TERMINAL_AVAILABLE:
+        try:
+            from api.terminal.pty_manager import pty_manager
+            killed = pty_manager.kill_all()
+            if killed:
+                _logger.info("Shutdown: killed %d terminal session(s)", killed)
+        except Exception as e:
+            _logger.warning("Shutdown: terminal cleanup failed: %s", e)
+
+    # 3. Stop stt hotkey listener
+    if STT_AVAILABLE:
+        try:
+            from tools.stt.engine import get_engine
+            get_engine().stop_listening()
+            _logger.info("Shutdown: STT hotkey listener stopped")
+        except Exception as e:
+            _logger.warning("Shutdown: STT stop failed: %s", e)
+
+    # 4. Kill active transcription worker subprocesses
+    try:
+        from api.recorder.routes import _active_workers
+        for rec_id, proc in list(_active_workers.items()):
+            try:
+                proc.kill()
+                _logger.info("Shutdown: killed transcription worker for %s", rec_id)
+            except Exception:
+                pass
+        _active_workers.clear()
+    except Exception as e:
+        _logger.warning("Shutdown: transcription worker cleanup failed: %s", e)
+
+    _logger.info("Server shutdown complete")
 
 
 app = FastAPI(title="iHIM", description="Your Command Center", lifespan=lifespan)
@@ -231,6 +280,41 @@ async def security_and_cache_headers(request: Request, call_next):
         response.headers["Expires"] = "0"
 
     return response
+
+
+# =============================================================================
+# REQUEST TIMEOUT SAFETY NET
+# =============================================================================
+
+_REQUEST_TIMEOUT = 30.0  # seconds — catches any remaining event loop blocks
+
+
+@app.middleware("http")
+async def request_timeout_middleware(request: Request, call_next):
+    """30-second timeout on all HTTP requests.
+
+    If a handler blocks the event loop beyond this, return 504 instead of
+    hanging forever. WebSocket upgrades and health checks are excluded.
+    """
+    # Skip timeout for WebSocket upgrade requests
+    if request.headers.get("upgrade", "").lower() == "websocket":
+        return await call_next(request)
+
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=_REQUEST_TIMEOUT)
+    except asyncio.TimeoutError:
+        _logger.error("Request timed out after %.0fs: %s %s", _REQUEST_TIMEOUT, request.method, request.url.path)
+        return JSONResponse(
+            status_code=504,
+            content={
+                "type": "about:blank",
+                "title": "Gateway Timeout",
+                "status": 504,
+                "detail": f"Request timed out after {_REQUEST_TIMEOUT:.0f} seconds",
+                "instance": str(request.url.path),
+            },
+            media_type="application/problem+json",
+        )
 
 
 # =============================================================================
@@ -368,6 +452,35 @@ async def root():
     )
 
 
+# ── PWA: manifest + service worker at root scope ──
+
+_manifest_path = UI_DIR / "manifest.json"
+_sw_path = UI_DIR / "sw.js"
+
+
+@app.get("/manifest.json")
+async def serve_manifest():
+    """W3C Web App Manifest — makes iHIM installable as PWA."""
+    if not _manifest_path.exists():
+        return problem(404, "manifest.json not found")
+    return Response(
+        content=_manifest_path.read_bytes(),
+        media_type="application/manifest+json",
+    )
+
+
+@app.get("/sw.js")
+async def serve_sw():
+    """Service Worker — must be served from root scope for full control."""
+    if not _sw_path.exists():
+        return problem(404, "sw.js not found")
+    return Response(
+        content=_sw_path.read_bytes(),
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
+
+
 # =============================================================================
 # ACTIONS
 # =============================================================================
@@ -387,8 +500,43 @@ async def execute_action(action_id: str):
 
 @app.get("/api/health")
 async def health():
-    """Health check."""
-    return {"status": "ok", "name": "iHIM"}
+    """Health check with server vitals.
+
+    Returns uptime, memory usage, active workers, and connection counts.
+    This endpoint must stay fast — it's used by the supervisor health check.
+    """
+    import time
+
+    result = {"status": "ok", "name": "iHIM", "pid": os.getpid()}
+
+    # Uptime
+    if _server_started_at is not None:
+        result["uptime_seconds"] = round(time.monotonic() - _server_started_at, 1)
+
+    # Memory usage (server process)
+    try:
+        proc = psutil.Process(os.getpid())
+        mem = proc.memory_info()
+        result["memory_mb"] = round(mem.rss / (1024 * 1024), 1)
+    except Exception:
+        pass
+
+    # Active transcription workers
+    try:
+        from api.recorder.routes import _active_workers
+        result["active_transcription_workers"] = len(_active_workers)
+    except Exception:
+        pass
+
+    # Terminal sessions
+    if TERMINAL_AVAILABLE:
+        try:
+            from api.terminal.pty_manager import pty_manager
+            result["terminal_sessions"] = len(pty_manager.sessions)
+        except Exception:
+            pass
+
+    return result
 
 
 # =============================================================================
@@ -610,7 +758,8 @@ async def restart_server():
 
     python_path = str(Path(sys.executable))
 
-    log_path = str(Path(tempfile.gettempdir()) / "ihim_restart.log").replace("\\", "/")
+    restart_log = ihim_dir / "data" / "restart.log"
+    log_path = str(restart_log).replace("\\", "/")
     ps_script = f"""
 $log = "{log_path}"
 "[$(Get-Date)] Restart script started" | Out-File $log
@@ -702,8 +851,16 @@ Remove-Item -Path $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyConti
 @app.get("/api/server/status")
 async def server_status():
     """Get server status and uptime info."""
-    import os
-    return {"status": "running", "pid": os.getpid(), "reload_enabled": True, "port": 7777}
+    import time
+    result = {
+        "status": "running",
+        "pid": os.getpid(),
+        "reload_enabled": True,
+        "port": int(os.environ.get("IHIM_PORT", 7777)),
+    }
+    if _server_started_at is not None:
+        result["uptime_seconds"] = round(time.monotonic() - _server_started_at, 1)
+    return result
 
 
 # =============================================================================

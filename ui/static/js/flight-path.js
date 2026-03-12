@@ -27,12 +27,32 @@ export const flightPath = {
 
     async loadHealth() {
         try {
-            const res = await fetch(`${API}/api/system/health`);
-            const data = await res.json();
-            if (data.success && data.components) {
-                this.components = data.components;
-                this.render();
-                this.updateTrafficLight(data);
+            // Fetch system health + server process health in parallel
+            const [healthRes, serverRes] = await Promise.all([
+                fetch(`${API}/api/system/health`).catch(() => null),
+                fetch(`${API}/api/health`).catch(() => null),
+            ]);
+
+            if (healthRes && healthRes.ok) {
+                const data = await healthRes.json();
+                if (data.success && data.components) {
+                    this.components = data.components;
+
+                    // Inject server process health as a component
+                    if (serverRes && serverRes.ok) {
+                        const server = await serverRes.json();
+                        const uptimeMin = server.uptime_seconds ? Math.floor(server.uptime_seconds / 60) : 0;
+                        this.components.push({
+                            id: 'server-process',
+                            name: `Server (PID ${server.pid || '?'})`,
+                            status: 'healthy',
+                            message: `Up ${uptimeMin}m | ${server.memory_mb || '?'}MB RAM | ${server.active_transcription_workers || 0} workers`,
+                        });
+                    }
+
+                    this.render();
+                    this.updateTrafficLight(data);
+                }
             }
         } catch (err) { console.error('Failed to load health:', err); }
     },
@@ -87,7 +107,8 @@ export const flightPath = {
             'feedback-optimizer': 'feedback-system', 'feedback-metrics': 'feedback-system',
             'data-tasks': 'data-stores', 'data-notes': 'data-stores',
             'data-slash-commands': 'data-stores', 'data-team-state': 'data-stores',
-            'sanity-check': 'ihim-root', 'ui-dashboard': 'ui-assets', 'ui-styles': 'ui-assets'
+            'sanity-check': 'ihim-root', 'server-process': 'api-server',
+            'ui-dashboard': 'ui-assets', 'ui-styles': 'ui-assets'
         };
         this.components.forEach(comp => {
             const groupId = componentToGroup[comp.id];

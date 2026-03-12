@@ -133,5 +133,5 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
         logger.error(f"Chat WS error: {e}")
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
-        except Exception:
-            pass
+        except Exception as send_err:
+            logger.debug("Chat WS: failed to send error to client: %s", send_err)

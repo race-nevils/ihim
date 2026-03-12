@@ -28,6 +28,10 @@ except ImportError:
 SCROLLBACK_SIZE = 1000
 
 
+# Session TTL: kill sessions inactive for this many seconds
+SESSION_TTL_SECONDS = 1800  # 30 minutes
+
+
 @dataclass
 class TerminalSession:
     """Represents a single terminal session."""
@@ -47,6 +51,9 @@ class TerminalSession:
 
     # Active WebSocket connections (for multi-viewer support)
     connections: int = 0
+
+    # Last activity timestamp (for TTL expiration)
+    last_activity: float = field(default_factory=lambda: __import__('time').monotonic())
 
 
 class PTYManager:
@@ -238,6 +245,7 @@ class PTYManager:
             else:
                 session.process.stdin.write(data)
                 session.process.stdin.flush()
+            self.touch(session_id)
             return True
         except (BrokenPipeError, OSError, Exception):
             return False
@@ -393,6 +401,27 @@ class PTYManager:
         session_ids = list(self.sessions.keys())
         count = 0
         for sid in session_ids:
+            if self.kill_session(sid):
+                count += 1
+        return count
+
+    def touch(self, session_id: str) -> None:
+        """Update last_activity timestamp for a session."""
+        import time
+        session = self.sessions.get(session_id)
+        if session:
+            session.last_activity = time.monotonic()
+
+    def expire_stale(self) -> int:
+        """Kill sessions inactive for longer than SESSION_TTL_SECONDS. Returns count expired."""
+        import time
+        now = time.monotonic()
+        stale = [
+            sid for sid, s in self.sessions.items()
+            if (now - s.last_activity) > SESSION_TTL_SECONDS and s.connections == 0
+        ]
+        count = 0
+        for sid in stale:
             if self.kill_session(sid):
                 count += 1
         return count

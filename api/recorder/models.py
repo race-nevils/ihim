@@ -88,6 +88,7 @@ class RecordingDetail(BaseModel):
     wav_mic: Optional[str] = None
     wav_sys: Optional[str] = None
     status: str = "complete"
+    transcription_stage: Optional[str] = None
 
 
 class StopResponse(BaseModel):

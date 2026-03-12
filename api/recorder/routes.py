@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import re
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,26 @@ router = APIRouter(prefix="/api/recorder", tags=["recorder"])
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "local"
 RECORDINGS_DIR = DATA_DIR / "recordings"
 BRAIN_DIR = DATA_DIR / "brain" / "Meetings"
+
+# ── Async file I/O helpers (prevent event loop starvation) ──
+
+async def _aread_text(path: Path) -> str:
+    """Read file text without blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: path.read_text(encoding="utf-8"))
+
+
+async def _awrite_text(path: Path, content: str) -> None:
+    """Write file text without blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, lambda: path.write_text(content, encoding="utf-8"))
+
+
+async def _aread_bytes(path: Path) -> bytes:
+    """Read file bytes without blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, path.read_bytes)
+
 
 # Singleton state
 _state = RecorderState()
@@ -187,7 +208,8 @@ async def recorder_stop(request: Request):
 
     # Read initial prompt from preferences (stored for later transcription)
     from api.preferences import _read_prefs
-    prefs = _read_prefs()
+    loop = asyncio.get_event_loop()
+    prefs = await loop.run_in_executor(None, _read_prefs)
     initial_prompt = (prefs.get("recorder", {}).get("initial_prompt") or "").strip() or None
 
     sidecar = {
@@ -219,7 +241,7 @@ async def recorder_stop(request: Request):
         sidecar["capture_warnings"] = capture_errors
 
     sidecar_path = RECORDINGS_DIR / f"recording-{rec_id}.json"
-    sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+    await _awrite_text(sidecar_path, json.dumps(sidecar, indent=2))
 
     logger.info("Recording saved: %s (%.1fs, status=pending_transcription)", rec_id, duration)
 
@@ -230,13 +252,18 @@ async def recorder_stop(request: Request):
     )
 
 
-@router.post("/transcribe/{recording_id}", response_model=TranscribeResponse)
-async def transcribe_recording(recording_id: str, request: Request):
-    """Manually trigger transcription for a saved recording.
+# Active transcription worker processes {recording_id: asyncio.subprocess.Process}
+_active_workers: dict = {}
+_TRANSCRIPTION_TIMEOUT = 300  # 5 minutes
 
-    Reads WAV paths and config from the sidecar JSON, runs Whisper,
-    then updates the sidecar with segments/transcript and creates
-    the brain entry + transcript markdown.
+
+@router.post("/transcribe/{recording_id}")
+async def transcribe_recording(recording_id: str, request: Request):
+    """Trigger transcription for a saved recording.
+
+    Launches a worker subprocess (own GIL, own process) so transcription
+    cannot block the event loop. Returns 202 immediately; frontend polls
+    GET /recordings/{id} for progress via transcription_stage field.
     """
     err = _validate_recording_id(recording_id, request)
     if err:
@@ -247,12 +274,11 @@ async def transcribe_recording(recording_id: str, request: Request):
         return problem(404, f"Recording '{recording_id}' not found", instance=request.url.path)
 
     try:
-        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        sidecar = json.loads(await _aread_text(sidecar_path))
     except Exception as e:
         return problem(500, f"Failed to read sidecar: {e}", instance=request.url.path)
 
     if sidecar.get("status") == "complete":
-        # Already transcribed — return existing data
         preview = sidecar.get("transcript", "")[:500]
         if len(sidecar.get("transcript", "")) > 500:
             preview += "..."
@@ -263,6 +289,9 @@ async def transcribe_recording(recording_id: str, request: Request):
             transcript_preview=preview,
             status="complete",
         )
+
+    if sidecar.get("status") == "transcribing":
+        return problem(409, "Transcription already in progress", instance=request.url.path)
 
     # Resolve WAV paths
     mic_path = RECORDINGS_DIR / sidecar.get("wav_mic", f"recording-{recording_id}-mic.wav")
@@ -277,83 +306,96 @@ async def transcribe_recording(recording_id: str, request: Request):
     initial_prompt = config.get("initial_prompt")
     speakers = sidecar.get("speakers", {})
     sys_label = speakers.get("system", "Other")
+    mic_label = speakers.get("mic", "the operator")
 
-    # Run transcription in thread pool
-    try:
-        from api.recorder.transcribe import transcribe_dual
+    # Write task JSON for the worker
+    task = {
+        "recording_id": recording_id,
+        "sidecar_path": str(sidecar_path),
+        "mic_path": str(mic_path),
+        "sys_path": str(sys_path),
+        "model_size": model_size,
+        "initial_prompt": initial_prompt,
+        "sys_label": sys_label,
+        "mic_label": mic_label,
+        "recordings_dir": str(RECORDINGS_DIR),
+        "brain_dir": str(BRAIN_DIR),
+    }
+    task_path = RECORDINGS_DIR / f".transcribe-task-{recording_id}.json"
+    await _awrite_text(task_path, json.dumps(task, indent=2))
 
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: transcribe_dual(
-                mic_path, sys_path,
-                sys_label=sys_label,
-                model_size=model_size,
-                initial_prompt=initial_prompt,
-            ),
-        )
-        segments = result["segments"]
-        transcript = result["transcript"]
-        sidecar_status = "complete" if segments else "no_transcript"
+    # Mark as transcribing
+    sidecar["status"] = "transcribing"
+    sidecar["transcription_stage"] = "queued"
+    await _awrite_text(sidecar_path, json.dumps(sidecar, indent=2))
 
-        # Free VRAM in background — don't block the response
-        import threading
-        from api.recorder.transcribe import unload_model
-        threading.Thread(target=unload_model, args=(model_size,), daemon=True).start()
-    except Exception as e:
-        logger.error("Transcription failed for %s: %s", recording_id, e)
-        sidecar["status"] = "transcription_failed"
-        sidecar["transcription_error"] = str(e)
-        sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
-        return problem(500, f"Transcription failed: {e}", instance=request.url.path)
+    # Launch worker subprocess — fire and forget with timeout
+    asyncio.create_task(_run_transcription_worker(recording_id, task_path, sidecar_path))
 
-    # Update sidecar with transcript data
-    sidecar["segments"] = segments
-    sidecar["transcript"] = transcript
-    sidecar["status"] = sidecar_status
-    sidecar.pop("transcription_error", None)
-    sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+    logger.info("Transcription worker launched for %s", recording_id)
 
-    # Write transcript markdown
-    duration = sidecar.get("duration_seconds", 0)
-    label = sidecar.get("label")
-    started_at_str = sidecar.get("started_at")
-    started_at = datetime.fromisoformat(started_at_str) if started_at_str else None
-
-    if segments:
-        try:
-            md_path = RECORDINGS_DIR / f"recording-{recording_id}-transcript.md"
-            _write_transcript_md(
-                rec_id=recording_id,
-                label=label,
-                started_at=started_at,
-                duration=duration,
-                speakers=speakers,
-                segments=segments,
-                output_path=md_path,
-            )
-        except Exception as md_err:
-            logger.error("Failed to write transcript markdown for %s: %s", recording_id, md_err)
-
-    # Create brain entry
-    try:
-        _create_brain_entry(recording_id, label, started_at, duration, transcript)
-    except Exception as brain_err:
-        logger.error("Failed to create brain entry for %s: %s", recording_id, brain_err)
-
-    logger.info("Transcription complete: %s (%.1fs, %d segments)", recording_id, duration, len(segments))
-
-    preview = transcript[:500]
-    if len(transcript) > 500:
-        preview += "..."
-
-    return TranscribeResponse(
-        recording_id=recording_id,
-        duration_seconds=duration,
-        segments_count=len(segments),
-        transcript_preview=preview,
-        status=sidecar_status,
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=202,
+        content={
+            "recording_id": recording_id,
+            "status": "transcribing",
+            "message": "Transcription started. Poll GET /recordings/{id} for progress.",
+        },
     )
+
+
+async def _run_transcription_worker(recording_id: str, task_path: Path, sidecar_path: Path):
+    """Manage the transcription worker subprocess with timeout."""
+    worker_script = Path(__file__).parent / "transcribe_worker.py"
+    ihim_dir = Path(__file__).parent.parent.parent  # IHIM root
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, str(worker_script), str(task_path),
+            cwd=str(ihim_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _active_workers[recording_id] = proc
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=_TRANSCRIPTION_TIMEOUT
+            )
+            if proc.returncode != 0:
+                logger.error(
+                    "Transcription worker failed for %s (exit=%d): %s",
+                    recording_id, proc.returncode,
+                    stderr.decode("utf-8", errors="replace")[-500:] if stderr else "no stderr",
+                )
+            else:
+                if stdout:
+                    logger.info(stdout.decode("utf-8", errors="replace").strip())
+        except asyncio.TimeoutError:
+            logger.error("Transcription worker timed out for %s after %ds — killing", recording_id, _TRANSCRIPTION_TIMEOUT)
+            proc.kill()
+            await proc.wait()
+            try:
+                sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                sidecar["status"] = "transcription_failed"
+                sidecar["transcription_error"] = f"Timed out after {_TRANSCRIPTION_TIMEOUT}s"
+                sidecar["transcription_stage"] = None
+                sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error("Failed to launch transcription worker for %s: %s", recording_id, e)
+        try:
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            sidecar["status"] = "transcription_failed"
+            sidecar["transcription_error"] = f"Worker launch failed: {e}"
+            sidecar["transcription_stage"] = None
+            sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+    finally:
+        _active_workers.pop(recording_id, None)
 
 
 @router.get("/recordings", response_model=RecordingsListResponse)
@@ -363,9 +405,13 @@ async def list_recordings():
         return RecordingsListResponse(recordings=[])
 
     recordings = []
-    for f in sorted(RECORDINGS_DIR.glob("recording-*.json"), reverse=True):
+    loop = asyncio.get_event_loop()
+    sidecar_files = await loop.run_in_executor(
+        None, lambda: sorted(RECORDINGS_DIR.glob("recording-*.json"), reverse=True)
+    )
+    for f in sidecar_files:
         try:
-            data = json.loads(f.read_text(encoding="utf-8"))
+            data = json.loads(await _aread_text(f))
             recordings.append(RecordingSummary(
                 recording_id=data["recording_id"],
                 label=data.get("label"),
@@ -391,7 +437,7 @@ async def get_recording(recording_id: str, request: Request):
         return problem(404, f"Recording '{recording_id}' not found", instance=request.url.path)
 
     try:
-        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        data = json.loads(await _aread_text(sidecar))
         return RecordingDetail(
             recording_id=data["recording_id"],
             label=data.get("label"),
@@ -405,6 +451,7 @@ async def get_recording(recording_id: str, request: Request):
             wav_mic=data.get("wav_mic"),
             wav_sys=data.get("wav_sys"),
             status=data.get("status", "complete"),
+            transcription_stage=data.get("transcription_stage"),
         )
     except Exception as e:
         logger.error("Failed to read recording %s: %s", recording_id, e)

@@ -7223,6 +7223,11 @@ button:focus-visible {
     color: var(--text-secondary);
     font-size: 0.85rem;
 }
+.recorder-elapsed-hint {
+    margin-top: 8px;
+    font-size: 0.75rem;
+    opacity: 0.6;
+}
 .recorder-refresh-btn {
     font-size: 0.8rem;
     padding: 4px 10px;

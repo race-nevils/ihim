@@ -169,7 +169,9 @@ def extract_imports(file_path: Path, language: str) -> list[str]:
 
     try:
         content = file_path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug("Failed to read %s for import extraction: %s", file_path, e)
         return []
 
     imports = []

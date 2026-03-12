@@ -380,6 +380,11 @@ function showHistoryList() {
     const transcribeBtn = document.getElementById('recorder-transcribe-btn');
     if (transcribeBtn) transcribeBtn.style.display = 'none';
     selectedRecordingId = null;
+    // Stop transcription progress polling when leaving detail view
+    if (transcriptionPollInterval) {
+        clearInterval(transcriptionPollInterval);
+        transcriptionPollInterval = null;
+    }
 }
 
 function showHistoryDetail() {
@@ -418,6 +423,17 @@ async function loadTranscript(id) {
             transcribeBtn.textContent = 'Transcribe';
             transcribeBtn.disabled = false;
             body.innerHTML = '<div class="recorder-placeholder">Recording saved. Click <strong>Transcribe</strong> to process.</div>';
+            return;
+        }
+        if (data.status === 'transcribing') {
+            transcribeBtn.style.display = '';
+            transcribeBtn.textContent = 'Transcribing...';
+            transcribeBtn.disabled = true;
+            const stage = data.transcription_stage || 'processing';
+            const stageLabel = STAGE_LABELS[stage] || `Processing (${stage})...`;
+            body.innerHTML = `<div class="recorder-loading">${escapeHtml(stageLabel)}</div>`;
+            // Start polling if not already
+            if (!transcriptionPollInterval) startTranscriptionPolling(id);
             return;
         }
         if (data.status === 'transcription_failed') {
@@ -467,27 +483,79 @@ function formatTimestamp(seconds) {
 // Manual transcription
 // =====================
 
+// Transcription stage display names
+const STAGE_LABELS = {
+    queued: 'Queued...',
+    loading_model: 'Loading Whisper model...',
+    transcribing_mic: 'Transcribing mic channel...',
+    transcribing_sys: 'Transcribing system audio...',
+    merging: 'Merging channels...',
+};
+
+let transcriptionPollInterval = null;
+
 async function transcribeRecording(id) {
     const transcribeBtn = document.getElementById('recorder-transcribe-btn');
     const body = document.getElementById('recorder-transcript-body');
     transcribeBtn.disabled = true;
     transcribeBtn.textContent = 'Transcribing...';
-    body.innerHTML = '<div class="recorder-loading">Transcribing... This may take a minute or two.</div>';
+    body.innerHTML = '<div class="recorder-loading">Starting transcription...</div>';
 
     try {
         const res = await fetch(`${API}/api/recorder/transcribe/${encodeURIComponent(id)}`, { method: 'POST' });
-        if (!res.ok) {
+        if (!res.ok && res.status !== 202) {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.detail || err.title || `HTTP ${res.status}`);
         }
-        // Reload the full detail view to show segments
-        await loadTranscript(id);
+        // Start polling for transcription progress
+        startTranscriptionPolling(id);
     } catch (e) {
         transcribeBtn.disabled = false;
         transcribeBtn.textContent = 'Retry';
         body.innerHTML = `<div class="recorder-error-inline">Transcription failed: ${escapeHtml(e.message)}</div>
             <div class="recorder-placeholder">Click <strong>Retry</strong> to try again.</div>`;
     }
+}
+
+function startTranscriptionPolling(id) {
+    if (transcriptionPollInterval) clearInterval(transcriptionPollInterval);
+    const startTime = Date.now();
+
+    transcriptionPollInterval = setInterval(async () => {
+        try {
+            const res = await fetch(`${API}/api/recorder/recordings/${encodeURIComponent(id)}`);
+            if (!res.ok) return;
+            const data = await res.json();
+
+            const body = document.getElementById('recorder-transcript-body');
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const elapsedStr = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`;
+
+            if (data.status === 'transcribing') {
+                const stage = data.transcription_stage || 'processing';
+                const stageLabel = STAGE_LABELS[stage] || `Processing (${stage})...`;
+                body.innerHTML = `<div class="recorder-loading">
+                    <div>${escapeHtml(stageLabel)}</div>
+                    <div class="recorder-elapsed-hint">Elapsed: ${elapsedStr}</div>
+                </div>`;
+            } else if (data.status === 'complete' || data.status === 'no_transcript') {
+                // Done — reload full transcript view
+                clearInterval(transcriptionPollInterval);
+                transcriptionPollInterval = null;
+                await loadTranscript(id);
+            } else if (data.status === 'transcription_failed') {
+                clearInterval(transcriptionPollInterval);
+                transcriptionPollInterval = null;
+                const transcribeBtn = document.getElementById('recorder-transcribe-btn');
+                transcribeBtn.disabled = false;
+                transcribeBtn.textContent = 'Retry';
+                transcribeBtn.style.display = '';
+                const errMsg = data.transcription_error ? escapeHtml(data.transcription_error) : 'Unknown error';
+                body.innerHTML = `<div class="recorder-error-inline">Transcription failed: ${errMsg}</div>
+                    <div class="recorder-placeholder">Click <strong>Retry</strong> to try again.</div>`;
+            }
+        } catch (e) { /* polling resilience */ }
+    }, 2000);
 }
 
 // =====================

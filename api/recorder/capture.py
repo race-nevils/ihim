@@ -424,13 +424,13 @@ class DualStreamCapture:
                 try:
                     stream.stop_stream()
                     stream.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("PyAudio stream cleanup: %s", e)
             if p:
                 try:
                     p.terminate()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("PyAudio terminate: %s", e)
 
     def _write_wav(self, path: Path, buffers: list, native_rate: int) -> None:
         """Concatenate buffers, resample to 16 kHz, write 16-bit mono WAV."""

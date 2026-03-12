@@ -27,6 +27,9 @@ if sys.platform == "win32":
 _model_cache: dict = {}
 _model_lock = threading.Lock()
 
+# Cached VRAM query (nvidia-smi is slow; cache for 30s)
+_vram_cache: dict = {"value": None, "expires": 0}
+
 # VRAM required (MB) for float16 by model size.
 # Measured empirically: model footprint + CUDA overhead.
 _VRAM_FLOAT16 = {
@@ -42,13 +45,21 @@ _MIN_VRAM_MB = 1000
 
 
 def _get_free_vram() -> int:
-    """Query free VRAM in MB via nvidia-smi. Raises on failure."""
+    """Query free VRAM in MB via nvidia-smi. Cached for 30 seconds."""
+    import time
+    now = time.monotonic()
+    if _vram_cache["value"] is not None and now < _vram_cache["expires"]:
+        return _vram_cache["value"]
+
     result = subprocess.run(
         ["nvidia-smi", "--query-gpu=memory.free",
          "--format=csv,noheader,nounits"],
         capture_output=True, text=True, timeout=5,
     )
-    return int(result.stdout.strip())
+    value = int(result.stdout.strip())
+    _vram_cache["value"] = value
+    _vram_cache["expires"] = now + 30
+    return value
 
 
 def _pick_device(model_size: str = "small") -> tuple[str, str]:

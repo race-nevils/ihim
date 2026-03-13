@@ -4,10 +4,13 @@ Two threads capture simultaneously. On stop, buffers are concatenated and writte
 16-bit mono WAV files at 16 kHz (resampled from native rate if needed).
 """
 
+import json
 import logging
+import os
 import threading
 import wave
 import struct
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -247,6 +250,8 @@ class DualStreamCapture:
         self,
         mic_device_index: Optional[int] = None,
         sys_device_index: Optional[int] = None,
+        checkpoint_dir: Optional[Path] = None,
+        checkpoint_interval: int = 60,
     ):
         self._stop_event = threading.Event()
         self._mic_buffers: list = []
@@ -255,6 +260,13 @@ class DualStreamCapture:
         self._sys_thread: Optional[threading.Thread] = None
         self._mic_error: Optional[str] = None
         self._sys_error: Optional[str] = None
+
+        # Streaming disk checkpoints — flush audio to disk every N blocks
+        self._checkpoint_dir: Optional[Path] = checkpoint_dir
+        self._checkpoint_interval: int = checkpoint_interval
+        self._mic_chunk_count: int = 0
+        self._sys_chunk_count: int = 0
+        self._started_at_iso: Optional[str] = None
 
         # Resolve devices
         if mic_device_index is not None:
@@ -303,6 +315,14 @@ class DualStreamCapture:
         self._sys_buffers.clear()
         self._mic_error = None
         self._sys_error = None
+        self._mic_chunk_count = 0
+        self._sys_chunk_count = 0
+
+        # Create checkpoint directory and initial manifest
+        if self._checkpoint_dir:
+            self._checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            self._started_at_iso = datetime.now(timezone.utc).isoformat()
+            self._update_manifest()
 
         self._mic_thread = threading.Thread(
             target=self._capture_mic, daemon=True, name="recorder-mic"
@@ -325,13 +345,37 @@ class DualStreamCapture:
 
     def save(self, mic_path: Path, sys_path: Path) -> tuple[str, str]:
         """Write captured audio to WAV files. Returns (mic_name, sys_name)."""
-        self._write_wav(mic_path, self._mic_buffers, int(self._mic_info["sample_rate"]))
-        if self._sys_buffers:
-            sys_rate = int(self._sys_info["sample_rate"]) if self._sys_info else TARGET_RATE
-            self._write_wav(sys_path, self._sys_buffers, sys_rate)
+        has_chunks = self._checkpoint_dir and (
+            self._mic_chunk_count > 0 or self._sys_chunk_count > 0
+        )
+
+        if has_chunks:
+            # Combine disk chunks + remaining in-memory buffers
+            self._save_with_chunks(
+                mic_path, self._mic_buffers,
+                int(self._mic_info["sample_rate"]), "mic",
+            )
+            if self._sys_buffers or self._sys_chunk_count > 0:
+                sys_rate = int(self._sys_info["sample_rate"]) if self._sys_info else TARGET_RATE
+                self._save_with_chunks(sys_path, self._sys_buffers, sys_rate, "sys")
+            else:
+                self._write_wav(sys_path, [], TARGET_RATE)
         else:
-            # Write empty WAV if no system audio captured
-            self._write_wav(sys_path, [], TARGET_RATE)
+            self._write_wav(mic_path, self._mic_buffers, int(self._mic_info["sample_rate"]))
+            if self._sys_buffers:
+                sys_rate = int(self._sys_info["sample_rate"]) if self._sys_info else TARGET_RATE
+                self._write_wav(sys_path, self._sys_buffers, sys_rate)
+            else:
+                self._write_wav(sys_path, [], TARGET_RATE)
+
+        # Clean up in-progress checkpoint directory
+        if self._checkpoint_dir and self._checkpoint_dir.exists():
+            import shutil
+            shutil.rmtree(self._checkpoint_dir, ignore_errors=True)
+            parent = self._checkpoint_dir.parent
+            if parent.exists() and not any(parent.iterdir()):
+                parent.rmdir()
+
         return mic_path.name, sys_path.name
 
     @property
@@ -372,6 +416,16 @@ class DualStreamCapture:
                     if overflowed:
                         logger.debug("mic read overflow")
                     self._mic_buffers.append(data[:, 0].copy())
+                    # Periodic disk checkpoint
+                    if (self._checkpoint_dir
+                            and len(self._mic_buffers) >= self._checkpoint_interval):
+                        try:
+                            self._flush_checkpoint(
+                                "mic", list(self._mic_buffers), native_rate,
+                            )
+                            self._mic_buffers.clear()
+                        except Exception as e:
+                            logger.warning("mic checkpoint failed: %s", e)
             finally:
                 stream.stop()
                 stream.close()
@@ -412,6 +466,16 @@ class DualStreamCapture:
                     arr = numpy.frombuffer(data, dtype=numpy.float32)
                     arr = _to_mono(arr, channels)
                     self._sys_buffers.append(arr)
+                    # Periodic disk checkpoint
+                    if (self._checkpoint_dir
+                            and len(self._sys_buffers) >= self._checkpoint_interval):
+                        try:
+                            self._flush_checkpoint(
+                                "sys", list(self._sys_buffers), native_rate,
+                            )
+                            self._sys_buffers.clear()
+                        except Exception as e:
+                            logger.warning("sys checkpoint failed: %s", e)
                 except Exception as e:
                     if not self._stop_event.is_set():
                         logger.warning("sys read error: %s", e)
@@ -431,6 +495,90 @@ class DualStreamCapture:
                     p.terminate()
                 except Exception as e:
                     logger.debug("PyAudio terminate: %s", e)
+
+    # ── Checkpointing ──────────────────────────────────────────────
+
+    def _flush_checkpoint(self, stream: str, buffers: list, native_rate: int) -> None:
+        """Flush accumulated audio buffers to a raw PCM chunk file on disk."""
+        if not self._checkpoint_dir or not buffers:
+            return
+
+        np = _get_numpy()
+        audio = np.concatenate(buffers)
+        audio = _resample(audio, native_rate, TARGET_RATE)
+        pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
+
+        if stream == "mic":
+            chunk_num = self._mic_chunk_count
+            self._mic_chunk_count += 1
+        else:
+            chunk_num = self._sys_chunk_count
+            self._sys_chunk_count += 1
+
+        chunk_path = self._checkpoint_dir / f"{stream}-chunk-{chunk_num:04d}.raw"
+        chunk_path.write_bytes(pcm.tobytes())
+
+        self._update_manifest()
+        logger.debug("Flushed %s chunk %04d (%d samples)", stream, chunk_num, len(pcm))
+
+    def _update_manifest(self) -> None:
+        """Update manifest.json with current chunk counts (atomic write)."""
+        if not self._checkpoint_dir:
+            return
+        manifest = {
+            "rec_id": self._checkpoint_dir.name,
+            "started_at": self._started_at_iso,
+            "sample_rate": TARGET_RATE,
+            "mic_chunks": self._mic_chunk_count,
+            "sys_chunks": self._sys_chunk_count,
+            "mic_device": self._mic_info["name"],
+            "sys_device": self._sys_info["name"] if self._sys_info else "none",
+        }
+        manifest_path = self._checkpoint_dir / "manifest.json"
+        tmp = manifest_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        os.replace(str(tmp), str(manifest_path))
+
+    def _save_with_chunks(self, path: Path, remaining_buffers: list,
+                          native_rate: int, stream: str) -> None:
+        """Combine disk chunks + remaining in-memory buffers into final WAV."""
+        np = _get_numpy()
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        all_pcm = []
+
+        # Read existing chunks from disk (already 16kHz int16 PCM)
+        chunk_count = self._mic_chunk_count if stream == "mic" else self._sys_chunk_count
+        for i in range(chunk_count):
+            chunk_path = self._checkpoint_dir / f"{stream}-chunk-{i:04d}.raw"
+            if chunk_path.exists():
+                raw = chunk_path.read_bytes()
+                all_pcm.append(np.frombuffer(raw, dtype=np.int16))
+
+        # Process remaining in-memory buffers (float32 at native rate)
+        if remaining_buffers:
+            audio = np.concatenate(remaining_buffers)
+            audio = _resample(audio, native_rate, TARGET_RATE)
+            pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
+            all_pcm.append(pcm)
+
+        if not all_pcm:
+            with wave.open(str(path), "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(TARGET_RATE)
+                wf.writeframes(b"")
+            return
+
+        final_pcm = np.concatenate(all_pcm)
+
+        with wave.open(str(path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(TARGET_RATE)
+            wf.writeframes(final_pcm.tobytes())
+
+    # ── WAV Output ───────────────────────────────────────────────
 
     def _write_wav(self, path: Path, buffers: list, native_rate: int) -> None:
         """Concatenate buffers, resample to 16 kHz, write 16-bit mono WAV."""

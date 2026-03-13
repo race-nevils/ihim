@@ -292,6 +292,68 @@ def check_api_server() -> ComponentHealth:
     )
 
 
+def check_recorder() -> ComponentHealth:
+    """Check meeting recorder status — is it recording? How long? Chunks flushed?"""
+    metrics = {}
+    try:
+        from api.recorder.state import RecorderState
+        state = RecorderState()
+        snap = state.snapshot()
+        metrics["status"] = snap["status"].value if hasattr(snap["status"], "value") else str(snap["status"])
+        metrics["recording_id"] = snap.get("recording_id")
+        metrics["elapsed_seconds"] = snap.get("elapsed_seconds")
+
+        # Check for in-progress checkpoint data
+        recordings_dir = IHIM_ROOT / "data" / "local" / "recordings"
+        in_progress = recordings_dir / ".in-progress"
+        if in_progress.exists():
+            active_dirs = [d.name for d in in_progress.iterdir() if d.is_dir()]
+            metrics["in_progress_recordings"] = active_dirs
+            # Read manifest for chunk counts
+            for d in in_progress.iterdir():
+                manifest = d / "manifest.json"
+                if manifest.exists():
+                    try:
+                        m = json.load(open(manifest, encoding="utf-8"))
+                        metrics["mic_chunks"] = m.get("mic_chunks", 0)
+                        metrics["sys_chunks"] = m.get("sys_chunks", 0)
+                    except Exception:
+                        pass
+
+        if snap["status"].value == "recording":
+            return ComponentHealth(
+                id="recorder",
+                status=HealthStatus.HEALTHY,
+                message=f"Recording ({int(snap.get('elapsed_seconds') or 0)}s)",
+                last_check=datetime.now().isoformat(),
+                metrics=metrics,
+            )
+        elif snap["status"].value == "error":
+            return ComponentHealth(
+                id="recorder",
+                status=HealthStatus.ERROR,
+                message=snap.get("error", "Unknown error")[:100],
+                last_check=datetime.now().isoformat(),
+                metrics=metrics,
+            )
+        else:
+            return ComponentHealth(
+                id="recorder",
+                status=HealthStatus.HEALTHY,
+                message=f"Idle",
+                last_check=datetime.now().isoformat(),
+                metrics=metrics,
+            )
+    except Exception as e:
+        return ComponentHealth(
+            id="recorder",
+            status=HealthStatus.INACTIVE,
+            message=f"Recorder unavailable: {str(e)[:50]}",
+            last_check=datetime.now().isoformat(),
+            metrics=metrics,
+        )
+
+
 def check_actions_registry() -> ComponentHealth:
     """Check actions registry."""
     try:
@@ -813,6 +875,7 @@ HEALTH_CHECKS: Dict[str, callable] = {
     # iHIM systems (child of workspace)
     "ihim-root": check_ihim_root,
     "api-server": check_api_server,
+    "recorder": check_recorder,
     "actions-registry": check_actions_registry,
     "slash-commands": check_slash_commands,
     "team-system": check_team_system,

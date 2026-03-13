@@ -3,11 +3,22 @@
 States: idle → recording → transcribing → idle  (+ error dead-end via /reset)
 """
 
+import json
+import logging
+import os
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from api.recorder.models import RecorderStatus
+
+logger = logging.getLogger(__name__)
+
+# File-backed state for crash recovery
+_DATA_DIR = Path(__file__).parent.parent.parent / "data" / "local"
+_RECORDINGS_DIR = _DATA_DIR / "recordings"
+_STATE_FILE = _RECORDINGS_DIR / ".recorder-state.json"
 
 
 class RecorderState:
@@ -101,6 +112,7 @@ class RecorderState:
             self._sys_device = sys_device
             self._model_size = model_size
             self._error = None
+            self._persist_state()
 
     def stop_recording(self) -> None:
         with self._state_lock:
@@ -114,6 +126,7 @@ class RecorderState:
             self._mic_device = None
             self._sys_device = None
             self._model_size = "small"
+            self._clear_state()
 
     def finish_transcription(self) -> None:
         with self._state_lock:
@@ -127,6 +140,7 @@ class RecorderState:
             self._mic_device = None
             self._sys_device = None
             self._model_size = "small"
+            self._clear_state()
 
     def set_error(self, message: str) -> None:
         with self._state_lock:
@@ -144,6 +158,39 @@ class RecorderState:
             self._sys_device = None
             self._model_size = "small"
             self._error = None
+            self._clear_state()
+
+    # ── File-Backed State ─────────────────────────────────────────────
+
+    def _persist_state(self) -> None:
+        """Write active recording metadata to disk (atomic tmp+replace).
+
+        Enables crash recovery to know what was recording when the server died.
+        """
+        try:
+            _RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+            state = {
+                "recording_id": self._recording_id,
+                "label": self._label,
+                "participant_name": self._participant_name,
+                "started_at": self._started_at.isoformat() if self._started_at else None,
+                "mic_device": self._mic_device,
+                "sys_device": self._sys_device,
+                "model_size": self._model_size,
+            }
+            tmp = _STATE_FILE.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            os.replace(str(tmp), str(_STATE_FILE))
+        except Exception as e:
+            logger.warning("Failed to persist recorder state: %s", e)
+
+    def _clear_state(self) -> None:
+        """Delete the state file when recording stops."""
+        try:
+            if _STATE_FILE.exists():
+                _STATE_FILE.unlink()
+        except Exception as e:
+            logger.warning("Failed to clear recorder state file: %s", e)
 
     # ── Snapshot ──────────────────────────────────────────────────────
 

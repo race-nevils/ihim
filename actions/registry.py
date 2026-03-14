@@ -106,6 +106,13 @@ ACTIONS = {
         "has_modal": True,
         "hidden": True,  # Consolidated into Mission Control
     },
+    "pipeline_observer": {
+        "name": "Pipeline Observer",
+        "description": "Brain pipeline health and trends",
+        "icon": "activity",
+        "category": "tools",
+        "has_modal": True,
+    },
     "meeting_recorder": {
         "name": "Meeting Recorder",
         "description": "Record meetings with dual-channel audio capture and transcription",
@@ -187,6 +194,10 @@ def run_action(action_id: str) -> dict:
     elif action_id == "agent_team_builder":
         # Handled by UI (modal for designing custom agent teams)
         return {"success": True, "message": "Opening Team Builder..."}
+
+    elif action_id == "pipeline_observer":
+        # Handled by UI (modal for pipeline observer)
+        return {"success": True, "message": "Opening Pipeline Observer..."}
 
     elif action_id == "meeting_recorder":
         # Handled by UI (modal for meeting recorder)

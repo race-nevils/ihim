@@ -45,7 +45,7 @@ const LUCIDE_ICONS = {
     'map': 'map', 'slash': 'command', 'restart': 'refresh-cw',
     'timer': 'timer', 'verified': 'badge-check', 'shield': 'shield-check',
     'lightbulb': 'lightbulb', 'calendar': 'calendar-days',
-    'git-branch': 'git-branch', 'archive': 'archive', 'mic': 'mic', 'default': 'zap'
+    'git-branch': 'git-branch', 'archive': 'archive', 'mic': 'mic', 'activity': 'activity', 'default': 'zap'
 };
 
 export function getIcon(icon) {

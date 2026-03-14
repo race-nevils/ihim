@@ -196,6 +196,10 @@ export async function runAction(actionId, btn = null) {
         const { toggleVaultWindow } = await import('./vault-dashboard.js');
         toggleVaultWindow(); return;
     }
+    if (actionId === 'pipeline_observer') {
+        const { openPipelineObserver } = await import('./pipeline-observer.js');
+        openPipelineObserver(); return;
+    }
     if (actionId === 'meeting_recorder') {
         const { toggleRecorderWindow } = await import('./recorder.js');
         toggleRecorderWindow(); return;

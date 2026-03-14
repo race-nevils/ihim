@@ -198,6 +198,70 @@
         </div>
     </ihim-panel>
 
+    <!-- Pipeline Observer Window (Draggable) -->
+    <ihim-panel id="pipeline-observer-window" class="pipeline-observer-window" persist-key="pipelineObserverWindowPosition">
+        <div class="pipeline-header" data-drag-handle>
+            <span class="pipeline-label">Pipeline Observer</span>
+            <button class="pipeline-close" data-close-btn aria-label="Close Pipeline Observer">&times;</button>
+        </div>
+        <div class="pipeline-body">
+            <!-- Status Indicator (WAI-ARIA 1.2 role="status") -->
+            <div id="pipeline-status" class="pipeline-status" role="status" aria-live="polite" aria-atomic="true">
+                <span class="pipeline-light"></span>
+                <span>Loading...</span>
+            </div>
+
+            <!-- Metrics Grid (2x2) -->
+            <div class="pipeline-metrics-grid">
+                <div id="pipeline-metric-entries" class="pipeline-metric">
+                    <span class="pipeline-metric-label">Entries</span>
+                    <span class="pipeline-metric-value">--</span>
+                </div>
+                <div id="pipeline-metric-relations" class="pipeline-metric">
+                    <span class="pipeline-metric-label">Relations</span>
+                    <span class="pipeline-metric-value">--</span>
+                </div>
+                <div id="pipeline-metric-orphans" class="pipeline-metric">
+                    <span class="pipeline-metric-label">Orphan Rate</span>
+                    <span class="pipeline-metric-value">--</span>
+                </div>
+                <div id="pipeline-metric-embeddings" class="pipeline-metric">
+                    <span class="pipeline-metric-label">Embeddings</span>
+                    <span class="pipeline-metric-value">--</span>
+                </div>
+            </div>
+
+            <!-- Sparkline Trends -->
+            <div class="pipeline-trends">
+                <div class="pipeline-trend-section">
+                    <span class="pipeline-trend-label">Entry Trend</span>
+                    <div id="pipeline-trend-entries" class="pipeline-sparkline"></div>
+                </div>
+            </div>
+
+            <!-- Detail Rows -->
+            <div class="pipeline-details">
+                <div id="pipeline-detail-rebuild" class="pipeline-detail-row">
+                    <span class="pipeline-detail-label">Last Rebuild</span>
+                    <span>--</span>
+                </div>
+                <div id="pipeline-detail-watcher" class="pipeline-detail-row">
+                    <span class="pipeline-detail-label">Watcher</span>
+                    <span>--</span>
+                </div>
+            </div>
+
+            <!-- Errors (hidden when empty) -->
+            <div id="pipeline-errors" class="pipeline-errors" style="display: none;">
+                <span class="pipeline-errors-label">Recent Errors</span>
+                <div class="pipeline-error-list"></div>
+            </div>
+        </div>
+        <div class="pipeline-footer">
+            <span>Polls every 30s • application/health+json</span>
+        </div>
+    </ihim-panel>
+
     <!-- Agent Team Builder Modal -->
     <dialog id="agent-team-modal" class="modal" aria-labelledby="agent-team-modal-title">
         <div class="modal-content agent-team-modal-content">

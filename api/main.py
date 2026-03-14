@@ -94,6 +94,8 @@ stt_router, STT_AVAILABLE = _try_import(
     "STT", lambda: __import__("api.stt.routes", fromlist=["router"]).router)
 graph_router, GRAPH_AVAILABLE = _try_import(
     "Knowledge Graph", lambda: __import__("api.graph.routes", fromlist=["router"]).router)
+pipeline_router, PIPELINE_AVAILABLE = _try_import(
+    "Pipeline", lambda: __import__("api.pipeline.routes", fromlist=["router"]).router)
 
 # System topology & health (not yet a router — functions used inline below)
 try:
@@ -343,6 +345,7 @@ _routers = [
     (preferences_router, PREFERENCES_AVAILABLE),
     (stt_router, STT_AVAILABLE),
     (graph_router, GRAPH_AVAILABLE),
+    (pipeline_router, PIPELINE_AVAILABLE),
 ]
 
 for rtr, available in _routers:

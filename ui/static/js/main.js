@@ -15,6 +15,7 @@ import { initVaultEvents } from './vault-dashboard.js';
 import { initMCEvents } from './terminal-manager.js';
 import { initRecorderEvents } from './recorder.js';
 import { initSTTEvents } from './stt.js';
+import { pipelineObserver, closePipelineObserver } from './pipeline-observer.js';
 import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent } from './calendar.js';
 import { initGlobalEscapeHandler } from './a11y.js';
 import './components/ihim-panel.js';
@@ -27,6 +28,7 @@ import './components/ihim-tabs.js';
 function cleanupIntervals() {
     stopSystemMonitor();
     if (flightPath?.stopHealthPolling) flightPath.stopHealthPolling();
+    if (pipelineObserver?.stopPolling) pipelineObserver.stopPolling();
     if (WorkspaceState?.stopAutoSave) WorkspaceState.stopAutoSave();
     if (stopwatchManager?.stopAll) stopwatchManager.stopAll();
 }

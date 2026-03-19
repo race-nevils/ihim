@@ -172,7 +172,7 @@
             </div>
             <div class="modal-body">
                 <p class="modal-desc">Enter your task. It will be morphed into 5 tailored prompts for each specialist.</p>
-                <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow"></textarea>
+                <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow AI"></textarea>
                 <div class="team-agents">
                     <span class="agent-badge">Frontend</span>
                     <span class="agent-badge">Backend</span>

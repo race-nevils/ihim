@@ -52,6 +52,13 @@
             <span id="watcher-value" class="bar-value">OFF</span>
         </div>
 
+        <!-- agent node Status -->
+        <div class="bar-widget" id="agentnode-widget" style="cursor:pointer;" title="agent node Agent Node">
+            <span class="status-dot inactive" id="agentnode-dot"></span>
+            <span class="bar-label">K8+</span>
+            <span id="agentnode-bar-value" class="bar-value">OFF</span>
+        </div>
+
         <div class="bar-spacer"></div>
 
         <!-- Brain Chat toggle -->
@@ -259,6 +266,95 @@
         </div>
         <div class="pipeline-footer">
             <span>Polls every 30s • application/health+json</span>
+        </div>
+    </ihim-panel>
+
+    <!-- agent node Agent Node Window (Draggable) -->
+    <ihim-panel id="agentnode-window" class="agentnode-window" persist-key="agentnodeWindowPosition">
+        <div class="k8-header" data-drag-handle>
+            <span class="k8-label">agent node</span>
+            <div class="k8-header-actions">
+                <button class="k8-refresh-btn" aria-label="Refresh agent node Status" title="Refresh">
+                    <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i>
+                </button>
+                <button class="k8-close" data-close-btn aria-label="Close agent node Panel">&times;</button>
+            </div>
+        </div>
+        <div class="k8-body">
+            <!-- Connection Status -->
+            <div id="k8-connection-status" class="k8-connection-status k8-status-offline" role="status" aria-live="polite" aria-atomic="true">
+                <span class="k8-status-light"></span>
+                <i data-lucide="wifi-off" class="k8-status-icon"></i>
+                <span>Checking...</span>
+            </div>
+
+            <!-- System Metrics Grid (2x2) -->
+            <div id="k8-metrics-grid" class="k8-metrics-grid">
+                <div id="k8-metric-cpu" class="k8-metric">
+                    <span class="k8-metric-label">CPU</span>
+                    <span class="k8-metric-value">--</span>
+                </div>
+                <div id="k8-metric-ram" class="k8-metric">
+                    <span class="k8-metric-label">RAM</span>
+                    <span class="k8-metric-value">--</span>
+                </div>
+                <div id="k8-metric-temp" class="k8-metric">
+                    <span class="k8-metric-label">Temp</span>
+                    <span class="k8-metric-value">--</span>
+                </div>
+                <div id="k8-metric-uptime" class="k8-metric">
+                    <span class="k8-metric-label">Uptime</span>
+                    <span class="k8-metric-value">--</span>
+                </div>
+            </div>
+
+            <!-- Agent Status -->
+            <div class="k8-section">
+                <span class="k8-section-label">Agent</span>
+                <div id="k8-agent-status" class="k8-agent-status">
+                    <span class="k8-agent-idle">No data</span>
+                </div>
+            </div>
+
+            <!-- Model Status -->
+            <div class="k8-section">
+                <span class="k8-section-label">Model</span>
+                <div id="k8-model-status" class="k8-model-status">
+                    <span class="k8-model-none">No data</span>
+                </div>
+            </div>
+
+            <!-- Task Input -->
+            <div class="k8-task-section">
+                <span class="k8-section-label">Send Task</span>
+                <div class="k8-task-input-row">
+                    <input type="text" id="k8-task-input" class="k8-task-input" placeholder="Describe task for agent..." autocomplete="off">
+                    <button class="k8-task-submit" aria-label="Submit Task">
+                        <i data-lucide="send" style="width:14px;height:14px;"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Power Controls -->
+            <div class="k8-power-section">
+                <span class="k8-section-label">Power</span>
+                <div class="k8-power-buttons">
+                    <button class="k8-power-btn k8-power-wol" title="Wake on LAN">
+                        <i data-lucide="power" style="width:14px;height:14px;"></i> Wake
+                    </button>
+                    <button class="k8-power-btn k8-power-reboot hidden" title="Reboot">
+                        <i data-lucide="rotate-ccw" style="width:14px;height:14px;"></i> Reboot
+                    </button>
+                    <button class="k8-power-btn k8-power-shutdown hidden" title="Shutdown">
+                        <i data-lucide="power-off" style="width:14px;height:14px;"></i> Shutdown
+                    </button>
+                </div>
+                <span id="k8-power-feedback" class="k8-power-feedback"></span>
+            </div>
+        </div>
+        <div class="k8-footer">
+            <span id="k8-last-update">Polls every 15s</span>
+            <span class="k8-host-label">192.168.20.2</span>
         </div>
     </ihim-panel>
 

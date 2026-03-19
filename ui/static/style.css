@@ -6752,3 +6752,370 @@ button:focus-visible {
         resize: none;
     }
 }
+
+/* ==========================================================================
+   agent node Agent Node Panel
+   ========================================================================== */
+
+.agentnode-window {
+    position: fixed;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg), 0 2px 6px rgba(0, 150, 180, 0.2);
+    z-index: 100;
+    width: 380px;
+    min-width: 300px;
+    overflow: hidden;
+    resize: horizontal;
+}
+
+.k8-header {
+    display: flex;
+    align-items: center;
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--glass-border);
+    cursor: move;
+    user-select: none;
+}
+
+.k8-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    flex: 1;
+}
+
+.k8-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.k8-refresh-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.k8-refresh-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+
+.k8-close {
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 1.5rem;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.k8-close:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+
+.k8-body {
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    overflow-y: auto;
+    max-height: 500px;
+}
+
+/* --- Connection Status --- */
+
+.k8-connection-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.k8-connection-status .k8-status-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.k8-status-online {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--status-success);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.k8-status-degraded {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--status-warning);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.k8-status-offline {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--status-error);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Status light pulse */
+.k8-status-light {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.k8-status-online .k8-status-light {
+    animation: k8-pulse 2s ease-in-out infinite;
+}
+
+@keyframes k8-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 4px currentColor; }
+    50% { opacity: 0.5; box-shadow: 0 0 8px currentColor; }
+}
+
+/* --- Metrics Grid --- */
+
+.k8-metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.k8-metric {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.k8-metric-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.k8-metric-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- Sections (Agent, Model) --- */
+
+.k8-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.k8-section-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+
+.k8-agent-status, .k8-model-status {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.k8-agent-idle { color: var(--text-muted); }
+.k8-agent-busy { color: var(--status-success); font-weight: 600; }
+.k8-agent-error { color: var(--status-error); font-weight: 600; }
+
+.k8-current-task {
+    margin-top: 4px;
+    font-size: 0.8rem;
+}
+
+.k8-task-label {
+    color: var(--text-muted);
+    margin-right: 4px;
+}
+
+.k8-task-text {
+    color: var(--text-primary);
+}
+
+.k8-queue-depth {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.k8-model-name {
+    color: var(--color-power);
+    font-weight: 600;
+}
+
+.k8-model-params, .k8-model-backend {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: 8px;
+}
+
+.k8-model-none {
+    color: var(--text-muted);
+}
+
+/* --- Task Input --- */
+
+.k8-task-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.k8-task-input-row {
+    display: flex;
+    gap: 6px;
+}
+
+.k8-task-input {
+    flex: 1;
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.k8-task-input:focus {
+    border-color: var(--color-power);
+}
+
+.k8-task-input::placeholder {
+    color: var(--text-muted);
+}
+
+.k8-task-submit {
+    background: var(--color-power);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.2s;
+}
+
+.k8-task-submit:hover { opacity: 0.85; }
+.k8-task-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* --- Power Controls --- */
+
+.k8-power-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid var(--glass-border);
+}
+
+.k8-power-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.k8-power-btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.k8-power-btn:hover {
+    background: var(--bg-surface);
+    border-color: var(--text-muted);
+}
+
+.k8-power-shutdown:hover {
+    border-color: var(--status-error);
+    color: var(--status-error);
+}
+
+.k8-power-feedback {
+    font-size: 0.75rem;
+    min-height: 1em;
+}
+
+.k8-power-success {
+    color: var(--status-success);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* --- Footer --- */
+
+.k8-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px var(--space-3);
+    border-top: 1px solid var(--glass-border);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.k8-host-label {
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 480px) {
+    .agentnode-window {
+        position: fixed;
+        left: 0 !important;
+        bottom: 0 !important;
+        top: auto !important;
+        width: 100% !important;
+        max-height: 70vh;
+        border-radius: 12px 12px 0 0;
+        resize: none;
+    }
+}

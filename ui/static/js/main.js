@@ -15,6 +15,7 @@ import { initVaultEvents } from './vault-dashboard.js';
 import { initRecorderEvents } from './recorder.js';
 import { initSTTEvents } from './stt.js';
 import { pipelineObserver, closePipelineObserver } from './pipeline-observer.js';
+import { initAgentNodeEvents, openAgentNodeWindow } from './agentnode-manager.js';
 import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent } from './calendar.js';
 import { initGlobalEscapeHandler } from './a11y.js';
 import './components/ihim-panel.js';
@@ -69,6 +70,7 @@ function initializeApp() {
     initVaultEvents();
     initRecorderEvents();
     initSTTEvents();
+    initAgentNodeEvents();
 
     // Global Escape handler (individual windows self-register via <ihim-panel>)
     initGlobalEscapeHandler();
@@ -77,6 +79,10 @@ function initializeApp() {
     document.querySelector('#bottom-bar [title="Brain Chat"]')
         ?.closest('.bar-widget')
         ?.addEventListener('click', toggleChatWindow);
+
+    // agent node bar widget → open panel
+    document.getElementById('agentnode-widget')
+        ?.addEventListener('click', openAgentNodeWindow);
 
     // Stopwatch spawn button
     document.querySelector('.stopwatch-spawn-btn')

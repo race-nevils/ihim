@@ -138,7 +138,7 @@
 
   "examples": [
     {
-      "scenario": "Mission Control feature complete",
+      "scenario": "Feature implementation complete",
       "result": "Found 17 bugs: 4 CRITICAL, 7 HIGH, 6 MEDIUM"
     },
     {

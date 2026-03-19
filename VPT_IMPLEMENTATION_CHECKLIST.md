@@ -173,7 +173,6 @@ Track progress on building the VPT feedback loop system.
   - [ ] Test: Verify pattern aggregation
 
 - [ ] Wire up to iHIM dashboard
-  - [ ] Add VPT tab to Mission Control
   - [ ] Load widgets on page load
   - [ ] Test: All widgets display correctly
 

@@ -58,10 +58,6 @@ team_builder_router, TEAM_BUILDER_AVAILABLE = _try_import(
     "Team builder", lambda: __import__("api.team_builder.routes", fromlist=["router"]).router)
 team_router, _TEAM_ROUTER_OK = _try_import(
     "Team router", lambda: __import__("api.team_builder.routes", fromlist=["team_router"]).team_router)
-terminal_router, TERMINAL_AVAILABLE = _try_import(
-    "Terminal", lambda: __import__("api.terminal.routes", fromlist=["router"]).router)
-agents_router, AGENTS_AVAILABLE = _try_import(
-    "Agents", lambda: __import__("api.agents.routes", fromlist=["router"]).router)
 calendar_router, CALENDAR_AVAILABLE = _try_import(
     "Calendar", lambda: __import__("api.calendar.routes", fromlist=["router"]).router)
 brain_router, BRAIN_AVAILABLE = _try_import(
@@ -181,17 +177,7 @@ async def lifespan(app):
         except Exception as e:
             _logger.warning("Shutdown: AsyncOllamaAdapter close failed: %s", e)
 
-    # 2. Kill all terminal sessions
-    if TERMINAL_AVAILABLE:
-        try:
-            from api.terminal.pty_manager import pty_manager
-            killed = pty_manager.kill_all()
-            if killed:
-                _logger.info("Shutdown: killed %d terminal session(s)", killed)
-        except Exception as e:
-            _logger.warning("Shutdown: terminal cleanup failed: %s", e)
-
-    # 3. Stop stt hotkey listener
+    # 2. Stop stt hotkey listener
     if STT_AVAILABLE:
         try:
             from tools.stt.engine import get_engine
@@ -327,9 +313,7 @@ _routers = [
     (slash_commands_router, SLASH_COMMANDS_AVAILABLE),
     (team_builder_router, TEAM_BUILDER_AVAILABLE),
     (team_router, _TEAM_ROUTER_OK),
-    (terminal_router, TERMINAL_AVAILABLE),
-    (agents_router, AGENTS_AVAILABLE),
-    (calendar_router, CALENDAR_AVAILABLE),
+(calendar_router, CALENDAR_AVAILABLE),
     (brain_router, BRAIN_AVAILABLE),
     (chat_router, CHAT_AVAILABLE),
     (health_router, HEALTH_AVAILABLE),
@@ -530,14 +514,6 @@ async def health():
         result["active_transcription_workers"] = len(_active_workers)
     except Exception:
         pass
-
-    # Terminal sessions
-    if TERMINAL_AVAILABLE:
-        try:
-            from api.terminal.pty_manager import pty_manager
-            result["terminal_sessions"] = len(pty_manager.sessions)
-        except Exception:
-            pass
 
     return result
 

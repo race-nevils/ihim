@@ -12,7 +12,6 @@ import { initSlashEvents } from './slash-commands.js';
 import { initStandardsLibraryEvents } from './standards-library.js';
 import { initHealthEvents } from './health-dashboard.js';
 import { initVaultEvents } from './vault-dashboard.js';
-import { initMCEvents } from './terminal-manager.js';
 import { initRecorderEvents } from './recorder.js';
 import { initSTTEvents } from './stt.js';
 import { pipelineObserver, closePipelineObserver } from './pipeline-observer.js';
@@ -68,7 +67,6 @@ function initializeApp() {
     initStandardsLibraryEvents();
     initHealthEvents();
     initVaultEvents();
-    initMCEvents();
     initRecorderEvents();
     initSTTEvents();
 

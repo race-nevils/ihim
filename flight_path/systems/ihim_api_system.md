@@ -52,7 +52,6 @@ The API runs as a single FastAPI application with hot-reload enabled, serving bo
 | `/api/system/*` | Health & topology monitoring | `api.system.health`, `api.system.topology` |
 | `/api/slash-commands/*` | Slash command center | `api.commands.routes` |
 | `/api/team-builder/*` | Team composition builder | `api.team_builder.routes` (optional module) |
-| `/api/terminal/*` | Mission Control terminal | `api.terminal.routes` (optional module) |
 | `/api/tasks` | Task list CRUD | Inline handlers |
 | `/api/notes` | Quick notes CRUD | Inline handlers |
 | `/api/stopwatches` | Multiple stopwatch management | Inline handlers |

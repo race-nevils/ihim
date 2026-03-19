@@ -186,7 +186,7 @@ vpt_score = (
     "avg_vpt": 0.039,
     "improvement_rate": 0.012,  # VPT gain per week
     "best_session": {
-      "id": "2025-12-28-mc-draggable",
+      "id": "2025-12-28-calendar-pagination",
       "vpt": 0.089,
       "why": "Applied h004 immediately, saved 2000 tokens"
     }
@@ -420,7 +420,7 @@ Reduce skill.md from 800 lines → 400 lines, keep principles, remove examples.
 ## VPT Performance (Last 7 Days)
 - Avg VPT: 0.042 (target: 0.05) - BELOW TARGET
 - Trend: +0.008/week (improving)
-- Best session: 0.089 (mc-draggable)
+- Best session: 0.089 (calendar-pagination)
 - Worst session: 0.015 (shell-escaping loop)
 
 ## Active Heuristics (Top 5 by Impact)
@@ -501,7 +501,7 @@ if command_count == 10:
 │                             │
 │  Trend: ↗ +0.008/week       │
 │  Sessions: 8 this week      │
-│  Best: 0.089 (mc-drag)      │
+│  Best: 0.089 (cal-sync)     │
 └─────────────────────────────┘
 ```
 
@@ -565,7 +565,7 @@ VPT Over Time (Last 30 Days)
   "trend_slope": 0.008,
   "sessions_this_week": 8,
   "best_session": {
-    "id": "mc-draggable",
+    "id": "calendar-pagination",
     "vpt": 0.089,
     "date": "2025-12-28"
   },
@@ -893,10 +893,10 @@ def vpt_system_health_check():
 
 ## Appendix A: VPT Calculation Examples
 
-### Example 1: High VPT Session (mc-draggable)
+### Example 1: High VPT Session (calendar-pagination)
 
 ```
-Task: Make Mission Control draggable
+Task: Fix calendar sync pagination
 Commands: 5
 Tokens: ~3000
 Outcome: Success

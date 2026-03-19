@@ -152,7 +152,7 @@ Effectiveness:
 ## Example: High VPT Session
 
 ```
-Task: Make Mission Control draggable
+Task: Fix calendar sync pagination
 Commands: 5 (all effective)
 Tokens: ~3000
 

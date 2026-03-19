@@ -172,11 +172,7 @@ export async function runAction(actionId, btn = null) {
         if (container) { container.classList.add('highlight'); setTimeout(() => container.classList.remove('highlight'), 1000); }
         showStatus('Stopwatch spawned!', 'success'); return;
     }
-    if (actionId === 'mission_control') {
-        const { openMCWindow } = await import('./terminal-manager.js');
-        openMCWindow(); return;
-    }
-    if (actionId === 'standards_library') {
+if (actionId === 'standards_library') {
         const { openStandardsLibraryWindow } = await import('./standards-library.js');
         openStandardsLibraryWindow(); return;
     }

@@ -208,7 +208,7 @@ META-FEEDBACK LOOP (System Measures Itself)
 ---
 
 ### 6. iHIM Dashboard
-**Current:** Mission Control, Quick Notes, Tasks, Stopwatches, Periodic Table
+**Current:** Quick Notes, Tasks, Stopwatches, Periodic Table
 
 **Add:**
 - VPT gauge widget (current vs target)

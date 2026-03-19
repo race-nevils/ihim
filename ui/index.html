@@ -84,7 +84,7 @@
                 <p class="modal-desc" id="team-modal-desc">Enter your task. It will be morphed into 5 tailored prompts for each specialist.
                 </p>
                 <label for="team-prompt" class="sr-only">Task description</label>
-                <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow" aria-describedby="team-modal-desc"></textarea>
+                <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow AI" aria-describedby="team-modal-desc"></textarea>
                 <div class="team-agents">
                     <span class="agent-badge">Frontend</span>
                     <span class="agent-badge">Backend</span>
@@ -481,153 +481,6 @@
     </ihim-panel>
 
 
-<!-- Mission Control Window (Draggable) -->
-    <ihim-panel id="mc-window" class="mc-window" persist-key="mcWindowPosition">
-        <div class="mc-header mc-drag-handle" data-drag-handle>
-            <span class="mc-label">Mission Control</span>
-            <button class="mc-close" data-close-btn aria-label="Close Mission Control">&times;</button>
-        </div>
-
-        <div class="mc-body">
-            <!-- LEFT PANEL: Form/Data Entry -->
-            <div class="mc-left-panel">
-                <ihim-tabs>
-                <!-- Section Tabs -->
-                <div class="mc-workshop-tabs" id="mc-tablist" role="tablist" aria-label="Mission Control Sections">
-                    <button class="mc-tab-btn active" data-section="agents" role="tab" id="mc-tab-agents" aria-selected="true" aria-controls="mc-section-agents" tabindex="0">Agents</button>
-                    <button class="mc-tab-btn" data-section="teams" role="tab" id="mc-tab-teams" aria-selected="false" aria-controls="mc-section-teams" tabindex="-1">Teams</button>
-                    <button class="mc-tab-btn" data-section="workflows" role="tab" id="mc-tab-workflows" aria-selected="false" aria-controls="mc-section-workflows" tabindex="-1">Workflows</button>
-                </div>
-
-                <!-- Agents Section -->
-                <div class="mc-section-panel active" id="mc-section-agents" role="tabpanel" aria-labelledby="mc-tab-agents">
-                    <div class="mc-section-header">
-                        <span class="mc-section-title">Agent Builder</span>
-                        <div class="mc-section-actions">
-                            <button class="mc-btn-small">+ New</button>
-                        </div>
-                    </div>
-
-                    <div class="mc-agent-form">
-                        <!-- Name + Tier Row (Inline) -->
-                        <div class="mc-form-row">
-                            <div class="mc-form-group mc-form-group-flex">
-                                <label for="agent-name">Name</label>
-                                <input type="text" id="agent-name" placeholder="e.g., API Scout">
-                            </div>
-                            <div class="mc-form-group mc-form-group-compact">
-                                <label for="agent-tier">Tier</label>
-                                <select id="agent-tier">
-                                    <option value="haiku">the agent</option>
-                                    <option value="sonnet">the agent</option>
-                                    <option value="opus">the agent</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Tier Indicator (Full Width) -->
-                        <div class="tier-indicator tier-haiku" id="tier-indicator">
-                            <span class="tier-icon">👁</span>
-                            <span class="tier-label">Scout</span>
-                            <span class="tier-badge read-only">READ-ONLY</span>
-                        </div>
-
-                        <div class="mc-form-group">
-                            <label for="agent-description">Description / Prompt</label>
-                            <textarea id="agent-description"
-                                placeholder="What does this agent do? This becomes the agent's system context..."></textarea>
-                        </div>
-
-                        <div class="mc-form-group">
-                            <label for="agent-skills">Skills</label>
-                            <input type="text" id="agent-skills" placeholder="e.g., security-audit, code-review">
-                            <div class="skill-preview-container" id="skill-preview">
-                                <!-- Skill pills populated dynamically -->
-                            </div>
-                        </div>
-
-                        <div class="mc-form-actions">
-                            <button class="mc-btn-primary">Save</button>
-                            <button class="mc-btn-secondary">Clear</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Teams Section -->
-                <div class="mc-section-panel" id="mc-section-teams" role="tabpanel" aria-labelledby="mc-tab-teams">
-                    <div class="mc-section-header">
-                        <span class="mc-section-title">Team Composer</span>
-                        <div class="mc-section-actions">
-                            <button class="mc-btn-small">+ New</button>
-                        </div>
-                    </div>
-                    <div class="mc-placeholder">
-                        <p>Compose teams from saved agents.</p>
-                        <p class="mc-hint">Build agents first, then combine them into teams.</p>
-                    </div>
-                </div>
-
-                <!-- Workflows Section -->
-                <div class="mc-section-panel" id="mc-section-workflows" role="tabpanel" aria-labelledby="mc-tab-workflows">
-                    <div class="mc-section-header">
-                        <span class="mc-section-title">Workflow Planner</span>
-                        <div class="mc-section-actions">
-                            <button class="mc-btn-small">+ New</button>
-                        </div>
-                    </div>
-                    <div class="mc-placeholder">
-                        <p>Plan multi-step workflows.</p>
-                        <p class="mc-hint">Map out automation sequences before building them.</p>
-                    </div>
-                </div>
-                </ihim-tabs>
-
-                <!-- Status -->
-                <div id="mc-status" class="mc-status" style="display: none;"></div>
-            </div>
-
-            <!-- RIGHT PANEL: Visual Library (Always Visible) -->
-            <div class="mc-right-panel">
-                <!-- Terminal Tabs + Panes -->
-                <div class="mc-terminal-section">
-                    <div class="mc-terminal-header">
-                        <div class="terminal-tabs" id="terminal-tabs">
-                            <!-- Populated by JS -->
-                        </div>
-                        <button class="mc-new-tab-btn" id="mc-new-tab-btn" title="New Terminal" aria-label="New Terminal">+</button>
-                        <div class="terminal-connection-status" id="terminal-connection-status">
-                            <span class="status-dot"></span>
-                            <span class="status-text">--</span>
-                        </div>
-                    </div>
-                    <div class="terminal-panes" id="terminal-panes">
-                        <!-- Terminal panes populated by JS -->
-                    </div>
-                </div>
-
-                <div class="mc-agent-library" id="agent-library">
-                    <div class="mc-library-header">
-                        <span>Saved Agents</span>
-                    </div>
-                    <div class="mc-library-list" id="agent-list">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="mc-footer">
-            <div class="mc-footer-left">
-                <span id="terminal-tab-count">0 terminals</span>
-                <span class="mc-footer-sep">|</span>
-                <span id="terminal-active-info">--</span>
-            </div>
-            <div class="mc-footer-right">
-                <button class="mc-footer-btn" title="Clear">Clear</button>
-                <button class="mc-footer-btn" title="Reconnect">Reconnect</button>
-            </div>
-        </div>
-    </ihim-panel>
 
 <!-- Vault Dashboard Window (Draggable) -->
     <ihim-panel id="vault-window" class="vault-window" persist-key="vaultWindowPosition">
@@ -841,12 +694,6 @@
             <button class="chat-send-btn" id="chat-send-btn">Send</button>
         </div>
     </ihim-panel>
-
-    <!-- xterm.js from CDN -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
-    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
 
     <!-- Import Map — cache-busts ALL JS module imports with BOOT_ID -->
     __IMPORT_MAP__

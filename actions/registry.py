@@ -39,14 +39,7 @@ ACTIONS = {
         "icon": "slash",
         "category": "tools",
         "has_modal": True,
-        "hidden": True,  # Consolidated into Mission Control
-    },
-    "mission_control": {
-        "name": "Mission Control",
-        "description": "Terminal, Commands, Feature Builder, Team Builder - all in one",
-        "icon": "terminal",
-        "category": "tools",
-        "has_modal": True,
+        "hidden": True,
     },
     "stopwatch": {
         "name": "Stopwatch",
@@ -89,14 +82,13 @@ ACTIONS = {
         "category": "tools",
         "has_modal": True,
     },
-    # Team actions (consolidated into Mission Control)
     "software_dev_team": {
         "name": "Feature Builder",
         "description": "Spawn 5 coding specialists in parallel",
         "icon": "rocket",
         "category": "actions",
         "has_input": True,
-        "hidden": True,  # Consolidated into Mission Control
+        "hidden": True,
     },
     "agent_team_builder": {
         "name": "Team Builder",
@@ -104,7 +96,7 @@ ACTIONS = {
         "icon": "users",
         "category": "actions",
         "has_modal": True,
-        "hidden": True,  # Consolidated into Mission Control
+        "hidden": True,
     },
     "pipeline_observer": {
         "name": "Pipeline Observer",
@@ -158,9 +150,6 @@ def run_action(action_id: str) -> dict:
         # Handled by UI (modal)
         return {"success": True, "message": "Opening Slash Command Center..."}
 
-    elif action_id == "mission_control":
-        # Handled by UI (modal)
-        return {"success": True, "message": "Opening Mission Control..."}
 
     elif action_id == "stopwatch":
         # Handled by UI (spawns floating stopwatch widgets)

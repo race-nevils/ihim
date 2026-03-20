@@ -34,15 +34,17 @@ def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
     """
     from api.recorder.transcribe import transcribe_channel
 
-    # Vocab priming disabled — large-v3-turbo handles domain terms well without it,
-    # and the initial_prompt causes the decoder to parrot vocab on short/unclear audio.
+    # Style prompt steers Whisper toward dictation output (not podcast/interview).
+    # Vocab-specific terms removed — they caused the decoder to parrot them back.
+    style_prompt = "Dictation of spoken text. Natural conversational English."
     segments = transcribe_channel(
         wav_path,
         speaker_label="dictation",
         model_size=model_size,
-        initial_prompt=None,
+        initial_prompt=style_prompt,
         condition_on_previous_text=False,
         compression_ratio_threshold=1.8,
         hallucination_silence_threshold=1.0,
+        language="en",
     )
     return " ".join(seg["text"] for seg in segments)

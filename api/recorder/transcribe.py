@@ -38,6 +38,7 @@ _VRAM_FLOAT16 = {
     "small": 1500, "small.en": 1500,
     "medium": 3000, "medium.en": 3000,
     "large-v3": 4500,
+    "large-v3-turbo": 2000,
 }
 
 # Absolute minimum VRAM for any GPU usage (tiny/base models).

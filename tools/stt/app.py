@@ -81,8 +81,12 @@ def main() -> None:
 
     # 4. Wire RMS volume meter (polls during recording)
     _rms_poll_id = [None]  # mutable container for after-id
+    _rms_polling = [False]  # guard against double-start
 
     def poll_rms():
+        if not _rms_polling[0]:
+            _rms_poll_id[0] = None
+            return
         capture = engine._mic._capture
         if capture is not None:
             bar.set_rms(_rms_from_buffers(capture))
@@ -90,19 +94,31 @@ def main() -> None:
             bar.set_rms(0.0)
         _rms_poll_id[0] = bar.root.after(50, poll_rms)
 
-    # Start polling when recording begins, stop when it ends
+    # Start/stop polling — always runs on main thread via root.after
     _orig_cb = on_state_change
+
+    def _start_rms_poll():
+        """Start RMS polling (must be called on main thread)."""
+        if _rms_polling[0]:
+            return  # already running
+        _rms_polling[0] = True
+        poll_rms()
+
+    def _stop_rms_poll():
+        """Stop RMS polling (must be called on main thread)."""
+        _rms_polling[0] = False
+        if _rms_poll_id[0] is not None:
+            bar.root.after_cancel(_rms_poll_id[0])
+            _rms_poll_id[0] = None
+        bar.set_rms(0.0)
 
     def on_state_with_rms(status: str):
         _orig_cb(status)
+        # Defer poll start/stop to main thread (callback fires from engine thread)
         if status in ("recording", "warning"):
-            if _rms_poll_id[0] is None:
-                poll_rms()
+            bar.root.after(0, _start_rms_poll)
         else:
-            if _rms_poll_id[0] is not None:
-                bar.root.after_cancel(_rms_poll_id[0])
-                _rms_poll_id[0] = None
-            bar.set_rms(0.0)
+            bar.root.after(0, _stop_rms_poll)
 
     engine.set_state_callback(on_state_with_rms)
 

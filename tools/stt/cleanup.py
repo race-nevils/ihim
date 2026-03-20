@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # ── Whisper hallucination patterns ────────────────────────────────────
 # Known artifacts from YouTube training data that Whisper hallucinates
 # on silence or low-confidence audio.
+# Patterns that match WITHIN longer text (stripped but don't reject the whole transcript)
 _HALLUCINATION_PATTERNS = [
     r"thanks?\s+for\s+watching",
     r"subscribe\s+to\s+my\s+channel",
@@ -33,6 +34,37 @@ _HALLUCINATION_PATTERNS = [
     r"♪+",                                  # music note symbols
     r"🎵+",                                 # music emoji
 ]
+
+# Full-transcript hallucinations — if the ENTIRE transcript matches one of these,
+# it's almost certainly hallucinated (Whisper's podcast/interview training data).
+# These are checked against the full normalized transcript, not stripped from it.
+_FULL_TRANSCRIPT_HALLUCINATIONS = [
+    # YouTube/podcast closings
+    r"^thanks?\s+for\s+(watching|listening|having\s+me|joining).*$",
+    r"^thank\s+you\s+for\s+(watching|listening|having\s+me|joining|tuning\s+in).*$",
+    r"^thank\s+you\.?\s*$",
+    r"^you\.?\s*$",
+    r"^bye[\s-]*bye\.?\s*$",
+    r"^goodbye\.?\s*$",
+    r"^see\s+you\s+(next\s+time|in\s+the\s+next|later|soon).*$",
+    r"^i'?ll\s+see\s+you\s+in\s+the\s+next.*$",
+    r"^(and\s+)?that'?s\s+(it|all)\s+for\s+(today|now|this).*$",
+    r"^(so\s+)?stay\s+tuned.*$",
+    r"^(please\s+)?leave\s+a\s+(comment|like).*$",
+    r"^don'?t\s+forget\s+to\s+subscribe.*$",
+    # Interview/podcast intros
+    r"^welcome\s+(back\s+)?(to\s+the\s+show|to\s+the\s+channel|everyone).*$",
+    r"^hey\s+(guys|everyone),?\s+welcome\s+back.*$",
+    r"^(and\s+)?we'?re\s+back.*$",
+    r"^(so\s+)?without\s+further\s+ado.*$",
+    # Single filler words (Whisper loves generating these on silence)
+    r"^(um|uh|hmm|ah|oh|okay|ok|yes|no|yeah|right|so|well|and)\.?\s*$",
+]
+
+_FULL_HALLUCINATION_RE = re.compile(
+    "|".join(_FULL_TRANSCRIPT_HALLUCINATIONS),
+    re.IGNORECASE,
+)
 
 _HALLUCINATION_RE = re.compile(
     "|".join(_HALLUCINATION_PATTERNS),
@@ -270,17 +302,27 @@ def _remove_hallucinations(text: str) -> str:
     """Strip known Whisper hallucination artifacts.
 
     If the entire transcript is a hallucination, returns empty string.
-    Checks: known patterns, non-Latin script dominance, repetitive nonsense.
+    Checks: full-transcript match, non-Latin script, repetitive nonsense, inline patterns.
     """
-    # Full-transcript checks first (before stripping patterns)
-    if _is_non_english_hallucination(text):
-        logger.info("Hallucination filtered (non-English script): %s", text[:80])
-        return ""
-    if _is_repetitive_nonsense(text):
-        logger.info("Hallucination filtered (repetitive): %s", text[:80])
+    normalized = text.strip()
+
+    # Full-transcript hallucination check (podcast/interview phrases)
+    if _FULL_HALLUCINATION_RE.match(normalized):
+        logger.info("Hallucination filtered (full-transcript match): %s", normalized[:80])
         return ""
 
-    cleaned = _HALLUCINATION_RE.sub("", text).strip()
+    # Non-Latin script dominance
+    if _is_non_english_hallucination(normalized):
+        logger.info("Hallucination filtered (non-English script): %s", normalized[:80])
+        return ""
+
+    # Repetitive nonsense
+    if _is_repetitive_nonsense(normalized):
+        logger.info("Hallucination filtered (repetitive): %s", normalized[:80])
+        return ""
+
+    # Inline pattern stripping (removes patterns but keeps surrounding text)
+    cleaned = _HALLUCINATION_RE.sub("", normalized).strip()
     if not cleaned or not re.search(r"\w", cleaned):
         return ""
     return cleaned

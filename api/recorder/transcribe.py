@@ -193,6 +193,7 @@ def transcribe_channel(
     log_prob_threshold: float = -1.0,
     hallucination_silence_threshold: Optional[float] = 2.0,
     temperature: Union[float, tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+    language: Optional[str] = None,
 ) -> list[dict]:
     """Transcribe a single WAV file, returning labeled segments.
 
@@ -237,6 +238,8 @@ def transcribe_channel(
         transcribe_kwargs["initial_prompt"] = initial_prompt
     if hallucination_silence_threshold is not None:
         transcribe_kwargs["hallucination_silence_threshold"] = hallucination_silence_threshold
+    if language is not None:
+        transcribe_kwargs["language"] = language
 
     segments_iter, info = model.transcribe(
         str(wav_path),

@@ -24,12 +24,47 @@ _HALLUCINATION_PATTERNS = [
     r"please\s+subscribe",
     r"hit\s+the\s+(?:bell|notification)",
     r"subtitles?\s+by\b",
+    r"sub[tт]i[tт]l",                     # "subtitles" in mixed Latin/Cyrillic
+    r"[Сс]убтитры",                        # Russian "subtitles"
+    r"DimaTorzok",                          # specific known hallucination
+    r"Amara\.org",                          # subtitle service
+    r"[Мм]узыка",                           # Russian "music"
+    r"Продолжение\s+следует",               # Russian "to be continued"
+    r"♪+",                                  # music note symbols
+    r"🎵+",                                 # music emoji
 ]
 
 _HALLUCINATION_RE = re.compile(
     "|".join(_HALLUCINATION_PATTERNS),
     re.IGNORECASE,
 )
+
+# Non-Latin script detector — English dictation should not contain Cyrillic,
+# CJK, Arabic, Hebrew, Thai, etc. If >30% of alpha chars are non-Latin,
+# the entire transcript is almost certainly a hallucination.
+_NON_LATIN_RE = re.compile(r"[^\u0000-\u024F\u1E00-\u1EFF]")
+
+def _is_non_english_hallucination(text: str) -> bool:
+    """Detect if text is predominantly non-Latin script (hallucination)."""
+    alpha_chars = [c for c in text if c.isalpha()]
+    if not alpha_chars:
+        return False
+    non_latin = sum(1 for c in alpha_chars if _NON_LATIN_RE.match(c))
+    return non_latin / len(alpha_chars) > 0.3
+
+# Repetitive word/phrase detector — catches "jaa jaa jaa jaa" and
+# "IHIM, IHIM, IHIM, IHIM" by stripping punctuation before comparing.
+def _is_repetitive_nonsense(text: str) -> bool:
+    """Detect if text is just the same word/phrase repeated 3+ times."""
+    # Strip punctuation, lowercase, split into words
+    words = re.sub(r"[^\w\s]", "", text).lower().split()
+    if len(words) < 3:
+        return False
+    # Check if one word dominates (>= 70% of all words)
+    from collections import Counter
+    counts = Counter(words)
+    most_common_word, most_common_count = counts.most_common(1)[0]
+    return most_common_count / len(words) >= 0.7
 
 # ── Stutter detection ─────────────────────────────────────────────────
 # Matches single-char-hyphen sequences: "s-s-stuttering" → "stuttering"
@@ -235,7 +270,16 @@ def _remove_hallucinations(text: str) -> str:
     """Strip known Whisper hallucination artifacts.
 
     If the entire transcript is a hallucination, returns empty string.
+    Checks: known patterns, non-Latin script dominance, repetitive nonsense.
     """
+    # Full-transcript checks first (before stripping patterns)
+    if _is_non_english_hallucination(text):
+        logger.info("Hallucination filtered (non-English script): %s", text[:80])
+        return ""
+    if _is_repetitive_nonsense(text):
+        logger.info("Hallucination filtered (repetitive): %s", text[:80])
+        return ""
+
     cleaned = _HALLUCINATION_RE.sub("", text).strip()
     if not cleaned or not re.search(r"\w", cleaned):
         return ""

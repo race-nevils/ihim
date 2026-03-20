@@ -34,12 +34,13 @@ def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
     """
     from api.recorder.transcribe import transcribe_channel
 
-    vocab_prompt = load_vocab()
+    # Vocab priming disabled — large-v3-turbo handles domain terms well without it,
+    # and the initial_prompt causes the decoder to parrot vocab on short/unclear audio.
     segments = transcribe_channel(
         wav_path,
         speaker_label="dictation",
         model_size=model_size,
-        initial_prompt=vocab_prompt or None,
+        initial_prompt=None,
         condition_on_previous_text=False,
         compression_ratio_threshold=1.8,
         hallucination_silence_threshold=1.0,

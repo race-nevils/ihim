@@ -597,9 +597,11 @@ class DualStreamCapture:
         audio = np.concatenate(buffers)
         audio = _resample(audio, native_rate, TARGET_RATE)
 
-        # Normalize to prevent clipping
+        # Normalize to prevent clipping — but only if signal is strong enough.
+        # On quiet/short recordings, peak normalization amplifies noise into
+        # hallucination-triggering levels for Whisper.
         peak = np.abs(audio).max()
-        if peak > 0:
+        if peak > 0.01:  # only normalize if there's real signal (not just noise floor)
             audio = audio / peak * 0.95
 
         # Convert to 16-bit PCM

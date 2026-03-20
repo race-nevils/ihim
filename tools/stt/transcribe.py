@@ -34,17 +34,21 @@ def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
     """
     from api.recorder.transcribe import transcribe_channel
 
-    # Style prompt steers Whisper toward dictation output (not podcast/interview).
-    # Vocab-specific terms removed — they caused the decoder to parrot them back.
-    style_prompt = "Dictation of spoken text. Natural conversational English."
+    # initial_prompt=None is mandatory for short dictation — ANY text gets parroted back.
+    # Confidence filtering catches hallucinated segments that VAD misses.
     segments = transcribe_channel(
         wav_path,
         speaker_label="dictation",
         model_size=model_size,
-        initial_prompt=style_prompt,
+        initial_prompt=None,
         condition_on_previous_text=False,
-        compression_ratio_threshold=1.8,
+        compression_ratio_threshold=2.4,
+        no_speech_threshold=0.4,
+        log_prob_threshold=-0.7,
         hallucination_silence_threshold=1.0,
         language="en",
     )
-    return " ".join(seg["text"] for seg in segments)
+
+    # Filter out low-confidence segments (likely hallucinations on silence)
+    confident = [seg for seg in segments if seg["confidence"] >= 0.5]
+    return " ".join(seg["text"] for seg in confident)

@@ -32,13 +32,6 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "format": "flac",
     },
-    "chunked_transcription": {
-        "enabled": True,
-        "min_silence_ms": 1500,
-        "min_speech_ms": 500,
-        "speech_pad_ms": 200,
-        "poll_interval_s": 2.0,
-    },
     "sounds": {
         "enabled": True,
         "success": True,

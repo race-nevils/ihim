@@ -99,7 +99,6 @@ class STTEngine:
         self._idle_timer: Optional[threading.Timer] = None
         self._warning_timer: Optional[threading.Timer] = None
         self._timeout_timer: Optional[threading.Timer] = None
-        self._chunked = None  # ChunkedTranscriber instance during recording
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
         """Register a callback fired on every status transition.
@@ -228,25 +227,6 @@ class STTEngine:
             self._set_status("recording")
             self._mic.start()
 
-            # Start chunked transcription (VAD-based streaming)
-            chunked_cfg = self._cfg.get("chunked_transcription", {})
-            if chunked_cfg.get("enabled", True):
-                try:
-                    from tools.stt.chunked import ChunkedTranscriber
-                    self._chunked = ChunkedTranscriber(model_name, chunked_cfg)
-                    self._chunked.start(self._mic._capture)
-                except Exception as e:
-                    logger.warning("Chunked transcription init failed: %s", e)
-                    self._chunked = None
-
-            # Preload model in background if not cached
-            if not is_model_loaded(model_name):
-                threading.Thread(
-                    target=lambda: __import__('api.recorder.transcribe', fromlist=['_get_model'])._get_model(model_name),
-                    daemon=True,
-                    name="stt-model-preload",
-                ).start()
-
             # Start recording timers
             rec_cfg = self._cfg.get("recording", {})
             warn_s = rec_cfg.get("warning_seconds", 300)
@@ -284,22 +264,10 @@ class STTEngine:
             # 1. Stop mic and get WAV path
             wav_path = self._mic.stop()
 
-            # 2. Transcribe — try chunked path first, fall back to full
+            # 2. Transcribe with configured model
+            from tools.stt.transcribe import transcribe
             model_name = self._cfg.get("model", "large-v3-turbo")
-            raw_text = ""
-            chunked = self._chunked
-            self._chunked = None
-
-            if chunked and not chunked._failed:
-                try:
-                    raw_text = chunked.finalize()
-                except Exception as e:
-                    logger.warning("Chunked transcription failed: %s", e)
-                    raw_text = ""
-
-            if not raw_text.strip():
-                from tools.stt.transcribe import transcribe
-                raw_text = transcribe(wav_path, model_size=model_name)
+            raw_text = transcribe(wav_path, model_size=model_name)
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")

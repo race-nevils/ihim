@@ -79,8 +79,9 @@ def main() -> None:
         bar.set_state(status)
     engine.set_state_callback(on_state_change)
 
-    # 4. Wire RMS volume meter (polls during recording)
+    # 4. Wire RMS volume meter + streaming text (polls during recording)
     _rms_poll_id = [None]  # mutable container for after-id
+    _text_poll_id = [None]
     _rms_polling = [False]  # guard against double-start
 
     def poll_rms():
@@ -94,23 +95,37 @@ def main() -> None:
             bar.set_rms(0.0)
         _rms_poll_id[0] = bar.root.after(50, poll_rms)
 
+    def poll_text():
+        """Poll streaming transcriber for partial text (every 100ms)."""
+        if not _rms_polling[0]:
+            _text_poll_id[0] = None
+            return
+        confirmed, partial = engine.get_partial_text()
+        bar.set_partial_text(confirmed, partial)
+        _text_poll_id[0] = bar.root.after(100, poll_text)
+
     # Start/stop polling — always runs on main thread via root.after
     _orig_cb = on_state_change
 
     def _start_rms_poll():
-        """Start RMS polling (must be called on main thread)."""
+        """Start RMS + text polling (must be called on main thread)."""
         if _rms_polling[0]:
             return  # already running
         _rms_polling[0] = True
         poll_rms()
+        poll_text()
 
     def _stop_rms_poll():
-        """Stop RMS polling (must be called on main thread)."""
+        """Stop RMS + text polling (must be called on main thread)."""
         _rms_polling[0] = False
         if _rms_poll_id[0] is not None:
             bar.root.after_cancel(_rms_poll_id[0])
             _rms_poll_id[0] = None
+        if _text_poll_id[0] is not None:
+            bar.root.after_cancel(_text_poll_id[0])
+            _text_poll_id[0] = None
         bar.set_rms(0.0)
+        bar.set_partial_text("", "")
 
     def on_state_with_rms(status: str):
         _orig_cb(status)

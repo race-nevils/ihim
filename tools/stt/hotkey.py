@@ -1,7 +1,7 @@
 """Hold-to-record hotkey listener using pynput.
 
 Reuses stale-key guard pattern from tools/capture_widget/widget.pyw.
-Default hotkey: Right Ctrl + Right Shift chord (hold both to record,
+Default hotkey: Left Ctrl + Windows key chord (hold both to record,
 release either to process).
 
 Supports single-key mode (str) and chord mode (tuple of str).
@@ -14,8 +14,8 @@ from typing import Callable, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
-# Default: Right Ctrl + Right Shift chord (testing hotkey)
-DEFAULT_HOTKEY: Tuple[str, ...] = ("Key.ctrl_r", "Key.shift_r")
+# Default: Left Ctrl + Windows key chord (matches Whisper Flow)
+DEFAULT_HOTKEY: Tuple[str, ...] = ("Key.ctrl_l", "Key.cmd")
 
 
 class HotkeyListener:

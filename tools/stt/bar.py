@@ -55,11 +55,6 @@ class DictationBar:
         self._spinner_angle: float = 0.0
         self._pulse_phase: float = 0.0
 
-        # Streaming text
-        self._confirmed_text: str = ""
-        self._partial_text: str = ""
-        self._partial_text_lock = threading.Lock()
-
         # Root (hidden master)
         self.root = tk.Tk()
         self.root.withdraw()
@@ -100,19 +95,6 @@ class DictationBar:
         """Thread-safe RMS level update (0.0–1.0)."""
         with self._rms_lock:
             self._rms = max(0.0, min(1.0, rms))
-
-    def set_partial_text(self, confirmed: str, partial: str) -> None:
-        """Thread-safe streaming text update. Triggers resize when text present."""
-        with self._partial_text_lock:
-            self._confirmed_text = confirmed
-            self._partial_text = partial
-        # Resize pill to accommodate text row
-        if self._state in ("recording", "warning"):
-            if confirmed or partial:
-                target_h = self._wcfg.get("streaming_height", 90)
-            else:
-                target_h = self._wcfg["recording_height"]
-            self.root.after(0, self._resize_to, self._wcfg["recording_width"], target_h)
 
     def run(self) -> None:
         """Enter the tkinter mainloop (blocks)."""
@@ -247,24 +229,16 @@ class DictationBar:
         accent_r = self._acfg["accent_recording"]
         text_color = self._acfg["text_color"]
 
-        # Check for streaming text
-        with self._partial_text_lock:
-            confirmed = self._confirmed_text
-            partial = self._partial_text
-        has_text = bool(confirmed or partial)
-
-        # Top row — shifted up when streaming text present
-        cy = 26 if has_text else h // 2
-
         # Pulsing red dot (left)
         pulse = 0.6 + 0.4 * abs(math.sin(self._pulse_phase))
         dot_r = int(6 * pulse)
         cx = 28
+        cy = h // 2
         c.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r, fill=accent_r, outline="")
 
         # "Recording" label
         c.create_text(
-            90, cy,
+            90, h // 2,
             text="Recording",
             fill=text_color,
             font=(self._acfg["font_family"], self._acfg["font_size"] - 1),
@@ -280,7 +254,7 @@ class DictationBar:
         bar_gap = 4
         meter_w = bar_count * bar_w + (bar_count - 1) * bar_gap
         meter_x = w - meter_w - 28
-        max_bar_h = self._wcfg["recording_height"] - 18  # use base height for meter
+        max_bar_h = h - 18
 
         for i in range(bar_count):
             # Each bar has a slightly different threshold so they fill L→R
@@ -294,10 +268,6 @@ class DictationBar:
                 fill=accent_r,
                 outline="",
             )
-
-        # Streaming text row
-        if has_text:
-            self._draw_streaming_text(c, w, confirmed, partial, text_color)
 
     # -- processing --
 
@@ -354,24 +324,16 @@ class DictationBar:
         accent_w = self._acfg.get("accent_warning", "#fab387")
         text_color = self._acfg["text_color"]
 
-        # Check for streaming text
-        with self._partial_text_lock:
-            confirmed = self._confirmed_text
-            partial = self._partial_text
-        has_text = bool(confirmed or partial)
-
-        # Top row — shifted up when streaming text present
-        cy = 26 if has_text else h // 2
-
         # Pulsing orange dot (left)
         pulse = 0.6 + 0.4 * abs(math.sin(self._pulse_phase))
         dot_r = int(6 * pulse)
         cx = 28
+        cy = h // 2
         c.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r, fill=accent_w, outline="")
 
         # "Wrapping up..." label
         c.create_text(
-            90, cy,
+            90, h // 2,
             text="Wrapping up\u2026",
             fill=text_color,
             font=(self._acfg["font_family"], self._acfg["font_size"] - 1),
@@ -387,7 +349,7 @@ class DictationBar:
         bar_gap = 4
         meter_w = bar_count * bar_w + (bar_count - 1) * bar_gap
         meter_x = w - meter_w - 28
-        max_bar_h = self._wcfg["recording_height"] - 18
+        max_bar_h = h - 18
 
         for i in range(bar_count):
             threshold = (i + 0.5) / bar_count
@@ -400,10 +362,6 @@ class DictationBar:
                 fill=accent_w,
                 outline="",
             )
-
-        # Streaming text row
-        if has_text:
-            self._draw_streaming_text(c, w, confirmed, partial, text_color)
 
     # -- error (pipeline failure) --
 
@@ -426,47 +384,3 @@ class DictationBar:
             font=(self._acfg["font_family"], self._acfg["font_size"] - 1, "bold"),
             anchor="center",
         )
-
-    # -- streaming text (shared by recording + warning) --
-
-    def _draw_streaming_text(
-        self, c: tk.Canvas, w: int, confirmed: str, partial: str, text_color: str,
-    ):
-        """Draw confirmed + partial streaming text in the bottom row of the pill."""
-        max_chars = self.cfg.get("streaming", {}).get("display_max_chars", 80)
-        font_small = (self._acfg["font_family"], self._acfg["font_size"] - 2)
-        text_y = 68
-        text_x = 20
-        dim_color = "#6c7086"
-
-        # Truncate from left if combined text exceeds max chars
-        full = (confirmed + " " + partial).strip() if confirmed and partial else (confirmed or partial)
-        if len(full) > max_chars:
-            # Show most recent text, all dimmed since we lose confirmed/partial boundary
-            truncated = "\u2026" + full[-(max_chars - 1):]
-            c.create_text(
-                text_x, text_y, text=truncated,
-                fill=dim_color, font=font_small, anchor="w",
-            )
-        elif confirmed and partial:
-            # Draw confirmed (solid) then partial (dimmed) side by side
-            conf_id = c.create_text(
-                text_x, text_y, text=confirmed,
-                fill=text_color, font=font_small, anchor="w",
-            )
-            bbox = c.bbox(conf_id)
-            if bbox:
-                c.create_text(
-                    bbox[2] + 4, text_y, text=partial,
-                    fill=dim_color, font=font_small, anchor="w",
-                )
-        elif confirmed:
-            c.create_text(
-                text_x, text_y, text=confirmed,
-                fill=text_color, font=font_small, anchor="w",
-            )
-        elif partial:
-            c.create_text(
-                text_x, text_y, text=partial,
-                fill=dim_color, font=font_small, anchor="w",
-            )

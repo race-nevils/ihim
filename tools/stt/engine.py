@@ -6,10 +6,8 @@ VRAM lazy loading/unloading, recording timeouts, and app-context detection.
 """
 
 import logging
-import re
 import shutil
 import subprocess
-import tempfile
 import threading
 import time
 import uuid
@@ -81,113 +79,6 @@ def _maybe_retain_audio(
         return None, 0.0
 
 
-_PUNCT_RE = re.compile(r'[^\w\s]', re.UNICODE)
-
-
-def _strip_punct(word: str) -> str:
-    return _PUNCT_RE.sub('', word).lower()
-
-
-def _extract_tail_wav(wav_path: Path, tail_start_s: float) -> Optional[Path]:
-    """Extract audio from tail_start_s to end of WAV as a new temp file."""
-    if tail_start_s <= 0:
-        return None
-    try:
-        with wave.open(str(wav_path), "rb") as wf:
-            rate = wf.getframerate()
-            n_channels = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
-            n_frames = wf.getnframes()
-            start_frame = int(tail_start_s * rate)
-            if start_frame >= n_frames:
-                return None
-            wf.setpos(start_frame)
-            tail_data = wf.readframes(n_frames - start_frame)
-
-        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        tail_path = Path(tmp.name)
-        tmp.close()
-
-        with wave.open(str(tail_path), "wb") as twf:
-            twf.setnchannels(n_channels)
-            twf.setsampwidth(sampwidth)
-            twf.setframerate(rate)
-            twf.writeframes(tail_data)
-
-        return tail_path
-    except Exception as e:
-        logger.warning("Tail WAV extraction failed: %s", e)
-        return None
-
-
-def _join_without_overlap(confirmed: str, tail: str) -> str:
-    """Join confirmed and tail text, removing any word overlap at the junction."""
-    if not confirmed or not tail:
-        return (confirmed + " " + tail).strip()
-
-    c_words = confirmed.split()
-    t_words = tail.split()
-
-    # Find longest suffix of confirmed that matches prefix of tail
-    max_check = min(len(c_words), len(t_words), 8)
-    for overlap in range(max_check, 0, -1):
-        if all(
-            _strip_punct(c_words[len(c_words) - overlap + i]) == _strip_punct(t_words[i])
-            for i in range(overlap)
-        ):
-            return confirmed + " " + " ".join(t_words[overlap:])
-
-    return confirmed + " " + tail
-
-
-def _transcribe_with_streaming(
-    wav_path: Path,
-    model_name: str,
-    streaming_result,
-    cfg: dict,
-) -> str:
-    """Transcribe using streaming shortcut if available, else full fallback."""
-    from tools.stt.transcribe import transcribe
-
-    stream_cfg = cfg.get("streaming", {})
-    max_age = stream_cfg.get("result_max_age_s", 2.0)
-    min_runs = stream_cfg.get("min_agreement_runs", 2)
-
-    if (
-        streaming_result is not None
-        and streaming_result.run_count >= min_runs
-        and streaming_result.confirmed_text.strip()
-        and (time.monotonic() - streaming_result.last_run_time) < max_age
-    ):
-        tail_wav = _extract_tail_wav(wav_path, streaming_result.tail_start_s)
-        if tail_wav is not None:
-            try:
-                tail_text = transcribe(tail_wav, model_size=model_name)
-                combined = _join_without_overlap(
-                    streaming_result.confirmed_text.strip(),
-                    tail_text.strip(),
-                )
-                if combined.strip():
-                    logger.info(
-                        "Streaming shortcut: %d confirmed words + tail from %.1fs "
-                        "(run_count=%d)",
-                        len(streaming_result.confirmed_text.split()),
-                        streaming_result.tail_start_s,
-                        streaming_result.run_count,
-                    )
-                    return combined
-            except Exception as e:
-                logger.warning("Tail transcription failed, full fallback: %s", e)
-            finally:
-                try:
-                    tail_wav.unlink()
-                except Exception:
-                    pass
-
-    # Full fallback
-    return transcribe(wav_path, model_size=model_name)
-
-
 class STTEngine:
     """Dictation pipeline orchestrator.
 
@@ -208,7 +99,6 @@ class STTEngine:
         self._idle_timer: Optional[threading.Timer] = None
         self._warning_timer: Optional[threading.Timer] = None
         self._timeout_timer: Optional[threading.Timer] = None
-        self._streamer = None
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
         """Register a callback fired on every status transition.
@@ -337,16 +227,6 @@ class STTEngine:
             self._set_status("recording")
             self._mic.start()
 
-            # Start streaming transcription (real-time text during recording)
-            if self._cfg.get("streaming", {}).get("enabled", True):
-                try:
-                    from tools.stt.streaming import StreamingTranscriber
-                    self._streamer = StreamingTranscriber(self, self._cfg)
-                    self._streamer.start()
-                except Exception as e:
-                    logger.warning("Failed to start streaming transcriber: %s", e)
-                    self._streamer = None
-
             # Start recording timers
             rec_cfg = self._cfg.get("recording", {})
             warn_s = rec_cfg.get("warning_seconds", 300)
@@ -384,19 +264,10 @@ class STTEngine:
             # 1. Stop mic and get WAV path
             wav_path = self._mic.stop()
 
-            # 2. Stop streamer, get result
-            streamer = self._streamer
-            self._streamer = None
-            streaming_result = None
-            if streamer:
-                streamer.stop()
-                streaming_result = streamer.get_result()
-
-            # 3. Transcribe — streaming shortcut or full fallback
+            # 2. Transcribe with configured model
+            from tools.stt.transcribe import transcribe
             model_name = self._cfg.get("model", "large-v3-turbo")
-            raw_text = _transcribe_with_streaming(
-                wav_path, model_name, streaming_result, self._cfg
-            )
+            raw_text = transcribe(wav_path, model_size=model_name)
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")
@@ -466,13 +337,6 @@ class STTEngine:
                 pass
             self._set_status("listening")
             self._reset_idle_timer()
-
-    def get_partial_text(self) -> tuple[str, str]:
-        """Return (confirmed, partial) text from the streaming transcriber."""
-        streamer = self._streamer
-        if streamer is None:
-            return ("", "")
-        return streamer.get_display_text()
 
     def on_dictation_complete(self, wav_path: Path) -> Optional[dict]:
         """Manual pipeline trigger (for API use without hotkey).

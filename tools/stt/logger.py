@@ -18,10 +18,6 @@ TRAINING_DIR = DATA_DIR / "voice-training"
 MANIFEST_FILE = TRAINING_DIR / "manifest.jsonl"
 METADATA_FILE = TRAINING_DIR / "metadata.json"
 
-# Vocab reload interval — check for new terms every N dictations.
-_VOCAB_RELOAD_INTERVAL = 10
-_dictation_count = 0
-
 
 def _ensure_data_dir() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -142,9 +138,6 @@ def mark_correction(dictation_id: str, corrected_text: str) -> Optional[dict]:
         DICTATIONS_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
         logger.info("Correction applied to dictation %s", dictation_id)
 
-        # Auto-learn vocabulary from correction
-        _learn_vocab_from_correction(updated_record)
-
         # Propagate correction to voice training manifest
         _update_manifest_correction(dictation_id, corrected_text)
 
@@ -210,58 +203,6 @@ def get_stats() -> dict:
         "flagged": flagged,
         "avg_latency_ms": round(total_latency / total) if total else 0,
     }
-
-
-def _learn_vocab_from_correction(record: dict) -> None:
-    """Detect word substitution patterns and auto-add to vocab.txt.
-
-    Compares cleaned_text to correction text. If a single word was
-    substituted (e.g., "Cloud" -> "the agent"), add the correct word to vocab.
-    Also saves the raw → corrected pair to corrections.jsonl for future
-    fine-tuning (Phase 4 prep).
-    """
-    from tools.stt.transcribe import VOCAB_FILE
-
-    correction = record.get("correction", {})
-    if not correction:
-        return
-
-    original_words = record.get("cleaned_text", "").split()
-    corrected_words = correction.get("text", "").split()
-
-    # Save correction pair for future fine-tuning (regardless of word count match)
-    _save_correction_pair(record)
-
-    if len(original_words) != len(corrected_words):
-        return  # Not a simple word substitution
-
-    new_terms = []
-    for orig, corr in zip(original_words, corrected_words):
-        if orig.lower() != corr.lower():
-            new_terms.append(corr)
-
-    if not new_terms:
-        return
-
-    # Read existing vocab
-    existing = set()
-    if VOCAB_FILE.exists():
-        for line in VOCAB_FILE.read_text(encoding="utf-8").splitlines():
-            t = line.strip()
-            if t:
-                existing.add(t.lower())
-
-    # Append new terms (append-only per recursive principle)
-    added = []
-    for term in new_terms:
-        if term.lower() not in existing:
-            with VOCAB_FILE.open("a", encoding="utf-8") as f:
-                f.write(term + "\n")
-            existing.add(term.lower())
-            added.append(term)
-
-    if added:
-        logger.info("Auto-learned vocab from correction: %s", added)
 
 
 def _save_correction_pair(record: dict) -> None:
@@ -373,18 +314,3 @@ def _update_manifest_correction(dictation_id: str, corrected_text: str) -> None:
         logger.debug("Manifest correction updated: %s", dictation_id)
 
 
-def trigger_vocab_reload() -> None:
-    """Signal that vocab.txt should be reloaded on the next transcription.
-
-    Called periodically (every N dictations) to pick up new terms added
-    by auto-learning without requiring an app restart.
-    """
-    global _dictation_count
-    _dictation_count += 1
-    if _dictation_count >= _VOCAB_RELOAD_INTERVAL:
-        _dictation_count = 0
-        try:
-            from tools.stt.transcribe import load_vocab
-            load_vocab.cache_clear()  # noqa: no-op if not cached, that's fine
-        except (AttributeError, ImportError):
-            pass  # load_vocab doesn't use cache yet — this is forward-compatible

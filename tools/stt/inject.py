@@ -20,12 +20,10 @@ logger = logging.getLogger(__name__)
 FOCUS_DELAY_S: float = 0.15
 
 # Delay before restoring the clipboard (gives Ctrl+V time to complete).
-CLIPBOARD_RESTORE_DELAY_S: float = 0.25
+CLIPBOARD_RESTORE_DELAY_S: float = 0.05
 
 # Module-level store for the last successfully injected text.
 _last_injected: Optional[str] = None
-_last_injected_time: float = 0.0
-_DEDUP_WINDOW_S: float = 2.0  # ignore duplicate injection within this window
 
 # Recall listener state.
 _recall_listener: Optional[object] = None
@@ -109,13 +107,10 @@ def _inject_via_clipboard(text: str) -> bool:
     try:
         from pynput.keyboard import Controller, Key
         kb = Controller()
-        kb.press(Key.ctrl_l)
-        time.sleep(0.02)
+        kb.press(Key.ctrl)
         kb.press('v')
-        time.sleep(0.02)
         kb.release('v')
-        time.sleep(0.02)
-        kb.release(Key.ctrl_l)
+        kb.release(Key.ctrl)
     except Exception as exc:
         logger.debug("Ctrl+V simulation failed: %s", exc)
         # Try to restore clipboard even on failure.
@@ -151,16 +146,10 @@ def inject_text(text: str, method: str = "auto") -> bool:
     Returns:
         True if injection succeeded, False otherwise.
     """
-    global _last_injected, _last_injected_time
+    global _last_injected
 
     if not text:
         return False
-
-    # Dedup guard — skip if identical text was just injected
-    now = time.time()
-    if text == _last_injected and (now - _last_injected_time) < _DEDUP_WINDOW_S:
-        logger.info("Dedup: skipping duplicate injection within %.1fs window", _DEDUP_WINDOW_S)
-        return True
 
     time.sleep(FOCUS_DELAY_S)
 
@@ -192,7 +181,6 @@ def inject_text(text: str, method: str = "auto") -> bool:
 
     if success:
         _last_injected = text
-        _last_injected_time = time.time()
         logger.info(
             "Injected %d characters via %s",
             len(text),

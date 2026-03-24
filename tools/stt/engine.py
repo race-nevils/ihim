@@ -264,14 +264,6 @@ class STTEngine:
             # 1. Stop mic and get WAV path
             wav_path = self._mic.stop()
 
-            # 1b. Skip audio too short for reliable transcription
-            duration = _get_wav_duration(wav_path)
-            if duration < 0.5:
-                logger.info("Audio too short (%.2fs), skipping", duration)
-                self._set_status("listening")
-                self._reset_idle_timer()
-                return
-
             # 2. Transcribe with configured model
             from tools.stt.transcribe import transcribe
             model_name = self._cfg.get("model", "large-v3-turbo")

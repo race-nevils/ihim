@@ -1,7 +1,8 @@
 """Dual-stream audio capture — mic (sounddevice) + system (PyAudioWPatch WASAPI loopback).
 
 Two threads capture simultaneously. On stop, buffers are concatenated and written as
-16-bit mono WAV files at 16 kHz (resampled from native rate if needed).
+16-bit mono WAV files at native sample rate. The consumer (faster-whisper) handles
+resampling to 16 kHz with its own anti-aliasing filter.
 """
 
 import json
@@ -9,7 +10,6 @@ import logging
 import os
 import threading
 import wave
-import struct
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -45,9 +45,6 @@ def _get_pyaudio():
         _pyaudiowpatch = paw
     return _pyaudiowpatch
 
-
-TARGET_RATE = 16000  # Whisper expects 16 kHz
-CHANNELS = 1         # Mono
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -213,21 +210,6 @@ def _get_default_loopback() -> Optional[dict]:
     return None
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# RESAMPLING
-# ═══════════════════════════════════════════════════════════════════════
-
-def _resample(data, orig_rate: int, target_rate: int):
-    """Simple linear interpolation resample. Good enough for speech."""
-    if orig_rate == target_rate:
-        return data
-    np = _get_numpy()
-    ratio = target_rate / orig_rate
-    n_samples = int(len(data) * ratio)
-    indices = np.linspace(0, len(data) - 1, n_samples)
-    return np.interp(indices, np.arange(len(data)), data).astype(np.float32)
-
-
 def _to_mono(data, channels: int):
     """Downmix to mono if needed."""
     if channels <= 1:
@@ -356,17 +338,17 @@ class DualStreamCapture:
                 int(self._mic_info["sample_rate"]), "mic",
             )
             if self._sys_buffers or self._sys_chunk_count > 0:
-                sys_rate = int(self._sys_info["sample_rate"]) if self._sys_info else TARGET_RATE
+                sys_rate = int(self._sys_info["sample_rate"]) if self._sys_info else 16000
                 self._save_with_chunks(sys_path, self._sys_buffers, sys_rate, "sys")
             else:
-                self._write_wav(sys_path, [], TARGET_RATE)
+                self._write_wav(sys_path, [], 16000)
         else:
             self._write_wav(mic_path, self._mic_buffers, int(self._mic_info["sample_rate"]))
             if self._sys_buffers:
-                sys_rate = int(self._sys_info["sample_rate"]) if self._sys_info else TARGET_RATE
+                sys_rate = int(self._sys_info["sample_rate"]) if self._sys_info else 16000
                 self._write_wav(sys_path, self._sys_buffers, sys_rate)
             else:
-                self._write_wav(sys_path, [], TARGET_RATE)
+                self._write_wav(sys_path, [], 16000)
 
         # Clean up in-progress checkpoint directory
         if self._checkpoint_dir and self._checkpoint_dir.exists():
@@ -396,16 +378,24 @@ class DualStreamCapture:
         mode because PortAudio's callback path queries WDM-KS terminal
         categories, which fails on certain USB audio descriptors.  Blocking
         (read) mode bypasses that code path entirely.
+
+        Opens in stereo (native channel count) and extracts channel 0.
+        PortAudio's mono downmix (channels=1) corrupts audio on some USB
+        devices — capturing stereo and picking a channel avoids this.
         """
         try:
             sd = _get_sounddevice()
             native_rate = int(self._mic_info["sample_rate"])
             block_size = int(native_rate * 0.5)  # 500ms blocks
 
+            # Query native channel count — capture at native, extract ch0
+            dev_info = sd.query_devices(self._mic_info["index"])
+            native_channels = max(int(dev_info["max_input_channels"]), 1)
+
             stream = sd.InputStream(
                 device=self._mic_info["index"],
                 samplerate=native_rate,
-                channels=1,
+                channels=native_channels,
                 dtype="float32",
                 blocksize=block_size,
             )
@@ -505,7 +495,6 @@ class DualStreamCapture:
 
         np = _get_numpy()
         audio = np.concatenate(buffers)
-        audio = _resample(audio, native_rate, TARGET_RATE)
         pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
 
         if stream == "mic":
@@ -528,7 +517,7 @@ class DualStreamCapture:
         manifest = {
             "rec_id": self._checkpoint_dir.name,
             "started_at": self._started_at_iso,
-            "sample_rate": TARGET_RATE,
+            "sample_rate": int(self._mic_info["sample_rate"]),
             "mic_chunks": self._mic_chunk_count,
             "sys_chunks": self._sys_chunk_count,
             "mic_device": self._mic_info["name"],
@@ -547,7 +536,7 @@ class DualStreamCapture:
 
         all_pcm = []
 
-        # Read existing chunks from disk (already 16kHz int16 PCM)
+        # Read existing chunks from disk (native rate int16 PCM)
         chunk_count = self._mic_chunk_count if stream == "mic" else self._sys_chunk_count
         for i in range(chunk_count):
             chunk_path = self._checkpoint_dir / f"{stream}-chunk-{i:04d}.raw"
@@ -558,7 +547,6 @@ class DualStreamCapture:
         # Process remaining in-memory buffers (float32 at native rate)
         if remaining_buffers:
             audio = np.concatenate(remaining_buffers)
-            audio = _resample(audio, native_rate, TARGET_RATE)
             pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
             all_pcm.append(pcm)
 
@@ -566,7 +554,7 @@ class DualStreamCapture:
             with wave.open(str(path), "wb") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
-                wf.setframerate(TARGET_RATE)
+                wf.setframerate(native_rate)
                 wf.writeframes(b"")
             return
 
@@ -575,38 +563,35 @@ class DualStreamCapture:
         with wave.open(str(path), "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
-            wf.setframerate(TARGET_RATE)
+            wf.setframerate(native_rate)
             wf.writeframes(final_pcm.tobytes())
 
     # ── WAV Output ───────────────────────────────────────────────
 
     def _write_wav(self, path: Path, buffers: list, native_rate: int) -> None:
-        """Concatenate buffers, resample to 16 kHz, write 16-bit mono WAV."""
+        """Concatenate buffers and write WAV at native sample rate.
+
+        No resampling — let the consumer (faster-whisper) handle resampling
+        with its proper anti-aliasing filter (FFmpeg AudioResampler).
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
 
         if not buffers:
-            # Write a minimal valid WAV (silence)
             with wave.open(str(path), "wb") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
-                wf.setframerate(TARGET_RATE)
+                wf.setframerate(native_rate)
                 wf.writeframes(b"")
             return
 
         np = _get_numpy()
         audio = np.concatenate(buffers)
-        audio = _resample(audio, native_rate, TARGET_RATE)
 
-        # Normalize to prevent clipping
-        peak = np.abs(audio).max()
-        if peak > 0:
-            audio = audio / peak * 0.95
-
-        # Convert to 16-bit PCM
-        pcm = (audio * 32767).astype(np.int16)
+        # Convert to 16-bit PCM (no normalization, no resampling)
+        pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
 
         with wave.open(str(path), "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
-            wf.setframerate(TARGET_RATE)
+            wf.setframerate(native_rate)
             wf.writeframes(pcm.tobytes())

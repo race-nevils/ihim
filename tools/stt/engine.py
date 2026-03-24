@@ -254,7 +254,7 @@ class STTEngine:
         ).start()
 
     def _run_pipeline(self) -> None:
-        """Full dictation pipeline: transcribe → cleanup → inject → log."""
+        """Full dictation pipeline: transcribe → inject → log."""
         self._set_status("processing")
         start_time = time.time()
         wav_path = None
@@ -275,15 +275,11 @@ class STTEngine:
                 self._reset_idle_timer()
                 return
 
-            # 3. Deterministic cleanup (no LLM, no VRAM) — context-aware
-            from tools.stt.cleanup import cleanup_transcript
-            cleaned_text = cleanup_transcript(raw_text, context=self._app_context)
-
-            # 4. Inject text into active window
+            # 3. Inject raw transcript into active window
             from tools.stt.inject import inject_text
             inj_cfg = self._cfg.get("injection", {})
             method = inj_cfg.get("method", "auto")
-            inject_text(cleaned_text, method=method)
+            inject_text(raw_text.strip(), method=method)
 
             # 5. Success sound
             try:
@@ -302,10 +298,10 @@ class STTEngine:
             from tools.stt.logger import log_dictation
             record = log_dictation(
                 raw_transcript=raw_text,
-                cleaned_text=cleaned_text,
+                cleaned_text=raw_text.strip(),
                 latency_ms=latency_ms,
                 whisper_model=model_name,
-                cleanup_model="deterministic",
+                cleanup_model="none",
                 dictation_id=dictation_id,
                 audio_path=str(audio_path) if audio_path else None,
                 duration_s=duration_s,
@@ -314,7 +310,7 @@ class STTEngine:
             self._last_result = record
             logger.info(
                 "Dictation complete: %s (%dms) — '%s'",
-                record["id"], latency_ms, cleaned_text[:80],
+                record["id"], latency_ms, raw_text.strip()[:80],
             )
 
         except Exception as e:
@@ -354,21 +350,18 @@ class STTEngine:
             if not raw_text.strip():
                 return None
 
-            from tools.stt.cleanup import cleanup_transcript
-            cleaned_text = cleanup_transcript(raw_text, context=self._app_context)
-
             from tools.stt.inject import inject_text
             inj_cfg = self._cfg.get("injection", {})
-            inject_text(cleaned_text, method=inj_cfg.get("method", "auto"))
+            inject_text(raw_text.strip(), method=inj_cfg.get("method", "auto"))
 
             latency_ms = int((time.time() - start_time) * 1000)
             from tools.stt.logger import log_dictation
             record = log_dictation(
                 raw_transcript=raw_text,
-                cleaned_text=cleaned_text,
+                cleaned_text=raw_text.strip(),
                 latency_ms=latency_ms,
                 whisper_model=model_name,
-                cleanup_model="deterministic",
+                cleanup_model="none",
             )
 
             self._last_result = record

@@ -194,6 +194,7 @@ def transcribe_channel(
     hallucination_silence_threshold: Optional[float] = 2.0,
     temperature: Union[float, tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
     language: Optional[str] = None,
+    vad_filter: bool = True,
 ) -> list[dict]:
     """Transcribe a single WAV file, returning labeled segments.
 
@@ -223,11 +224,14 @@ def transcribe_channel(
 
     transcribe_kwargs = dict(
         beam_size=5,
-        vad_filter=True,
-        vad_parameters=dict(
+        vad_filter=vad_filter,
+    )
+    if vad_filter:
+        transcribe_kwargs["vad_parameters"] = dict(
             min_silence_duration_ms=500,
             speech_pad_ms=200,
-        ),
+        )
+    transcribe_kwargs.update(
         condition_on_previous_text=condition_on_previous_text,
         compression_ratio_threshold=compression_ratio_threshold,
         no_speech_threshold=no_speech_threshold,

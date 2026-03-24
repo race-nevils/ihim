@@ -15,7 +15,7 @@ CONFIG_PATH = Path(__file__).parent / "stt_bar.json"
 DEFAULT_CONFIG = {
     "hotkey": ["Key.ctrl_r", "Key.shift_r"],
     "model": "large-v3-turbo",
-    "idle_timeout_s": 1800,
+    "idle_timeout_s": 600,
     "position": "bottom_center",
     "offset_y": 80,
     "recording": {
@@ -38,19 +38,11 @@ DEFAULT_CONFIG = {
         "error": True,
         "warning": True,
     },
-    "streaming": {
-        "enabled": True,
-        "interval_s": 2.0,
-        "min_agreement_runs": 2,
-        "result_max_age_s": 2.0,
-        "display_max_chars": 80,
-    },
     "window": {
         "idle_width": 200,
         "idle_height": 36,
         "recording_width": 400,
         "recording_height": 52,
-        "streaming_height": 90,
         "opacity": 0.92,
     },
     "appearance": {

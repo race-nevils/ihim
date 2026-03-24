@@ -36,10 +36,6 @@ class StatsResponse(BaseModel):
     avg_latency_ms: int = Field(0, description="Average pipeline latency in ms")
 
 
-class VocabResponse(BaseModel):
-    terms: list[str] = Field(default_factory=list, description="Vocabulary priming terms")
-
-
 class StatusResponse(BaseModel):
     active: bool = Field(False, description="Whether the hotkey listener is active")
     status: str = Field("idle", description="Engine status: idle | listening | recording | processing")
@@ -51,11 +47,6 @@ class StatusResponse(BaseModel):
 
 class CorrectionRequest(BaseModel):
     corrected_text: str = Field(..., min_length=1, description="The corrected dictation text")
-
-
-class VocabUpdateRequest(BaseModel):
-    add: list[str] = Field(default_factory=list, description="Terms to add")
-    remove: list[str] = Field(default_factory=list, description="Terms to remove")
 
 
 class SuccessResponse(BaseModel):

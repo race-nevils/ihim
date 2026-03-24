@@ -1,6 +1,6 @@
 """FastAPI router for the STT dictation system.
 
-Endpoints: history, correct, vocab, stats, start, status.
+Endpoints: history, correct, stats, start, status.
 """
 
 import asyncio
@@ -12,8 +12,8 @@ from api.errors import problem
 
 from api.stt.models import (
     DictationRecord, HistoryResponse, StatsResponse,
-    VocabResponse, StatusResponse, CorrectionRequest,
-    VocabUpdateRequest, SuccessResponse,
+    StatusResponse, CorrectionRequest,
+    SuccessResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,57 +82,6 @@ async def stt_flag(dictation_id: str, request: Request):
         return problem(404, f"Dictation '{dictation_id}' not found", instance=request.url.path)
 
     return DictationRecord(**record)
-
-
-@router.get("/vocab", response_model=VocabResponse)
-async def stt_vocab():
-    """List vocabulary priming terms."""
-    from tools.stt.transcribe import VOCAB_FILE
-
-    terms = []
-    if VOCAB_FILE.exists():
-        for line in VOCAB_FILE.read_text(encoding="utf-8").splitlines():
-            t = line.strip()
-            if t:
-                terms.append(t)
-
-    return VocabResponse(terms=terms)
-
-
-@router.put("/vocab", response_model=VocabResponse)
-async def stt_vocab_update(body: VocabUpdateRequest, request: Request):
-    """Add/remove vocabulary terms (append-only: removals are logged)."""
-    from tools.stt.transcribe import VOCAB_FILE, DATA_DIR
-
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Read current terms
-    existing = []
-    if VOCAB_FILE.exists():
-        existing = [
-            line.strip()
-            for line in VOCAB_FILE.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-
-    existing_lower = {t.lower() for t in existing}
-
-    # Add new terms
-    for term in body.add:
-        term = term.strip()
-        if term and term.lower() not in existing_lower:
-            existing.append(term)
-            existing_lower.add(term.lower())
-
-    # Remove terms
-    if body.remove:
-        remove_lower = {t.lower().strip() for t in body.remove}
-        existing = [t for t in existing if t.lower() not in remove_lower]
-
-    # Write back
-    VOCAB_FILE.write_text("\n".join(existing) + "\n", encoding="utf-8")
-
-    return VocabResponse(terms=existing)
 
 
 @router.get("/stats", response_model=StatsResponse)

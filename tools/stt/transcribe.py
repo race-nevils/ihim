@@ -1,8 +1,8 @@
 """Whisper transcription for dictation.
 
-Calls faster-whisper via transcribe_channel, then strips low-confidence
-trailing segments that Whisper fabricates on silence/noise at the end
-of recordings.
+Calls faster-whisper via transcribe_channel with word-level timestamps,
+then strips trailing words whose decoder probability is low — these are
+typically hallucinated on silence/noise at the end of recordings.
 """
 
 import logging
@@ -20,26 +20,43 @@ _diag_logger = logging.getLogger("stt.transcribe.diag")
 _diag_logger.addHandler(_diag_handler)
 _diag_logger.setLevel(logging.DEBUG)
 
-# Segments below this confidence are suspect. If they're at the END
-# of the transcript, they're almost certainly hallucinated on silence.
-_TAIL_CONFIDENCE_THRESHOLD = 0.70
+# Words below this decoder probability at the END of the transcript are
+# likely hallucinated.  Segment-level confidence (1 - no_speech_prob) is
+# useless with VAD enabled (always ~1.0); word-level decoder probs are
+# much more discriminating.
+_WORD_PROB_THRESHOLD = 0.5
 
 
-def _strip_low_confidence_tail(segments: list[dict]) -> list[dict]:
-    """Drop trailing segments whose confidence is below threshold.
+def _strip_low_prob_tail_words(segments: list[dict]) -> list[dict]:
+    """Strip trailing words whose decoder probability is below threshold.
 
-    Whisper fabricates short phrases ("Aww.", "Strap.", "Let's get it off.")
-    at the end of audio where only silence/noise remains. These segments
-    have low confidence (high no_speech_prob). Strip them from the tail
-    only — low-confidence segments in the MIDDLE might be real speech
-    in a noisy environment.
+    Works on word-level data within segments.  If an entire segment's
+    words are stripped, removes the segment and checks the previous one.
     """
-    while segments and segments[-1]["confidence"] < _TAIL_CONFIDENCE_THRESHOLD:
-        dropped = segments.pop()
-        logger.info(
-            "Dropped low-confidence tail segment (%.2f): '%s'",
-            dropped["confidence"], dropped["text"],
+    if not segments:
+        return segments
+
+    last_seg = segments[-1]
+    words = last_seg.get("words")
+    if not words:
+        return segments
+
+    # Strip low-prob words from the tail
+    while words and words[-1]["prob"] < _WORD_PROB_THRESHOLD:
+        dropped = words.pop()
+        _diag_logger.info(
+            "  STRIPPED word (prob=%.4f): '%s'",
+            dropped["prob"], dropped["word"],
         )
+
+    if not words:
+        # Entire last segment was low-prob — remove and check previous
+        segments.pop()
+        return _strip_low_prob_tail_words(segments)
+
+    # Reconstruct segment text from remaining words
+    last_seg["text"] = "".join(w["word"] for w in words).strip()
+    last_seg["end"] = words[-1]["end"]
     return segments
 
 
@@ -61,21 +78,28 @@ def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
         language="en",
         vad_filter=True,
         repetition_penalty=1.1,
+        word_timestamps=True,
     )
 
-    # Diagnostic: log every segment so we can see what Whisper produces
+    # Diagnostic: log every segment and word
     _diag_logger.info("--- TRANSCRIPTION: %s ---", wav_path.name)
     for i, seg in enumerate(segments):
         _diag_logger.info(
             "  SEG[%d] conf=%.4f  [%.2f-%.2f]  '%s'",
             i, seg["confidence"], seg["start"], seg["end"], seg["text"],
         )
+        for w in seg.get("words", []):
+            _diag_logger.info(
+                "    WORD prob=%.4f  [%.2f-%.2f]  '%s'",
+                w["prob"], w["start"], w["end"], w["word"],
+            )
 
-    # Strip fabricated trailing segments
-    before_count = len(segments)
-    segments = _strip_low_confidence_tail(segments)
-    if len(segments) < before_count:
-        _diag_logger.info("  STRIPPED %d tail segments", before_count - len(segments))
-    _diag_logger.info("  FINAL: '%s'", " ".join(seg["text"] for seg in segments))
+    # Strip trailing hallucinated words by decoder probability
+    before_text = " ".join(seg["text"] for seg in segments)
+    segments = _strip_low_prob_tail_words(segments)
+    after_text = " ".join(seg["text"] for seg in segments)
+    if before_text != after_text:
+        _diag_logger.info("  STRIPPED: '%s' → '%s'", before_text, after_text)
+    _diag_logger.info("  FINAL: '%s'", after_text)
 
-    return " ".join(seg["text"] for seg in segments)
+    return after_text

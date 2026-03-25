@@ -196,6 +196,7 @@ def transcribe_channel(
     language: Optional[str] = None,
     vad_filter: bool = True,
     repetition_penalty: float = 1.0,
+    word_timestamps: bool = False,
 ) -> list[dict]:
     """Transcribe a single WAV file, returning labeled segments.
 
@@ -247,6 +248,8 @@ def transcribe_channel(
         transcribe_kwargs["language"] = language
     if repetition_penalty != 1.0:
         transcribe_kwargs["repetition_penalty"] = repetition_penalty
+    if word_timestamps:
+        transcribe_kwargs["word_timestamps"] = True
 
     segments_iter, info = model.transcribe(
         str(wav_path),
@@ -258,13 +261,24 @@ def transcribe_channel(
         text = _deloop_text(seg.text.strip())
         if not text:
             continue
-        results.append({
+        entry = {
             "speaker": speaker_label,
             "start": round(seg.start, 2),
             "end": round(seg.end, 2),
             "text": text,
             "confidence": round(1.0 - seg.no_speech_prob, 4),
-        })
+        }
+        if word_timestamps and seg.words:
+            entry["words"] = [
+                {
+                    "word": w.word,
+                    "start": round(w.start, 2),
+                    "end": round(w.end, 2),
+                    "prob": round(w.probability, 4),
+                }
+                for w in seg.words
+            ]
+        results.append(entry)
 
     return results
 

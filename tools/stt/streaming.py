@@ -89,6 +89,15 @@ class StreamingTranscriber:
 
         tail_buffers = all_buffers[covered:]
         native_rate = int(capture._mic_info["sample_rate"])
+
+        # Estimate tail duration — skip if too short (Whisper hallucinates on <0.5s)
+        import numpy as np
+        total_samples = sum(len(b) for b in tail_buffers)
+        tail_duration_s = total_samples / native_rate
+        if tail_duration_s < 0.5:
+            logger.info("TAIL SKIP: %.2fs too short, would hallucinate", tail_duration_s)
+            return ""
+
         wav_path = self._write_wav(tail_buffers, native_rate)
         if wav_path is None:
             return ""
@@ -100,8 +109,8 @@ class StreamingTranscriber:
             elapsed = time.monotonic() - t0
             tail_text = text.strip()
             logger.info(
-                "TAIL TRANSCRIPTION: %.1fs for %d blocks → '%s'",
-                elapsed, len(tail_buffers), tail_text[:80],
+                "TAIL TRANSCRIPTION: %.1fs for %d blocks (%.2fs audio) → '%s'",
+                elapsed, len(tail_buffers), tail_duration_s, tail_text[:80],
             )
             return tail_text
         except Exception as e:

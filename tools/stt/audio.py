@@ -45,15 +45,20 @@ class MicCapture:
         Threads are daemon and clean up on their own.
         """
         import numpy as np
+        import time
 
         with self._lock:
             if self._capture is None:
                 raise RuntimeError("MicCapture.stop() called but not recording")
             capture = self._capture
-            buffers = list(capture._mic_buffers)
-            native_rate = int(capture._mic_info["sample_rate"])
-            capture._stop_event.set()
             self._capture = None
+
+        # Signal stop, then wait for the in-flight stream.read (~500ms block)
+        # to finish and append its buffer before snapshotting.
+        capture._stop_event.set()
+        time.sleep(0.3)
+        buffers = list(capture._mic_buffers)
+        native_rate = int(capture._mic_info["sample_rate"])
 
         # Write WAV at native rate — Whisper resamples internally
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)

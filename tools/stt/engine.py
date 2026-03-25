@@ -298,9 +298,19 @@ class STTEngine:
                 raw_text = streaming_text
             else:
                 # Sub-second recording (0 streaming runs) — safe, streamer never touched GPU
+                _t0 = time.time()
                 wav_path = self._mic.stop()
+                _t1 = time.time()
                 from tools.stt.transcribe import transcribe
                 raw_text = transcribe(wav_path, model_size=model_name)
+                _t2 = time.time()
+                # TEMP TIMING — remove after diagnosing short-dictation latency
+                try:
+                    _timing_path = Path(__file__).parent / "data" / "timing.log"
+                    with open(_timing_path, "a") as _tf:
+                        _tf.write(f"mic_stop={_t1-_t0:.2f}s transcribe={_t2-_t1:.2f}s total={_t2-_t0:.2f}s\n")
+                except Exception:
+                    pass
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")

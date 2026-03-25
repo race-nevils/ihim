@@ -108,13 +108,27 @@ def _inject_via_clipboard(text: str) -> bool:
         import ctypes
         from ctypes import wintypes
 
-        SendInput = ctypes.windll.user32.SendInput
+        _SendInput = ctypes.windll.user32.SendInput
+        _SendInput.argtypes = [wintypes.UINT, ctypes.c_void_p, ctypes.c_int]
+        _SendInput.restype = wintypes.UINT
 
-        # Virtual key codes
         VK_CONTROL = 0x11
         VK_V = 0x56
         KEYEVENTF_KEYUP = 0x0002
         INPUT_KEYBOARD = 1
+
+        # Full union with MOUSEINPUT for correct struct sizing on 64-bit.
+        # Without MOUSEINPUT the union is too small and SendInput silently
+        # injects 0 events.
+        class MOUSEINPUT(ctypes.Structure):
+            _fields_ = [
+                ("dx", ctypes.c_long),
+                ("dy", ctypes.c_long),
+                ("mouseData", wintypes.DWORD),
+                ("dwFlags", wintypes.DWORD),
+                ("time", wintypes.DWORD),
+                ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+            ]
 
         class KEYBDINPUT(ctypes.Structure):
             _fields_ = [
@@ -125,9 +139,20 @@ def _inject_via_clipboard(text: str) -> bool:
                 ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
             ]
 
+        class HARDWAREINPUT(ctypes.Structure):
+            _fields_ = [
+                ("uMsg", wintypes.DWORD),
+                ("wParamL", wintypes.WORD),
+                ("wParamH", wintypes.WORD),
+            ]
+
         class INPUT(ctypes.Structure):
             class _INPUT(ctypes.Union):
-                _fields_ = [("ki", KEYBDINPUT)]
+                _fields_ = [
+                    ("ki", KEYBDINPUT),
+                    ("mi", MOUSEINPUT),
+                    ("hi", HARDWAREINPUT),
+                ]
             _fields_ = [("type", wintypes.DWORD), ("_input", _INPUT)]
 
         def _key_event(vk, flags=0):
@@ -143,7 +168,11 @@ def _inject_via_clipboard(text: str) -> bool:
             _key_event(VK_V, KEYEVENTF_KEYUP),
             _key_event(VK_CONTROL, KEYEVENTF_KEYUP),
         )
-        SendInput(4, events, ctypes.sizeof(INPUT))
+        sent = _SendInput(4, ctypes.pointer(events), ctypes.sizeof(INPUT))
+        if sent != 4:
+            logger.warning("SendInput returned %d (expected 4), paste may have failed", sent)
+            _clipboard_restore_after(previous, 0)
+            return False
     except Exception as exc:
         logger.debug("Ctrl+V simulation failed: %s", exc)
         _clipboard_restore_after(previous, 0)

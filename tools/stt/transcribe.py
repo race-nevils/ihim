@@ -79,8 +79,16 @@ def _strip_hallucinated_tail(segments: list[dict]) -> list[dict]:
     return segments
 
 
-def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
+def transcribe(
+    wav_path: Path,
+    model_size: str = "large-v3-turbo",
+    word_timestamps: bool = True,
+) -> str:
     """Transcribe a WAV file using Whisper.
+
+    Args:
+        word_timestamps: Enable word-level timestamps for tail stripping.
+            Set False for streaming preview runs (saves ~30% per call).
 
     Returns the raw transcript as a single string.
     """
@@ -97,7 +105,7 @@ def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
         language="en",
         vad_filter=True,
         repetition_penalty=1.1,
-        word_timestamps=True,
+        word_timestamps=word_timestamps,
     )
 
     # Diagnostic: log every segment and word

@@ -33,7 +33,7 @@ class StreamingTranscriber:
     def __init__(self, engine_ref, model_name: str):
         self._engine = engine_ref
         self._model_name = model_name
-        self._interval = 0.5
+        self._interval = 2.0
 
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -143,7 +143,7 @@ class StreamingTranscriber:
             return
 
         buffers = list(capture._mic_buffers)
-        if len(buffers) < 2:
+        if len(buffers) < 4:  # need ~2s of audio before first streaming run
             return
 
         if len(buffers) == self._last_block_count:
@@ -158,7 +158,7 @@ class StreamingTranscriber:
         try:
             t0 = time.monotonic()
             from tools.stt.transcribe import transcribe
-            text = transcribe(wav_path, model_size=self._model_name)
+            text = transcribe(wav_path, model_size=self._model_name, word_timestamps=False)
             elapsed = time.monotonic() - t0
 
             self._run_count += 1

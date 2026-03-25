@@ -158,7 +158,7 @@ class StreamingTranscriber:
         try:
             t0 = time.monotonic()
             from tools.stt.transcribe import transcribe
-            text = transcribe(wav_path, model_size=self._model_name, word_timestamps=False)
+            text = transcribe(wav_path, model_size=self._model_name)
             elapsed = time.monotonic() - t0
 
             self._run_count += 1

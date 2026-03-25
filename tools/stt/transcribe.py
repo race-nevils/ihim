@@ -10,6 +10,16 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Dedicated file log for segment diagnostics — guaranteed capture
+# regardless of how the server routes stdout/stderr.
+_DIAG_LOG = Path(__file__).parent / "data" / "transcribe_diag.log"
+_DIAG_LOG.parent.mkdir(parents=True, exist_ok=True)
+_diag_handler = logging.FileHandler(str(_DIAG_LOG), encoding="utf-8")
+_diag_handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
+_diag_logger = logging.getLogger("stt.transcribe.diag")
+_diag_logger.addHandler(_diag_handler)
+_diag_logger.setLevel(logging.DEBUG)
+
 # Segments below this confidence are suspect. If they're at the END
 # of the transcript, they're almost certainly hallucinated on silence.
 _TAIL_CONFIDENCE_THRESHOLD = 0.70
@@ -53,7 +63,19 @@ def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
         repetition_penalty=1.1,
     )
 
+    # Diagnostic: log every segment so we can see what Whisper produces
+    _diag_logger.info("--- TRANSCRIPTION: %s ---", wav_path.name)
+    for i, seg in enumerate(segments):
+        _diag_logger.info(
+            "  SEG[%d] conf=%.4f  [%.2f-%.2f]  '%s'",
+            i, seg["confidence"], seg["start"], seg["end"], seg["text"],
+        )
+
     # Strip fabricated trailing segments
+    before_count = len(segments)
     segments = _strip_low_confidence_tail(segments)
+    if len(segments) < before_count:
+        _diag_logger.info("  STRIPPED %d tail segments", before_count - len(segments))
+    _diag_logger.info("  FINAL: '%s'", " ".join(seg["text"] for seg in segments))
 
     return " ".join(seg["text"] for seg in segments)

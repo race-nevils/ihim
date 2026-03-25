@@ -1,9 +1,36 @@
-"""Whisper transcription — minimal baseline."""
+"""Whisper transcription for dictation.
+
+Calls faster-whisper via transcribe_channel, then strips low-confidence
+trailing segments that Whisper fabricates on silence/noise at the end
+of recordings.
+"""
 
 import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Segments below this confidence are suspect. If they're at the END
+# of the transcript, they're almost certainly hallucinated on silence.
+_TAIL_CONFIDENCE_THRESHOLD = 0.70
+
+
+def _strip_low_confidence_tail(segments: list[dict]) -> list[dict]:
+    """Drop trailing segments whose confidence is below threshold.
+
+    Whisper fabricates short phrases ("Aww.", "Strap.", "Let's get it off.")
+    at the end of audio where only silence/noise remains. These segments
+    have low confidence (high no_speech_prob). Strip them from the tail
+    only — low-confidence segments in the MIDDLE might be real speech
+    in a noisy environment.
+    """
+    while segments and segments[-1]["confidence"] < _TAIL_CONFIDENCE_THRESHOLD:
+        dropped = segments.pop()
+        logger.info(
+            "Dropped low-confidence tail segment (%.2f): '%s'",
+            dropped["confidence"], dropped["text"],
+        )
+    return segments
 
 
 def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
@@ -23,11 +50,10 @@ def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
         no_speech_threshold=0.3,
         language="en",
         vad_filter=True,
-        initial_prompt=(
-            "Hello, this is a clear dictation with proper punctuation. "
-            "I'll use commas, periods, and question marks where appropriate. "
-            "Technical terms like API, JSON, GitHub, and TypeScript appear naturally."
-        ),
         repetition_penalty=1.1,
     )
+
+    # Strip fabricated trailing segments
+    segments = _strip_low_confidence_tail(segments)
+
     return " ".join(seg["text"] for seg in segments)

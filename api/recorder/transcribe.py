@@ -222,7 +222,10 @@ def transcribe_channel(
     Returns list of:
         {"speaker": str, "start": float, "end": float, "text": str, "confidence": float}
     """
+    import time as _time
+    _t_start_tc = _time.monotonic()
     model = _get_model(model_size)
+    _t_after_model = _time.monotonic()
 
     transcribe_kwargs = dict(
         beam_size=5,
@@ -251,10 +254,12 @@ def transcribe_channel(
     if word_timestamps:
         transcribe_kwargs["word_timestamps"] = True
 
+    _t_model = _time.monotonic()
     segments_iter, info = model.transcribe(
         str(wav_path),
         **transcribe_kwargs,
     )
+    _t_iter_start = _time.monotonic()
 
     results = []
     for seg in segments_iter:
@@ -279,6 +284,21 @@ def transcribe_channel(
                 for w in seg.words
             ]
         results.append(entry)
+
+    # TEMP TIMING — remove after diagnosing short-dictation latency
+    _t_done = _time.monotonic()
+    try:
+        from pathlib import Path as _Path
+        _tpath = _Path(__file__).resolve().parent.parent.parent / "tools" / "stt" / "data" / "timing.log"
+        with open(_tpath, "a") as _tf:
+            _tf.write(
+                f"  get_model={_t_after_model - _t_start_tc:.2f}s "
+                f"model.transcribe={_t_iter_start - _t_after_model:.2f}s "
+                f"iterate={_t_done - _t_iter_start:.2f}s "
+                f"total_tc={_t_done - _t_start_tc:.2f}s\n"
+            )
+    except Exception:
+        pass
 
     return results
 

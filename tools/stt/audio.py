@@ -3,6 +3,7 @@
 import logging
 import tempfile
 import threading
+import wave
 from pathlib import Path
 from typing import Optional
 
@@ -36,42 +37,50 @@ class MicCapture:
             logger.info("Mic capture started")
 
     def stop(self) -> Path:
-        """Stop capture, save 16kHz mono WAV to temp file, return path."""
+        """Stop capture, write WAV from buffers, return path.
+
+        Signals stop without joining threads — capture.stop() has a 5s
+        thread.join timeout that blocks every time (sounddevice stream.stop
+        hangs on Windows). Instead, read buffers directly and write WAV.
+        Threads are daemon and clean up on their own.
+        """
+        import numpy as np
+
         with self._lock:
             if self._capture is None:
                 raise RuntimeError("MicCapture.stop() called but not recording")
-            self._capture.stop()
             capture = self._capture
+            buffers = list(capture._mic_buffers)
+            native_rate = int(capture._mic_info["sample_rate"])
+            capture._stop_event.set()
             self._capture = None
 
-        # Save mic channel to a temp WAV
+        # Write WAV at native rate — Whisper resamples internally
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         mic_path = Path(tmp.name)
         tmp.close()
 
-        # DualStreamCapture.save() writes both channels; we only need mic
-        # Pass a dummy path for sys since sys_device_index=None produces empty buffer
-        dummy_sys = Path(tempfile.mktemp(suffix=".wav"))
-        capture.save(mic_path, dummy_sys)
+        if buffers:
+            audio = np.concatenate(buffers)
+            pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
+        else:
+            pcm = np.zeros(0, dtype=np.int16)
 
-        # Clean up dummy sys file
-        if dummy_sys.exists():
-            dummy_sys.unlink()
+        with wave.open(str(mic_path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(native_rate)
+            wf.writeframes(pcm.tobytes())
 
-        logger.info("Mic capture saved: %s", mic_path)
+        logger.info("Mic capture saved: %s (%d buffers)", mic_path, len(buffers))
         return mic_path
 
     def stop_fast(self) -> None:
-        """Stop capture without saving to disk. Use when transcription is already done.
-
-        Sets the stop event but does NOT join threads — avoids the 5s
-        thread.join(timeout=5) in capture.stop(). Threads are daemon and
-        will exit on their own within one block read (~500ms).
-        """
+        """Stop capture without saving to disk. Use when transcription is already done."""
         with self._lock:
             if self._capture is None:
                 raise RuntimeError("MicCapture.stop_fast() called but not recording")
-            self._capture._stop_event.set()  # signal threads, don't wait
+            self._capture._stop_event.set()
             self._capture = None
         logger.info("Mic capture stopped (no save)")
 

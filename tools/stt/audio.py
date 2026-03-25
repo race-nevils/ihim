@@ -61,6 +61,20 @@ class MicCapture:
         logger.info("Mic capture saved: %s", mic_path)
         return mic_path
 
+    def stop_fast(self) -> None:
+        """Stop capture without saving to disk. Use when transcription is already done.
+
+        Sets the stop event but does NOT join threads — avoids the 5s
+        thread.join(timeout=5) in capture.stop(). Threads are daemon and
+        will exit on their own within one block read (~500ms).
+        """
+        with self._lock:
+            if self._capture is None:
+                raise RuntimeError("MicCapture.stop_fast() called but not recording")
+            self._capture._stop_event.set()  # signal threads, don't wait
+            self._capture = None
+        logger.info("Mic capture stopped (no save)")
+
     @property
     def is_recording(self) -> bool:
         return self._capture is not None

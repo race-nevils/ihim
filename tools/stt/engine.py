@@ -79,6 +79,7 @@ def _maybe_retain_audio(
         return None, 0.0
 
 
+
 class STTEngine:
     """Dictation pipeline orchestrator.
 
@@ -99,6 +100,7 @@ class STTEngine:
         self._idle_timer: Optional[threading.Timer] = None
         self._warning_timer: Optional[threading.Timer] = None
         self._timeout_timer: Optional[threading.Timer] = None
+        self._streamer = None
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
         """Register a callback fired on every status transition.
@@ -227,6 +229,16 @@ class STTEngine:
             self._set_status("recording")
             self._mic.start()
 
+            # Start streaming transcriber (Step 1: logging only)
+            try:
+                from tools.stt.streaming import StreamingTranscriber
+                model_name = self._cfg.get("model", "large-v3-turbo")
+                self._streamer = StreamingTranscriber(self, model_name)
+                self._streamer.start()
+            except Exception as e:
+                logger.warning("Failed to start streamer: %s", e)
+                self._streamer = None
+
             # Start recording timers
             rec_cfg = self._cfg.get("recording", {})
             warn_s = rec_cfg.get("warning_seconds", 300)
@@ -254,20 +266,41 @@ class STTEngine:
         ).start()
 
     def _run_pipeline(self) -> None:
-        """Full dictation pipeline: transcribe → inject → log."""
+        """Full dictation pipeline: transcribe → cleanup → inject → log."""
         self._set_status("processing")
         start_time = time.time()
         wav_path = None
         dictation_id = uuid.uuid4().hex[:8]
 
         try:
-            # 1. Stop mic and get WAV path
-            wav_path = self._mic.stop()
+            # 1. Check streaming result BEFORE stopping mic (avoid slow WAV save)
+            streamer = self._streamer
+            self._streamer = None
+            streaming_text = None
+            if streamer:
+                streamer.stop()
+                sr = streamer.get_result()
+                if sr and sr.run_count >= 1 and sr.text.strip():
+                    # Transcribe the tail (audio after last streaming run) while mic is still alive
+                    tail_text = streamer.transcribe_tail()
+                    streaming_text = sr.text
+                    if tail_text:
+                        streaming_text = streaming_text + " " + tail_text
+                    logger.info(
+                        "STREAMING SHORTCUT: %d words from %d runs + tail",
+                        len(streaming_text.split()), sr.run_count,
+                    )
 
-            # 2. Transcribe with configured model
-            from tools.stt.transcribe import transcribe
+            # 2. Stop mic + transcribe
             model_name = self._cfg.get("model", "large-v3-turbo")
-            raw_text = transcribe(wav_path, model_size=model_name)
+            if streaming_text:
+                self._mic.stop_fast()  # no WAV save needed
+                raw_text = streaming_text
+            else:
+                # Sub-second recording (0 streaming runs) — safe, streamer never touched GPU
+                wav_path = self._mic.stop()
+                from tools.stt.transcribe import transcribe
+                raw_text = transcribe(wav_path, model_size=model_name)
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")
@@ -275,11 +308,15 @@ class STTEngine:
                 self._reset_idle_timer()
                 return
 
-            # 3. Inject raw transcript into active window
+            # 3. Deterministic cleanup (no LLM, no VRAM) — context-aware
+            from tools.stt.cleanup import cleanup_transcript
+            cleaned_text = cleanup_transcript(raw_text, context=self._app_context)
+
+            # 4. Inject text into active window
             from tools.stt.inject import inject_text
             inj_cfg = self._cfg.get("injection", {})
             method = inj_cfg.get("method", "auto")
-            inject_text(raw_text.strip(), method=method)
+            inject_text(cleaned_text, method=method)
 
             # 5. Success sound
             try:
@@ -289,19 +326,21 @@ class STTEngine:
                 pass
 
             # 6. Retain audio for voice model training (before WAV cleanup)
-            audio_path, duration_s = _maybe_retain_audio(
-                wav_path, dictation_id, self._cfg
-            )
+            audio_path, duration_s = (None, 0.0)
+            if wav_path is not None:
+                audio_path, duration_s = _maybe_retain_audio(
+                    wav_path, dictation_id, self._cfg
+                )
 
             # 7. Log to JSONL + manifest
             latency_ms = int((time.time() - start_time) * 1000)
             from tools.stt.logger import log_dictation
             record = log_dictation(
                 raw_transcript=raw_text,
-                cleaned_text=raw_text.strip(),
+                cleaned_text=cleaned_text,
                 latency_ms=latency_ms,
                 whisper_model=model_name,
-                cleanup_model="none",
+                cleanup_model="deterministic",
                 dictation_id=dictation_id,
                 audio_path=str(audio_path) if audio_path else None,
                 duration_s=duration_s,
@@ -310,7 +349,7 @@ class STTEngine:
             self._last_result = record
             logger.info(
                 "Dictation complete: %s (%dms) — '%s'",
-                record["id"], latency_ms, raw_text.strip()[:80],
+                record["id"], latency_ms, cleaned_text[:80],
             )
 
         except Exception as e:
@@ -350,18 +389,21 @@ class STTEngine:
             if not raw_text.strip():
                 return None
 
+            from tools.stt.cleanup import cleanup_transcript
+            cleaned_text = cleanup_transcript(raw_text, context=self._app_context)
+
             from tools.stt.inject import inject_text
             inj_cfg = self._cfg.get("injection", {})
-            inject_text(raw_text.strip(), method=inj_cfg.get("method", "auto"))
+            inject_text(cleaned_text, method=inj_cfg.get("method", "auto"))
 
             latency_ms = int((time.time() - start_time) * 1000)
             from tools.stt.logger import log_dictation
             record = log_dictation(
                 raw_transcript=raw_text,
-                cleaned_text=raw_text.strip(),
+                cleaned_text=cleaned_text,
                 latency_ms=latency_ms,
                 whisper_model=model_name,
-                cleanup_model="none",
+                cleanup_model="deterministic",
             )
 
             self._last_result = record

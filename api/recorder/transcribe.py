@@ -195,6 +195,7 @@ def transcribe_channel(
     temperature: Union[float, tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
     language: Optional[str] = None,
     vad_filter: bool = True,
+    repetition_penalty: float = 1.0,
 ) -> list[dict]:
     """Transcribe a single WAV file, returning labeled segments.
 
@@ -244,6 +245,8 @@ def transcribe_channel(
         transcribe_kwargs["hallucination_silence_threshold"] = hallucination_silence_threshold
     if language is not None:
         transcribe_kwargs["language"] = language
+    if repetition_penalty != 1.0:
+        transcribe_kwargs["repetition_penalty"] = repetition_penalty
 
     segments_iter, info = model.transcribe(
         str(wav_path),

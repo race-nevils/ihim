@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent / "data"
 DICTATIONS_FILE = DATA_DIR / "dictations.jsonl"
-CORRECTIONS_FILE = DATA_DIR / "corrections.jsonl"
 
 TRAINING_DIR = DATA_DIR / "voice-training"
 MANIFEST_FILE = TRAINING_DIR / "manifest.jsonl"
@@ -203,30 +202,6 @@ def get_stats() -> dict:
         "flagged": flagged,
         "avg_latency_ms": round(total_latency / total) if total else 0,
     }
-
-
-def _save_correction_pair(record: dict) -> None:
-    """Save raw → corrected pair to corrections.jsonl for future fine-tuning."""
-    _ensure_data_dir()
-
-    correction = record.get("correction", {})
-    if not correction:
-        return
-
-    pair = {
-        "id": record.get("id"),
-        "timestamp": correction.get("timestamp"),
-        "raw_transcript": record.get("raw_transcript", ""),
-        "cleaned_text": record.get("cleaned_text", ""),
-        "corrected_text": correction.get("text", ""),
-    }
-
-    try:
-        with CORRECTIONS_FILE.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(pair) + "\n")
-        logger.debug("Correction pair saved for fine-tuning: %s", pair["id"])
-    except Exception as exc:
-        logger.debug("Failed to save correction pair: %s", exc)
 
 
 def _append_manifest(record: dict, duration_s: float) -> None:

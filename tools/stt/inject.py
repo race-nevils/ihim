@@ -17,10 +17,10 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Delay before injection to allow focus to return to the target window.
-FOCUS_DELAY_S: float = 0.15
+FOCUS_DELAY_S: float = 0.25
 
 # Delay before restoring the clipboard (gives Ctrl+V time to complete).
-CLIPBOARD_RESTORE_DELAY_S: float = 0.05
+CLIPBOARD_RESTORE_DELAY_S: float = 0.15
 
 # Module-level store for the last successfully injected text.
 _last_injected: Optional[str] = None
@@ -105,15 +105,47 @@ def _inject_via_clipboard(text: str) -> bool:
         return False
 
     try:
-        from pynput.keyboard import Controller, Key
-        kb = Controller()
-        kb.press(Key.ctrl)
-        kb.press('v')
-        kb.release('v')
-        kb.release(Key.ctrl)
+        import ctypes
+        from ctypes import wintypes
+
+        SendInput = ctypes.windll.user32.SendInput
+
+        # Virtual key codes
+        VK_CONTROL = 0x11
+        VK_V = 0x56
+        KEYEVENTF_KEYUP = 0x0002
+        INPUT_KEYBOARD = 1
+
+        class KEYBDINPUT(ctypes.Structure):
+            _fields_ = [
+                ("wVk", wintypes.WORD),
+                ("wScan", wintypes.WORD),
+                ("dwFlags", wintypes.DWORD),
+                ("time", wintypes.DWORD),
+                ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+            ]
+
+        class INPUT(ctypes.Structure):
+            class _INPUT(ctypes.Union):
+                _fields_ = [("ki", KEYBDINPUT)]
+            _fields_ = [("type", wintypes.DWORD), ("_input", _INPUT)]
+
+        def _key_event(vk, flags=0):
+            inp = INPUT()
+            inp.type = INPUT_KEYBOARD
+            inp._input.ki.wVk = vk
+            inp._input.ki.dwFlags = flags
+            return inp
+
+        events = (INPUT * 4)(
+            _key_event(VK_CONTROL),
+            _key_event(VK_V),
+            _key_event(VK_V, KEYEVENTF_KEYUP),
+            _key_event(VK_CONTROL, KEYEVENTF_KEYUP),
+        )
+        SendInput(4, events, ctypes.sizeof(INPUT))
     except Exception as exc:
         logger.debug("Ctrl+V simulation failed: %s", exc)
-        # Try to restore clipboard even on failure.
         _clipboard_restore_after(previous, 0)
         return False
 

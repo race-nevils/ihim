@@ -1,8 +1,8 @@
 """Whisper transcription for dictation.
 
 Calls faster-whisper via transcribe_channel with word-level timestamps,
-then strips trailing words whose decoder probability is low — these are
-typically hallucinated on silence/noise at the end of recordings.
+then strips trailing hallucinations using multiple signals: word decoder
+probability, speech rate, and segment-level probability analysis.
 """
 
 import logging
@@ -20,18 +20,26 @@ _diag_logger = logging.getLogger("stt.transcribe.diag")
 _diag_logger.addHandler(_diag_handler)
 _diag_logger.setLevel(logging.DEBUG)
 
-# Words below this decoder probability at the END of the transcript are
-# likely hallucinated.  Segment-level confidence (1 - no_speech_prob) is
-# useless with VAD enabled (always ~1.0); word-level decoder probs are
-# much more discriminating.
+# Words below this decoder probability at the tail are stripped.
 _WORD_PROB_THRESHOLD = 0.5
 
+# Max plausible speech rate (words/sec).  Normal English is ~2.5 w/s;
+# fast speech tops out around 6-8.  Above 15 is physically impossible
+# and means Whisper fabricated text on near-zero audio.
+_MAX_SPEECH_RATE = 15.0
 
-def _strip_low_prob_tail_words(segments: list[dict]) -> list[dict]:
-    """Strip trailing words whose decoder probability is below threshold.
+# For short segments (< 1s), if ANY word has probability below this,
+# the whole segment is suspect hallucination from silence/noise.
+_MIN_WORD_PROB = 0.25
 
-    Works on word-level data within segments.  If an entire segment's
-    words are stripped, removes the segment and checks the previous one.
+
+def _strip_hallucinated_tail(segments: list[dict]) -> list[dict]:
+    """Remove trailing hallucinated segments and words.
+
+    Three detection layers, applied to the last segment:
+    1. Impossible speech rate  → drop entire segment
+    2. Short segment with very low-prob word → drop entire segment
+    3. Low-prob trailing words → strip individual words
     """
     if not segments:
         return segments
@@ -41,7 +49,32 @@ def _strip_low_prob_tail_words(segments: list[dict]) -> list[dict]:
     if not words:
         return segments
 
-    # Strip low-prob words from the tail
+    seg_duration = last_seg["end"] - last_seg["start"]
+
+    # Layer 1: Impossible speech rate (e.g. 4 words in 0.06s)
+    if seg_duration > 0 and len(words) / seg_duration > _MAX_SPEECH_RATE:
+        _diag_logger.info(
+            "  DROP segment (%.0f w/s, impossible): '%s'",
+            len(words) / seg_duration, last_seg["text"],
+        )
+        segments.pop()
+        return _strip_hallucinated_tail(segments)
+
+    # Layer 2: Short segment with a very low-prob word
+    # On short tail audio (< 1s), Whisper often hallucinates a phrase where
+    # the first word has very low prob but subsequent words are confident
+    # (it "locks in" after the hallucinated start).
+    if seg_duration < 1.0 and words:
+        min_prob = min(w["prob"] for w in words)
+        if min_prob < _MIN_WORD_PROB:
+            _diag_logger.info(
+                "  DROP segment (min_prob=%.4f in %.2fs segment): '%s'",
+                min_prob, seg_duration, last_seg["text"],
+            )
+            segments.pop()
+            return _strip_hallucinated_tail(segments)
+
+    # Layer 3: Strip low-prob trailing words
     while words and words[-1]["prob"] < _WORD_PROB_THRESHOLD:
         dropped = words.pop()
         _diag_logger.info(
@@ -50,9 +83,8 @@ def _strip_low_prob_tail_words(segments: list[dict]) -> list[dict]:
         )
 
     if not words:
-        # Entire last segment was low-prob — remove and check previous
         segments.pop()
-        return _strip_low_prob_tail_words(segments)
+        return _strip_hallucinated_tail(segments)
 
     # Reconstruct segment text from remaining words
     last_seg["text"] = "".join(w["word"] for w in words).strip()
@@ -94,9 +126,9 @@ def transcribe(wav_path: Path, model_size: str = "large-v3-turbo") -> str:
                 w["prob"], w["start"], w["end"], w["word"],
             )
 
-    # Strip trailing hallucinated words by decoder probability
+    # Strip trailing hallucinations
     before_text = " ".join(seg["text"] for seg in segments)
-    segments = _strip_low_prob_tail_words(segments)
+    segments = _strip_hallucinated_tail(segments)
     after_text = " ".join(seg["text"] for seg in segments)
     if before_text != after_text:
         _diag_logger.info("  STRIPPED: '%s' → '%s'", before_text, after_text)

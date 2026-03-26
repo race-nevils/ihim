@@ -72,8 +72,6 @@ _FILLER_PHRASES = [
     r"\bwhat I meant was\b",
     r"\bwhat I meant is\b",
     r"\byou know\b",
-    r"\bkind of\b",
-    r"\bsort of\b",
 ]
 
 # "sorry" only when followed by comma + restart pronoun
@@ -88,9 +86,6 @@ _FILLER_WORDS = [
     r"\bhmm+\b",
     r"\bah+\b",
     r"\boh\b",
-    r"\bbasically\b",
-    r"\bliterally\b",
-    r"\bright\b(?=[,.]?\s)",   # "right" only when followed by pause/punctuation
     r"\blike\s*,",              # "like" as filler + trailing comma
 ]
 
@@ -122,8 +117,6 @@ _BACKTRACK_TRIGGERS = [
     "scratch that",
     "wait no",
     "no wait",
-    "i mean",
-    "actually",
 ]
 
 # Build a single regex: match from the last sentence boundary through the trigger

@@ -209,6 +209,31 @@ def _drop_trailing_signoff(text: str) -> str:
     return text
 
 
+# ── Trailing incomplete fragment ───────────────────────────────────
+# Whisper appends a trailing filler word + ellipsis when audio fades out.
+# "...big dog. So..." → "...big dog."
+# Only triggers when the fragment follows a complete sentence (.!?).
+_TRAILING_INCOMPLETE_RE = re.compile(
+    r"([.!?])\s+"        # sentence boundary (capture to preserve)
+    r"\w{1,6}"           # short trailing word (So, And, But, Well, ...)
+    r"\.{2,}\s*$",       # ellipsis at end of text
+)
+
+
+def _drop_trailing_incomplete(text: str) -> str:
+    """Strip trailing word + ellipsis after a complete sentence.
+
+    "...big dog. So..." → "...big dog."
+    "I was thinking about..." → preserved (no sentence before)
+    """
+    m = _TRAILING_INCOMPLETE_RE.search(text)
+    if m:
+        result = text[:m.end(1)].strip()
+        logger.debug("Dropped trailing incomplete: '%s'", text[m.start()+1:].strip())
+        return result
+    return text
+
+
 # ── Smart formatting ────────────────────────────────────────────────
 
 # Numbered list: "one [text] two [text] three [text]"
@@ -426,6 +451,9 @@ def cleanup_transcript(raw_text: str, context: str = "prose") -> str:
 
     # 7c. Drop trailing sign-off hallucinations (Thank you, man)
     text = _drop_trailing_signoff(text)
+
+    # 7d. Drop trailing incomplete fragments (So...)
+    text = _drop_trailing_incomplete(text)
 
     # 8. Smart formatting (numbered/bullet lists)
     text = _apply_smart_formatting(text)

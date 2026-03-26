@@ -162,6 +162,8 @@ class STTEngine:
     def _mute_audio(self, mute: bool) -> None:
         """Mute/unmute system audio output during dictation."""
         try:
+            import comtypes
+            comtypes.CoInitialize()  # safe no-op if already initialized
             from pycaw.pycaw import AudioUtilities
             vol = AudioUtilities.GetSpeakers().EndpointVolume
             vol.SetMute(mute, None)

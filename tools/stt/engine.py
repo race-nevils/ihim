@@ -94,13 +94,14 @@ class STTEngine:
         self._listener: Optional[HotkeyListener] = None
         self._lock = threading.Lock()
         self._last_result: Optional[dict] = None
-        self._status = "idle"  # idle | listening | recording | processing | loading | warning | error
+        self._status = "cold"  # cold | warm | recording | processing | warning | error
         self._on_state_change: Optional[Callable[[str], None]] = None
         self._app_context: str = "prose"  # captured at record start
         self._idle_timer: Optional[threading.Timer] = None
         self._warning_timer: Optional[threading.Timer] = None
         self._timeout_timer: Optional[threading.Timer] = None
         self._streamer = None
+        self._warming_up = False
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
         """Register a callback fired on every status transition.
@@ -132,7 +133,10 @@ class STTEngine:
                 hotkey=self._hotkey,
             )
             self._listener.start()
-            self._set_status("listening")
+            # Check if model is already loaded
+            from api.recorder.transcribe import is_model_loaded
+            model_name = self._cfg.get("model", "large-v3-turbo")
+            self._set_status("warm" if is_model_loaded(model_name) else "cold")
 
     def stop_listening(self) -> None:
         """Deactivate the hotkey listener."""
@@ -144,7 +148,7 @@ class STTEngine:
             if self._idle_timer is not None:
                 self._idle_timer.cancel()
                 self._idle_timer = None
-            self._set_status("idle")
+            self._set_status("cold")
 
     @property
     def status(self) -> str:
@@ -182,6 +186,7 @@ class STTEngine:
             unload_model(model_name)
         except Exception as e:
             logger.debug("Model unload failed (may not be loaded): %s", e)
+        self._set_status("cold")
 
     def _on_recording_warning(self) -> None:
         """Called when recording nears the time limit."""
@@ -208,9 +213,30 @@ class STTEngine:
         ).start()
 
     def _on_record_start(self) -> None:
-        """Called by hotkey listener on key press."""
+        """Called by hotkey listener on key press.
+
+        If model is cold (not loaded), this press warms it up without recording.
+        If model is warm, this press starts recording normally.
+        """
         try:
-            # Capture app context BEFORE recording (stt pill will have focus during recording)
+            from api.recorder.transcribe import is_model_loaded, _get_model
+            model_name = self._cfg.get("model", "large-v3-turbo")
+
+            # Cold press — load model only, don't record
+            if not is_model_loaded(model_name):
+                self._set_status("loading")
+                logger.info("Cold start — loading model '%s'", model_name)
+                self._warming_up = True
+                threading.Thread(
+                    target=self._warm_up_model,
+                    args=(model_name,),
+                    daemon=True,
+                    name="stt-warmup",
+                ).start()
+                return
+
+            # Warm press — normal recording
+            # Capture app context BEFORE recording
             from tools.stt.app_context import get_active_app_context
             self._app_context = get_active_app_context()
             logger.debug("App context at record start: %s", self._app_context)
@@ -220,19 +246,12 @@ class STTEngine:
                 self._idle_timer.cancel()
                 self._idle_timer = None
 
-            # Check if model needs loading
-            from api.recorder.transcribe import is_model_loaded
-            model_name = self._cfg.get("model", "large-v3-turbo")
-            if not is_model_loaded(model_name):
-                self._set_status("loading")
-
             self._set_status("recording")
             self._mic.start()
 
-            # Start streaming transcriber (Step 1: logging only)
+            # Start streaming transcriber
             try:
                 from tools.stt.streaming import StreamingTranscriber
-                model_name = self._cfg.get("model", "large-v3-turbo")
                 self._streamer = StreamingTranscriber(self, model_name)
                 self._streamer.start()
             except Exception as e:
@@ -254,10 +273,31 @@ class STTEngine:
 
         except Exception as e:
             logger.error("Failed to start mic capture: %s", e)
-            self._set_status("listening")
+            self._set_status("warm")
+
+    def _warm_up_model(self, model_name: str) -> None:
+        """Load the Whisper model in a background thread (cold → warm)."""
+        try:
+            from api.recorder.transcribe import _get_model
+            _get_model(model_name)
+            logger.info("Model '%s' loaded — warm", model_name)
+            self._set_status("warm")
+        except Exception as e:
+            logger.error("Model warmup failed: %s", e)
+            self._set_status("error")
+            time.sleep(2)
+            self._set_status("cold")
+        finally:
+            self._warming_up = False
 
     def _on_record_stop(self) -> None:
         """Called by hotkey listener on key release. Runs pipeline in background thread."""
+        # If we were warming up (cold press), don't run pipeline
+        if self._warming_up:
+            return
+        # If not recording (e.g. cold press released after warmup finished), skip
+        if not self._mic.is_recording:
+            return
         self._cancel_recording_timers()
         threading.Thread(
             target=self._run_pipeline,
@@ -308,7 +348,7 @@ class STTEngine:
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")
-                self._set_status("listening")
+                self._set_status("warm")
                 self._reset_idle_timer()
                 return
 
@@ -374,7 +414,7 @@ class STTEngine:
                     wav_path.unlink()
             except Exception:
                 pass
-            self._set_status("listening")
+            self._set_status("warm")
             self._reset_idle_timer()
 
     def on_dictation_complete(self, wav_path: Path) -> Optional[dict]:
@@ -417,7 +457,7 @@ class STTEngine:
             logger.error("Manual dictation pipeline failed: %s", e)
             return None
         finally:
-            self._set_status("listening" if self._listener else "idle")
+            self._set_status("warm" if self._listener else "cold")
 
 
 # Module-level singleton

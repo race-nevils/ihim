@@ -174,6 +174,41 @@ def _drop_trailing_echo(text: str) -> str:
     return text
 
 
+# ── Trailing sign-off hallucination ────────────────────────────────
+# Whisper sometimes appends "Thank you, man" / "Thanks" / "Bye" at end
+# of audio — especially on short tail clips.  Key discriminator: real
+# sign-offs follow a sentence boundary (.!?); hallucinated ones are
+# spliced mid-flow without punctuation.
+_TRAILING_SIGNOFF_RE = re.compile(
+    r"(?<![.!?])"                          # NOT after sentence-ending punct
+    r"\s+"                                 # whitespace separator
+    r"(?:"
+    r"thank(?:s| you)\b[^.!?\n]{0,20}"    # thank you / thanks [, man]
+    r"|bye\b[^.!?\n]{0,10}"               # bye [bye]
+    r"|goodbye\b[^.!?\n]{0,10}"           # goodbye
+    r"|see you\b[^.!?\n]{0,15}"           # see you [next time]
+    r")"
+    r"[.!?]*\s*$",                         # trailing punct + end of string
+    re.IGNORECASE,
+)
+
+
+def _drop_trailing_signoff(text: str) -> str:
+    """Strip trailing sign-off hallucinations spliced without sentence boundary.
+
+    "...you know what I mean Thank you, man." → "...you know what I mean"
+    "...at the meeting. Thank you." → preserved (period before = legitimate)
+    """
+    m = _TRAILING_SIGNOFF_RE.search(text)
+    if m:
+        before = text[:m.start()].strip()
+        # Only strip if substantial text precedes (short speech might be legit)
+        if len(before.split()) >= 5:
+            logger.debug("Dropped trailing sign-off: '%s'", m.group().strip())
+            return before
+    return text
+
+
 # ── Smart formatting ────────────────────────────────────────────────
 
 # Numbered list: "one [text] two [text] three [text]"
@@ -347,7 +382,7 @@ def cleanup_transcript(raw_text: str, context: str = "prose") -> str:
      4. Apply backtrack detection (scratch that, wait no, etc.)
      5. Remove filler words/phrases (skipped in "chat" context)
      6. Remove false starts (I went to the— I went to the store)
-     7. Collapse repeated words
+     7. Collapse repeated words + drop trailing echoes/sign-offs
      8. Smart formatting (numbered/bullet lists)
      9. Clean punctuation artifacts
     10. Normalize whitespace
@@ -388,6 +423,9 @@ def cleanup_transcript(raw_text: str, context: str = "prose") -> str:
 
     # 7b. Drop trailing echo (last sentence is substring of previous)
     text = _drop_trailing_echo(text)
+
+    # 7c. Drop trailing sign-off hallucinations (Thank you, man)
+    text = _drop_trailing_signoff(text)
 
     # 8. Smart formatting (numbered/bullet lists)
     text = _apply_smart_formatting(text)

@@ -162,8 +162,6 @@ class STTEngine:
     def _mute_audio(self, mute: bool) -> None:
         """Mute/unmute system audio output during dictation."""
         try:
-            import comtypes
-            comtypes.CoInitialize()  # safe no-op if already initialized
             from pycaw.pycaw import AudioUtilities
             vol = AudioUtilities.GetSpeakers().EndpointVolume
             vol.SetMute(mute, None)
@@ -294,6 +292,7 @@ class STTEngine:
 
     def _on_record_stop(self) -> None:
         """Called by hotkey listener on key release. Runs pipeline in background thread."""
+        self._mute_audio(False)  # unmute on same thread where mute worked
         # If we were warming up (cold press), don't run pipeline
         if self._warming_up:
             return
@@ -383,7 +382,6 @@ class STTEngine:
             time.sleep(2)
 
         finally:
-            self._mute_audio(False)
             # Clean up temp WAV
             try:
                 if wav_path is not None and wav_path.exists():

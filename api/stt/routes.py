@@ -13,7 +13,7 @@ from api.errors import problem
 from api.stt.models import (
     DictationRecord, HistoryResponse, StatsResponse,
     StatusResponse, CorrectionRequest,
-    SuccessResponse,
+    SuccessResponse, VocabResponse, VocabUpdateRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -93,6 +93,51 @@ async def stt_stats():
     stats = await loop.run_in_executor(None, get_stats)
 
     return StatsResponse(**stats)
+
+
+VOCAB_FILE = Path(__file__).resolve().parent.parent.parent / "tools" / "stt" / "data" / "vocab.txt"
+
+
+def _read_vocab() -> list[str]:
+    """Read vocabulary terms from vocab.txt."""
+    if not VOCAB_FILE.exists():
+        return []
+    return [t.strip() for t in VOCAB_FILE.read_text(encoding="utf-8").splitlines() if t.strip()]
+
+
+def _write_vocab(terms: list[str]) -> None:
+    """Write vocabulary terms to vocab.txt."""
+    VOCAB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    VOCAB_FILE.write_text("\n".join(terms) + "\n", encoding="utf-8")
+
+
+@router.get("/vocab", response_model=VocabResponse)
+async def stt_vocab():
+    """List vocabulary priming terms."""
+    loop = asyncio.get_event_loop()
+    terms = await loop.run_in_executor(None, _read_vocab)
+    return VocabResponse(terms=terms)
+
+
+@router.put("/vocab", response_model=VocabResponse)
+async def stt_vocab_update(body: VocabUpdateRequest):
+    """Add/remove vocabulary terms."""
+    def _update():
+        terms = _read_vocab()
+        for term in body.add:
+            term = term.strip()
+            if term and term not in terms:
+                terms.append(term)
+        for term in body.remove:
+            term = term.strip()
+            if term in terms:
+                terms.remove(term)
+        _write_vocab(terms)
+        return terms
+
+    loop = asyncio.get_event_loop()
+    terms = await loop.run_in_executor(None, _update)
+    return VocabResponse(terms=terms)
 
 
 @router.post("/start", response_model=SuccessResponse)

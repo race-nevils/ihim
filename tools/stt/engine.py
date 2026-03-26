@@ -159,6 +159,15 @@ class STTEngine:
     def last_result(self) -> Optional[dict]:
         return self._last_result
 
+    def _mute_audio(self, mute: bool) -> None:
+        """Mute/unmute system audio output during dictation."""
+        try:
+            from pycaw.pycaw import AudioUtilities
+            vol = AudioUtilities.GetSpeakers().EndpointVolume
+            vol.SetMute(mute, None)
+        except Exception:
+            logger.debug("Audio mute control failed", exc_info=True)
+
     def _cancel_recording_timers(self) -> None:
         """Cancel warning and timeout timers."""
         for timer in (self._warning_timer, self._timeout_timer):
@@ -246,6 +255,7 @@ class STTEngine:
                 self._idle_timer = None
 
             self._set_status("recording")
+            self._mute_audio(True)
             self._mic.start()
 
             # Start recording timers
@@ -371,6 +381,7 @@ class STTEngine:
             time.sleep(2)
 
         finally:
+            self._mute_audio(False)
             # Clean up temp WAV
             try:
                 if wav_path is not None and wav_path.exists():

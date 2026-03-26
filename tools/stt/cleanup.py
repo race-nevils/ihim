@@ -144,6 +144,36 @@ def _apply_backtrack(text: str) -> str:
     return text.strip()
 
 
+# ── Trailing echo detection ─────────────────────────────────────────
+# Whisper sometimes loops the last phrase at the end of audio.
+# "The rest of it looks good. Looks good." → "The rest of it looks good."
+
+
+def _drop_trailing_echo(text: str) -> str:
+    """Drop the last sentence if it's a substring of the previous one.
+
+    Catches Whisper's end-of-audio looping where it echoes the tail
+    of the previous sentence as a new sentence.
+    """
+    # Split into sentences on . ! ?
+    parts = re.split(r'(?<=[.!?])\s+', text.strip())
+    if len(parts) < 2:
+        return text
+
+    last = parts[-1].rstrip(".!? ").lower()
+    prev = parts[-2].rstrip(".!? ").lower()
+
+    if not last or not prev:
+        return text
+
+    # Last sentence is a substring of the previous (echo)
+    if last in prev and len(last) >= 3:
+        logger.debug("Dropped trailing echo: '%s'", parts[-1])
+        return " ".join(parts[:-1])
+
+    return text
+
+
 # ── Smart formatting ────────────────────────────────────────────────
 
 # Numbered list: "one [text] two [text] three [text]"
@@ -355,6 +385,9 @@ def cleanup_transcript(raw_text: str, context: str = "prose") -> str:
 
     # 7. Collapse repeated words
     text = _REPEATED_WORD_RE.sub(r"\1", text)
+
+    # 7b. Drop trailing echo (last sentence is substring of previous)
+    text = _drop_trailing_echo(text)
 
     # 8. Smart formatting (numbered/bullet lists)
     text = _apply_smart_formatting(text)

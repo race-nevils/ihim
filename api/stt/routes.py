@@ -37,6 +37,7 @@ async def stt_history(limit: int = 50, offset: int = 0):
     return HistoryResponse(
         dictations=[DictationRecord(**r) for r in records],
         total=stats["total"],
+        total_words=stats.get("total_words", 0),
     )
 
 

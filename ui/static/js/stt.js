@@ -277,6 +277,7 @@ async function addVocabTerm() {
 }
 
 async function removeVocabTerm(term) {
+    if (!confirm(`Remove "${term}" from dictionary?`)) return;
     try {
         const res = await fetch(`${API}/api/stt/vocab`, {
             method: 'PUT',

@@ -52,3 +52,12 @@ class CorrectionRequest(BaseModel):
 class SuccessResponse(BaseModel):
     success: bool = True
     message: str = ""
+
+
+class VocabResponse(BaseModel):
+    terms: list[str] = Field(default_factory=list, description="Vocabulary terms for Whisper priming")
+
+
+class VocabUpdateRequest(BaseModel):
+    add: list[str] = Field(default_factory=list, description="Terms to add")
+    remove: list[str] = Field(default_factory=list, description="Terms to remove")

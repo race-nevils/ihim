@@ -61,12 +61,13 @@ function renderStatus(data) {
     const badge = document.getElementById('stt-status-badge');
     if (!badge) return;
 
-    badge.classList.remove('status-idle', 'status-listening', 'status-recording', 'status-processing');
+    badge.classList.remove('status-cold', 'status-warm', 'status-recording', 'status-processing', 'status-loading',
+        'status-idle', 'status-listening');
 
     switch (data.status) {
-        case 'listening':
-            badge.textContent = 'LISTENING';
-            badge.classList.add('status-listening');
+        case 'warm':
+            badge.textContent = 'WARM';
+            badge.classList.add('status-warm');
             break;
         case 'recording':
             badge.textContent = 'REC';
@@ -76,9 +77,13 @@ function renderStatus(data) {
             badge.textContent = 'PROCESSING';
             badge.classList.add('status-processing');
             break;
+        case 'loading':
+            badge.textContent = 'LOADING';
+            badge.classList.add('status-loading');
+            break;
         default:
-            badge.textContent = 'IDLE';
-            badge.classList.add('status-idle');
+            badge.textContent = 'COLD';
+            badge.classList.add('status-cold');
             break;
     }
 

@@ -6053,11 +6053,11 @@ button:focus-visible {
     letter-spacing: 0.05em;
 }
 
-.stt-status-badge.status-idle {
-    background: rgba(108, 112, 134, 0.3);
-    color: #a6adc8;
+.stt-status-badge.status-cold {
+    background: rgba(137, 180, 250, 0.2);
+    color: #89b4fa;
 }
-.stt-status-badge.status-listening {
+.stt-status-badge.status-warm {
     background: rgba(166, 227, 161, 0.2);
     color: #a6e3a1;
 }
@@ -6069,6 +6069,11 @@ button:focus-visible {
 .stt-status-badge.status-processing {
     background: rgba(250, 179, 135, 0.2);
     color: #fab387;
+}
+.stt-status-badge.status-loading {
+    background: rgba(249, 226, 175, 0.2);
+    color: #f9e2af;
+    animation: stt-pulse 1s ease-in-out infinite;
 }
 
 @keyframes stt-pulse {

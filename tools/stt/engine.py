@@ -293,8 +293,12 @@ class STTEngine:
 
             # 2. Stop mic + transcribe
             model_name = self._cfg.get("model", "large-v3-turbo")
+            retain_audio = self._cfg.get("audio_retention", {}).get("enabled", False)
             if streaming_text:
-                self._mic.stop_fast()  # no WAV save needed
+                if retain_audio:
+                    wav_path = self._mic.stop()  # save WAV for training data
+                else:
+                    self._mic.stop_fast()
                 raw_text = streaming_text
             else:
                 # Sub-second recording (0 streaming runs) — safe, streamer never touched GPU

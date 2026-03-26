@@ -106,6 +106,8 @@ async function loadHistory() {
 
         const countEl = document.getElementById('stt-history-count');
         if (countEl) countEl.textContent = `${data.total} dictation${data.total !== 1 ? 's' : ''}`;
+        const wordEl = document.getElementById('stt-word-count');
+        if (wordEl) wordEl.textContent = `${(data.total_words || 0).toLocaleString()} words`;
 
         if (dictations.length === 0) {
             body.innerHTML = '<div class="stt-placeholder">No dictations yet. Start listening and speak!</div>';

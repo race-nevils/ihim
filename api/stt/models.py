@@ -27,6 +27,7 @@ class DictationRecord(BaseModel):
 class HistoryResponse(BaseModel):
     dictations: list[DictationRecord] = Field(default_factory=list)
     total: int = Field(0, description="Total number of dictations in history")
+    total_words: int = Field(0, description="Total words dictated")
 
 
 class StatsResponse(BaseModel):
@@ -34,6 +35,7 @@ class StatsResponse(BaseModel):
     corrections: int = Field(0, description="Number of corrected dictations")
     flagged: int = Field(0, description="Number of flagged dictations")
     avg_latency_ms: int = Field(0, description="Average pipeline latency in ms")
+    total_words: int = Field(0, description="Total words dictated")
 
 
 class StatusResponse(BaseModel):

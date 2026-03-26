@@ -180,6 +180,7 @@ def get_stats() -> dict:
     corrections = 0
     flagged = 0
     total_latency = 0
+    total_words = 0
 
     for line in DICTATIONS_FILE.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -193,6 +194,8 @@ def get_stats() -> dict:
             if record.get("flagged"):
                 flagged += 1
             total_latency += record.get("latency_ms", 0)
+            text = record.get("cleaned_text") or record.get("raw_transcript") or ""
+            total_words += len(text.split())
         except json.JSONDecodeError:
             continue
 
@@ -201,6 +204,7 @@ def get_stats() -> dict:
         "corrections": corrections,
         "flagged": flagged,
         "avg_latency_ms": round(total_latency / total) if total else 0,
+        "total_words": total_words,
     }
 
 

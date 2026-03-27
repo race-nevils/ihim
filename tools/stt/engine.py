@@ -160,8 +160,13 @@ class STTEngine:
         return self._last_result
 
     def _mute_audio(self, mute: bool) -> None:
-        """Mute/unmute system audio output during dictation."""
+        """Mute/unmute system audio — runs on own thread to avoid blocking hotkey listener."""
+        threading.Thread(target=self._set_system_mute, args=(mute,), daemon=True).start()
+
+    def _set_system_mute(self, mute: bool) -> None:
         try:
+            import comtypes
+            comtypes.CoInitialize()
             from pycaw.pycaw import AudioUtilities
             vol = AudioUtilities.GetSpeakers().EndpointVolume
             vol.SetMute(mute, None)

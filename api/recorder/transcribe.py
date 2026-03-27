@@ -5,10 +5,12 @@ with a speaker label, then merges chronologically. Uses GPU (CUDA) when
 available with automatic CPU fallback if VRAM is insufficient.
 """
 
+import ctypes
 import os
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Optional, Union
 
@@ -26,6 +28,32 @@ if sys.platform == "win32":
 
 _model_cache: dict = {}
 _model_lock = threading.Lock()
+
+# --- Sleep detection (Windows) -------------------------------------------
+# CUDA contexts go stale after system sleep (faster-whisper #829).
+# Detect sleep by comparing monotonic time (includes sleep on Python 3.7+)
+# against QueryUnbiasedInterruptTime (excludes sleep).  If the gap exceeds
+# a threshold, the system slept and cached GPU models must be discarded.
+_model_stamps: dict = {}  # cache_key → (monotonic_s, unbiased_100ns)
+
+if sys.platform == "win32":
+    def _unbiased_100ns() -> int:
+        """System uptime in 100ns units, excluding sleep/hibernate."""
+        t = ctypes.c_uint64()
+        ctypes.windll.kernel32.QueryUnbiasedInterruptTime(ctypes.byref(t))
+        return t.value
+else:
+    _unbiased_100ns = None  # type: ignore[assignment]
+
+
+def _slept_since(cache_key, threshold_s: float = 30.0) -> bool:
+    """True if the system slept for longer than *threshold_s* since the model was cached."""
+    if _unbiased_100ns is None or cache_key not in _model_stamps:
+        return False
+    mono_then, unbiased_then = _model_stamps[cache_key]
+    mono_elapsed = time.monotonic() - mono_then
+    unbiased_elapsed = (_unbiased_100ns() - unbiased_then) / 10_000_000
+    return (mono_elapsed - unbiased_elapsed) > threshold_s
 
 # Cached VRAM query (nvidia-smi is slow; cache for 30s)
 _vram_cache: dict = {"value": None, "expires": 0}
@@ -47,7 +75,6 @@ _MIN_VRAM_MB = 1000
 
 def _get_free_vram() -> int:
     """Query free VRAM in MB via nvidia-smi. Cached for 30 seconds."""
-    import time
     now = time.monotonic()
     if _vram_cache["value"] is not None and now < _vram_cache["expires"]:
         return _vram_cache["value"]
@@ -93,23 +120,44 @@ def _get_model(model_size: str = "small"):
     """Lazy-load and cache a faster-whisper model.
 
     Cache key is (model_size, device, compute_type) so the same model
-    at different compute types are cached separately.
+    at different compute types are cached separately.  If the model was
+    previously unloaded from GPU via ``unload_model()``, it is reloaded
+    transparently using CTranslate2's ``load_model()`` API.
     """
     device, compute_type = _pick_device(model_size)
     cache_key = (model_size, device, compute_type)
 
+    # Flush stale CUDA context after system sleep (faster-whisper #829).
+    # Don't call unload_model() on the stale object — it can hang when
+    # the CUDA driver is in a post-sleep state.  Just drop the reference.
+    if cache_key in _model_cache and _slept_since(cache_key):
+        with _model_lock:
+            _model_cache.pop(cache_key, None)
+            _model_stamps.pop(cache_key, None)
+        print(f"[recorder] Sleep detected — flushed stale '{model_size}' model")
+
     if cache_key in _model_cache:
-        return _model_cache[cache_key]
+        cached = _model_cache[cache_key]
+        if not cached.model.model_is_loaded:
+            print(f"[recorder] Reloading '{model_size}' on {device} ({compute_type})...")
+            cached.model.load_model()
+            print(f"[recorder] Model '{model_size}' reloaded on {device}.")
+        return cached
 
     with _model_lock:
         if cache_key in _model_cache:
-            return _model_cache[cache_key]
+            cached = _model_cache[cache_key]
+            if not cached.model.model_is_loaded:
+                cached.model.load_model()
+            return cached
 
         from faster_whisper import WhisperModel
 
         print(f"[recorder] Loading faster-whisper '{model_size}' on {device} ({compute_type})...")
         model = WhisperModel(model_size, device=device, compute_type=compute_type)
         _model_cache[cache_key] = model
+        if _unbiased_100ns is not None:
+            _model_stamps[cache_key] = (time.monotonic(), _unbiased_100ns())
         print(f"[recorder] Model '{model_size}' loaded on {device}.")
         return model
 
@@ -150,36 +198,38 @@ def _deloop_text(text: str) -> str:
 
 
 def is_model_loaded(model_size: str = "small") -> bool:
-    """Check if a Whisper model is currently cached in memory.
+    """Check if a Whisper model is loaded on the compute device.
 
-    Checks all cache keys (which include device/compute_type) for matching model_size.
+    Returns True only if the model is cached AND its weights are resident
+    on the GPU/CPU (i.e. not unloaded via ``unload_model()``).
     """
-    return any(key[0] == model_size if isinstance(key, tuple) else key == model_size
-               for key in _model_cache)
+    for key, cached in _model_cache.items():
+        if (isinstance(key, tuple) and key[0] == model_size) or key == model_size:
+            return cached.model.model_is_loaded
+    return False
 
 
 def unload_model(model_size: str = "small") -> bool:
     """Unload a cached Whisper model to free VRAM.
 
-    CTranslate2 models release GPU memory when garbage-collected.
-    Returns True if a model was unloaded, False if nothing was cached.
+    Uses CTranslate2's explicit ``unload_model()`` API to release GPU
+    memory without destroying the Python object.  The model stays in
+    cache and can be cheaply reloaded via ``load_model()`` on next use.
+
+    This avoids ``del`` + ``gc.collect()`` which triggers the C++
+    destructor — known to hang on Windows when the CUDA driver stalls
+    during idle/sleep transitions (faster-whisper #829).
     """
-    import gc
-
     with _model_lock:
-        # Find and remove all cache entries for this model_size
-        keys_to_remove = [
-            key for key in _model_cache
-            if (isinstance(key, tuple) and key[0] == model_size) or key == model_size
-        ]
-        if not keys_to_remove:
-            return False
-        for key in keys_to_remove:
-            del _model_cache[key]
-
-    gc.collect()
-    print(f"[recorder] Unloaded model '{model_size}' — VRAM freed.")
-    return True
+        unloaded = False
+        for key, cached in _model_cache.items():
+            if (isinstance(key, tuple) and key[0] == model_size) or key == model_size:
+                if cached.model.model_is_loaded:
+                    cached.model.unload_model()
+                    unloaded = True
+    if unloaded:
+        print(f"[recorder] Unloaded model '{model_size}' — VRAM freed.")
+    return unloaded
 
 
 def transcribe_channel(

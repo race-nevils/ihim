@@ -1,6 +1,7 @@
 # Core API
 fastapi==0.115.6
 uvicorn==0.34.0
+watchfiles>=1.0.0,<2.0.0
 websockets>=13.0,<14.0
 python-multipart==0.0.21
 
@@ -34,6 +35,11 @@ dateparser>=1.2.0,<2.0.0
 # C2PA (optional)
 cryptography>=42.0.0,<44.0.0
 # c2pa-python>=0.27.0  # Uncomment if C2PA signing needed
+
+# STT Dictation (Windows)
+pywin32>=306  # win32clipboard for paste injection
+comtypes>=1.4.0,<2.0.0  # COM for audio mute (pycaw dep)
+pycaw>=20230407  # Windows audio endpoint control
 
 # Meeting Recorder
 PyAudioWPatch>=0.2.12

@@ -167,9 +167,12 @@ class STTEngine:
         try:
             import comtypes
             comtypes.CoInitialize()
-            from pycaw.pycaw import AudioUtilities
-            vol = AudioUtilities.GetSpeakers().EndpointVolume
-            vol.SetMute(mute, None)
+            try:
+                from pycaw.pycaw import AudioUtilities
+                vol = AudioUtilities.GetSpeakers().EndpointVolume
+                vol.SetMute(mute, None)
+            finally:
+                comtypes.CoUninitialize()
         except Exception:
             logger.debug("Audio mute control failed", exc_info=True)
 

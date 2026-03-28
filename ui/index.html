@@ -632,7 +632,10 @@
     <ihim-panel id="workspaces-window" class="workspaces-window" persist-key="workspacesWindowPosition">
         <div class="workspaces-header workspaces-drag-handle" data-drag-handle>
             <span class="workspaces-label"><i data-lucide="git-branch" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Workspaces</span>
-            <button class="workspaces-close" data-close-btn aria-label="Close Workspaces">&times;</button>
+            <span class="workspaces-header-actions">
+                <button class="workspaces-refresh" id="workspaces-refresh-btn" type="button" aria-label="Refresh workspaces"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i></button>
+                <button class="workspaces-close" data-close-btn aria-label="Close Workspaces">&times;</button>
+            </span>
         </div>
 
         <div class="workspaces-body" id="workspaces-body">

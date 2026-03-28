@@ -272,6 +272,20 @@ export const workspacesManager = {
         return map[status] || 'status-closed';
     },
 
+    async refresh() {
+        const btn = document.getElementById('workspaces-refresh-btn');
+        if (!btn || btn.classList.contains('is-refreshing')) return;
+        btn.classList.add('is-refreshing');
+        btn.disabled = true;
+        try {
+            await this.loadWorkspaces();
+            if (window.lucide) lucide.createIcons();
+        } finally {
+            btn.classList.remove('is-refreshing');
+            btn.disabled = false;
+        }
+    },
+
     escapeHtml(unsafe) {
         return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -308,7 +322,11 @@ export async function openWorkspacesWindow() {
     const win = document.getElementById('workspaces-window');
     if (!win) return;
     win.open();
-    if (!workspacesManager.initialized) workspacesManager.initialized = true;
+    if (!workspacesManager.initialized) {
+        workspacesManager.initialized = true;
+        const refreshBtn = document.getElementById('workspaces-refresh-btn');
+        if (refreshBtn) refreshBtn.addEventListener('click', () => workspacesManager.refresh());
+    }
     await workspacesManager.loadWorkspaces();
     if (window.lucide) lucide.createIcons();
 }

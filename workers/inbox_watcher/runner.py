@@ -156,7 +156,7 @@ OBSIDIAN_INBOX = InboxSource(
 
 # Structured sources — files stay in place, dedup via content_hash
 RESEARCH_SOURCE = InboxSource(
-    path=WORKSPACE_ROOT / "research",
+    path=WORKSPACE_ROOT / "design-notes",
     cleanup="none",
     extensions={".md"},
     recursive=True,

@@ -10,6 +10,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
+# Configure logging so tools.stt.* and other module loggers reach the console
+import logging as _logging
+_logging.basicConfig(
+    level=_logging.INFO,
+    format="%(asctime)s  %(name)-28s  %(levelname)-5s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles

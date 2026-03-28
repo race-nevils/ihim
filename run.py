@@ -99,13 +99,26 @@ def main():
     # Get the IHIM directory
     ihim_dir = Path(__file__).parent
 
+    # Source directories only — excludes .venv (7,773 .py files that cause
+    # false-positive reloads from antivirus/indexer mtime changes on Windows).
+    # StatReload ignores reload_includes/reload_excludes, so explicit
+    # reload_dirs is the only reliable fix without watchfiles installed.
+    source_dirs = [
+        str(ihim_dir / d) for d in [
+            "api", "actions", "adapters", "handlers", "tools",
+            "workers", "orchestrator", "privilege", "compliance",
+            "flight_path", "configs", "sanity", "infra", "team",
+        ]
+        if (ihim_dir / d).is_dir()
+    ]
+
     uvicorn.run(
         "api.main:app",
         host="127.0.0.1",
         port=7777,
         reload=True,
-        reload_dirs=[str(ihim_dir)],  # Watch the entire IHIM directory
-        reload_includes=["*.py", "*.html", "*.css", "*.js"],  # Watch these file types
+        reload_dirs=source_dirs,
+        reload_includes=["*.py", "*.html", "*.css", "*.js"],
         log_level="warning"
     )
 

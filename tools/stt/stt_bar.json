@@ -18,7 +18,7 @@
     "recall_hotkey": "alt+shift+z"
   },
   "audio_retention": {
-    "enabled": false,
+    "enabled": true,
     "format": "flac"
   },
   "sounds": {

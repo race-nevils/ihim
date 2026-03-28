@@ -40,6 +40,22 @@ def play_error(cfg: dict) -> None:
         _beep(300, 200)
 
 
+def play_locked(cfg: dict) -> None:
+    """Two quick high beeps when lock mode engages."""
+    if _sounds_enabled(cfg, "locked"):
+        def _double_high():
+            try:
+                import winsound
+                winsound.Beep(1200, 60)
+                import time
+                time.sleep(0.04)
+                winsound.Beep(1500, 60)
+            except Exception as exc:
+                logger.debug("Lock beep failed: %s", exc)
+
+        threading.Thread(target=_double_high, daemon=True, name="stt-lock").start()
+
+
 def play_warning(cfg: dict) -> None:
     """Double beep at the 5-minute recording mark."""
     if _sounds_enabled(cfg, "warning"):

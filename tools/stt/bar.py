@@ -135,7 +135,7 @@ class DictationBar:
     def _apply_state(self, state: str):
         """Apply a state transition on the main thread."""
         self._state = state
-        if state in ("recording", "warning"):
+        if state in ("recording", "warning", "locked"):
             self._resize_to(self._wcfg["recording_width"], self._wcfg["recording_height"])
         else:
             self._resize_to(self._wcfg["idle_width"], self._wcfg["idle_height"])
@@ -154,7 +154,7 @@ class DictationBar:
         self._pulse_phase += 0.15
         self._spinner_angle = (self._spinner_angle + 8) % 360
         # Only redraw for animated states; idle/error are static
-        if self._state in ("recording", "warning", "processing", "loading"):
+        if self._state in ("recording", "warning", "processing", "loading", "locked"):
             self._draw()
         self.root.after(50, self._tick)
 
@@ -172,7 +172,7 @@ class DictationBar:
 
         state = self._state
 
-        if state in ("recording", "warning"):
+        if state in ("recording", "warning", "locked"):
             bg = self._acfg["bg_recording"]
         else:
             bg = self._acfg["bg_idle"]
@@ -180,7 +180,9 @@ class DictationBar:
         # Draw pill shape (two semicircles + rectangle)
         self._draw_pill(c, 0, 0, w, h, r, bg)
 
-        if state == "recording":
+        if state == "locked":
+            self._draw_locked(c, w, h)
+        elif state == "recording":
             self._draw_recording(c, w, h)
         elif state == "warning":
             self._draw_warning(c, w, h)
@@ -222,6 +224,50 @@ class DictationBar:
             font=(self._acfg["font_family"], self._acfg["font_size"], "bold"),
             anchor="center",
         )
+
+    # -- locked (hands-free recording) --
+
+    def _draw_locked(self, c: tk.Canvas, w: int, h: int):
+        accent = self._acfg.get("accent_locked", self._acfg["accent"])
+        text_color = self._acfg["text_color"]
+
+        # Steady blue dot (left) — not pulsing, indicates stable lock
+        dot_r = 6
+        cx = 28
+        cy = h // 2
+        c.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r, fill=accent, outline="")
+
+        # "Locked" label
+        c.create_text(
+            90, h // 2,
+            text="Locked",
+            fill=text_color,
+            font=(self._acfg["font_family"], self._acfg["font_size"] - 1, "bold"),
+            anchor="center",
+        )
+
+        # 5-bar volume meter (same as recording — proves mic is live)
+        with self._rms_lock:
+            rms = self._rms
+
+        bar_count = 5
+        bar_w = 6
+        bar_gap = 4
+        meter_w = bar_count * bar_w + (bar_count - 1) * bar_gap
+        meter_x = w - meter_w - 28
+        max_bar_h = h - 18
+
+        for i in range(bar_count):
+            threshold = (i + 0.5) / bar_count
+            level = max(0.0, min(1.0, rms / max(threshold, 0.01)))
+            bar_h = max(4, int(max_bar_h * level))
+            bx = meter_x + i * (bar_w + bar_gap)
+            by = cy - bar_h // 2
+            c.create_rectangle(
+                bx, by, bx + bar_w, by + bar_h,
+                fill=accent,
+                outline="",
+            )
 
     # -- recording --
 

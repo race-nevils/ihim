@@ -115,7 +115,7 @@ def main() -> None:
     def on_state_with_rms(status: str):
         _orig_cb(status)
         # Defer poll start/stop to main thread (callback fires from engine thread)
-        if status in ("recording", "warning"):
+        if status in ("recording", "warning", "locked"):
             bar.root.after(0, _start_rms_poll)
         else:
             bar.root.after(0, _stop_rms_poll)

@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = Path(__file__).parent / "stt_bar.json"
 
 DEFAULT_CONFIG = {
-    "hotkey": ["Key.ctrl_r", "Key.shift_r"],
+    "hotkey": ["Key.ctrl_l", "Key.cmd"],
+    "lock_key": "l",
+    "stop_key": "Key.ctrl_r",
     "model": "large-v3-turbo",
     "idle_timeout_s": 600,
     "position": "bottom_center",

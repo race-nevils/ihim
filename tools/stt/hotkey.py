@@ -4,6 +4,10 @@ Reuses stale-key guard pattern from tools/capture_widget/widget.pyw.
 Default hotkey: Left Ctrl + Windows key chord (hold both to record,
 release either to process).
 
+Lock mode (Sticky Keys pattern): while recording, press the lock key
+to keep recording after releasing the chord. Press the stop key to
+finish and trigger the pipeline.
+
 Supports single-key mode (str) and chord mode (tuple of str).
 """
 
@@ -30,13 +34,20 @@ class HotkeyListener:
         on_start: Callable[[], None],
         on_stop: Callable[[], None],
         hotkey: Union[str, Tuple[str, ...]] = DEFAULT_HOTKEY,
+        lock_key: Optional[str] = None,
+        stop_key: Optional[str] = None,
+        on_locked: Optional[Callable[[], None]] = None,
     ):
         self._on_start = on_start
         self._on_stop = on_stop
+        self._on_locked = on_locked
         self._hotkey = hotkey
         self._is_chord = isinstance(hotkey, (tuple, list))
+        self._lock_key_str = lock_key
+        self._stop_key_str = stop_key
         self._listener: Optional[object] = None
         self._recording = False
+        self._locked = False
         self._lock = threading.Lock()
 
         # Stale-key guard state
@@ -59,6 +70,10 @@ class HotkeyListener:
         else:
             target_keys = frozenset([self._resolve_key(self._hotkey)])
 
+        # Resolve lock/stop keys (None if not configured)
+        lock_key = self._resolve_key(self._lock_key_str) if self._lock_key_str else None
+        stop_key = self._resolve_key(self._stop_key_str) if self._stop_key_str else None
+
         def on_press(key):
             try:
                 now = time.time()
@@ -68,9 +83,25 @@ class HotkeyListener:
                 self._last_key_time = now
                 self._current_keys.add(key)
 
-                # Check if ALL target keys are currently held
-                if target_keys.issubset(self._current_keys):
-                    with self._lock:
+                with self._lock:
+                    # Lock mode: stop_key pressed while locked → stop recording
+                    if self._locked and stop_key is not None and key == stop_key:
+                        self._locked = False
+                        self._recording = False
+                        self._on_stop()
+                        return
+
+                    # Lock mode: lock_key pressed while recording (not yet locked) → lock
+                    if (self._recording and not self._locked
+                            and lock_key is not None and key == lock_key):
+                        self._locked = True
+                        logger.info("Recording locked — release chord, press stop key to finish")
+                        if self._on_locked:
+                            self._on_locked()
+                        return
+
+                    # Normal: check if ALL target keys are currently held
+                    if target_keys.issubset(self._current_keys):
                         if not self._recording:
                             self._recording = True
                             self._on_start()
@@ -80,7 +111,10 @@ class HotkeyListener:
         def on_release(key):
             try:
                 self._current_keys.discard(key)
-                # If recording and ANY target key released → stop
+                # If locked, releasing chord keys does NOT stop recording
+                if self._locked:
+                    return
+                # Normal: if recording and ANY target key released → stop
                 if key in target_keys:
                     with self._lock:
                         if self._recording:
@@ -97,7 +131,8 @@ class HotkeyListener:
         self._listener.daemon = True
         self._listener.start()
         hotkey_display = " + ".join(self._hotkey) if self._is_chord else self._hotkey
-        logger.info("Hotkey listener started: %s (hold to record)", hotkey_display)
+        lock_display = f", lock: {self._lock_key_str}, stop: {self._stop_key_str}" if lock_key else ""
+        logger.info("Hotkey listener started: %s (hold to record%s)", hotkey_display, lock_display)
 
     def stop(self) -> None:
         """Stop the hotkey listener."""
@@ -105,6 +140,7 @@ class HotkeyListener:
             self._listener.stop()
             self._listener = None
             self._recording = False
+            self._locked = False
             logger.info("Hotkey listener stopped")
 
     @property
@@ -114,6 +150,10 @@ class HotkeyListener:
     @property
     def is_recording(self) -> bool:
         return self._recording
+
+    @property
+    def is_locked(self) -> bool:
+        return self._locked
 
     @staticmethod
     def _resolve_key(hotkey_str: str):

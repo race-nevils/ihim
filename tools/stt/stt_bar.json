@@ -1,7 +1,7 @@
 {
   "hotkey": [
-    "Key.ctrl_r",
-    "Key.shift_r"
+    "Key.ctrl_l",
+    "Key.cmd"
   ],
   "model": "large-v3-turbo",
   "idle_timeout_s": 600,

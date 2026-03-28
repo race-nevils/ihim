@@ -130,6 +130,9 @@ class STTEngine:
                 on_start=self._on_record_start,
                 on_stop=self._on_record_stop,
                 hotkey=self._hotkey,
+                lock_key=self._cfg.get("lock_key"),
+                stop_key=self._cfg.get("stop_key"),
+                on_locked=self._on_record_locked,
             )
             self._listener.start()
             # Check if model is already loaded
@@ -151,6 +154,8 @@ class STTEngine:
 
     @property
     def status(self) -> str:
+        if self._listener and self._listener.is_locked:
+            return "locked"
         if self._listener and self._listener.is_recording:
             return "recording"
         return self._status
@@ -218,6 +223,10 @@ class STTEngine:
         """Called when recording hits the max time limit — auto-stop."""
         logger.info("Recording timeout: auto-stopping after max duration")
         self._cancel_recording_timers()
+        # Reset locked state on the listener so it doesn't stay stale
+        if self._listener:
+            self._listener._locked = False
+            self._listener._recording = False
         try:
             self._mic.stop()
         except Exception:
@@ -227,6 +236,15 @@ class STTEngine:
             daemon=True,
             name="stt-pipeline-timeout",
         ).start()
+
+    def _on_record_locked(self) -> None:
+        """Called by hotkey listener when lock key is pressed during recording."""
+        self._set_status("locked")
+        try:
+            from tools.stt.sounds import play_locked
+            play_locked(self._cfg)
+        except Exception:
+            pass
 
     def _on_record_start(self) -> None:
         """Called by hotkey listener on key press.

@@ -6105,6 +6105,16 @@ button:focus-visible {
     background: rgba(250, 179, 135, 0.2);
     color: #fab387;
 }
+.stt-status-badge.status-locked {
+    background: rgba(137, 180, 250, 0.3);
+    color: #89b4fa;
+    animation: stt-pulse 1s ease-in-out infinite;
+}
+.stt-status-badge.status-warning {
+    background: rgba(250, 179, 135, 0.3);
+    color: #fab387;
+    animation: stt-pulse 1s ease-in-out infinite;
+}
 .stt-status-badge.status-loading {
     background: rgba(249, 226, 175, 0.2);
     color: #f9e2af;

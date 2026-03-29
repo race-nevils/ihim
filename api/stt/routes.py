@@ -178,6 +178,6 @@ async def stt_status():
     return StatusResponse(
         active=engine._listener is not None and engine._listener.is_running,
         status=engine.status,
-        model_loaded="small" in _model_cache,
+        model_loaded=bool(_model_cache),
         last_result_id=last_id,
     )

@@ -3,6 +3,8 @@
     "Key.ctrl_l",
     "Key.cmd"
   ],
+  "lock_key": "Key.ctrl_r",
+  "stop_key": "Key.ctrl_r",
   "model": "large-v3-turbo",
   "idle_timeout_s": 600,
   "position": "bottom_center",

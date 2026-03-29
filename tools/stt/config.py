@@ -14,7 +14,7 @@ CONFIG_PATH = Path(__file__).parent / "stt_bar.json"
 
 DEFAULT_CONFIG = {
     "hotkey": ["Key.ctrl_l", "Key.cmd"],
-    "lock_key": "l",
+    "lock_key": "Key.ctrl_r",
     "stop_key": "Key.ctrl_r",
     "model": "large-v3-turbo",
     "idle_timeout_s": 600,

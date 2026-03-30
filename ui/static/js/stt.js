@@ -62,7 +62,7 @@ function renderStatus(data) {
     if (!badge) return;
 
     badge.classList.remove('status-cold', 'status-warm', 'status-recording', 'status-processing', 'status-loading',
-        'status-locked', 'status-warning');
+        'status-locked');
 
     switch (data.status) {
         case 'warm':
@@ -76,10 +76,6 @@ function renderStatus(data) {
         case 'locked':
             badge.textContent = 'LOCKED';
             badge.classList.add('status-locked');
-            break;
-        case 'warning':
-            badge.textContent = 'REC';
-            badge.classList.add('status-warning');
             break;
         case 'processing':
             badge.textContent = 'PROCESSING';

@@ -54,19 +54,3 @@ def play_locked(cfg: dict) -> None:
                 logger.debug("Lock beep failed: %s", exc)
 
         threading.Thread(target=_double_high, daemon=True, name="stt-lock").start()
-
-
-def play_warning(cfg: dict) -> None:
-    """Double beep at the 5-minute recording mark."""
-    if _sounds_enabled(cfg, "warning"):
-        def _double():
-            try:
-                import winsound
-                winsound.Beep(440, 100)
-                import time
-                time.sleep(0.05)
-                winsound.Beep(440, 100)
-            except Exception as exc:
-                logger.debug("Warning beep failed: %s", exc)
-
-        threading.Thread(target=_double, daemon=True, name="stt-warning").start()

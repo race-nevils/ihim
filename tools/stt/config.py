@@ -35,7 +35,6 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "success": True,
         "error": True,
-        "warning": True,
     },
     "window": {
         "idle_width": 200,
@@ -49,7 +48,6 @@ DEFAULT_CONFIG = {
         "bg_recording": "#313244",
         "accent": "#89b4fa",
         "accent_recording": "#f38ba8",
-        "accent_warning": "#fab387",
         "accent_error": "#f38ba8",
         "accent_loading": "#f9e2af",
         "text_color": "#cdd6f4",

@@ -80,6 +80,11 @@ class HotkeyListener:
                 # Stale-key guard: clear if no activity for 2s or set suspiciously large
                 if (now - self._last_key_time > 2.0) or len(self._current_keys) > 4:
                     self._current_keys.clear()
+                    # Clear stuck recording state (e.g. system slept mid-recording)
+                    with self._lock:
+                        if self._recording and not self._locked:
+                            logger.info("Stale-key guard: cleared stuck recording state")
+                            self._recording = False
                 self._last_key_time = now
                 self._current_keys.add(key)
 

@@ -20,10 +20,7 @@ DEFAULT_CONFIG = {
     "idle_timeout_s": 600,
     "position": "bottom_center",
     "offset_y": 80,
-    "recording": {
-        "max_seconds": 360,
-        "warning_seconds": 300,
-    },
+    "recording": {},
     "injection": {
         "method": "auto",
         "focus_delay_s": 0.15,

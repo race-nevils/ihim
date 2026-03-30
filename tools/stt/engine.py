@@ -2,7 +2,12 @@
 
 Ties together audio capture, Whisper transcription, deterministic cleanup,
 clipboard injection, and JSONL logging. Manages the hotkey listener lifecycle,
-VRAM lazy loading/unloading, recording timeouts, and app-context detection.
+VRAM lazy loading/unloading, and app-context detection.
+
+No artificial recording time limits — this is local processing with zero
+marginal cost. Hold-to-talk stops when you release; locked mode stops when
+you press the stop key. faster-whisper handles arbitrarily long audio via
+its native 30-second sliding window chunking.
 """
 
 import logging
@@ -94,12 +99,10 @@ class STTEngine:
         self._listener: Optional[HotkeyListener] = None
         self._lock = threading.Lock()
         self._last_result: Optional[dict] = None
-        self._status = "cold"  # cold | warm | recording | processing | warning | error
+        self._status = "cold"  # cold | warm | recording | processing | locked | error
         self._on_state_change: Optional[Callable[[str], None]] = None
         self._app_context: str = "prose"  # captured at record start
         self._idle_timer: Optional[threading.Timer] = None
-        self._warning_timer: Optional[threading.Timer] = None
-        self._timeout_timer: Optional[threading.Timer] = None
         self._warming_up = False
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
@@ -146,7 +149,6 @@ class STTEngine:
             if self._listener:
                 self._listener.stop()
                 self._listener = None
-            self._cancel_recording_timers()
             if self._idle_timer is not None:
                 self._idle_timer.cancel()
                 self._idle_timer = None
@@ -181,14 +183,6 @@ class STTEngine:
         except Exception:
             logger.debug("Audio mute control failed", exc_info=True)
 
-    def _cancel_recording_timers(self) -> None:
-        """Cancel warning and timeout timers."""
-        for timer in (self._warning_timer, self._timeout_timer):
-            if timer is not None:
-                timer.cancel()
-        self._warning_timer = None
-        self._timeout_timer = None
-
     def _reset_idle_timer(self) -> None:
         """Reset the VRAM idle unload timer."""
         if self._idle_timer is not None:
@@ -209,37 +203,10 @@ class STTEngine:
             logger.debug("Model unload failed (may not be loaded): %s", e)
         self._set_status("cold")
 
-    def _on_recording_warning(self) -> None:
-        """Called when recording nears the time limit."""
-        logger.info("Recording warning: approaching time limit")
-        self._set_status("warning")
-        try:
-            from tools.stt.sounds import play_warning
-            play_warning(self._cfg)
-        except Exception:
-            pass
-
-    def _on_recording_timeout(self) -> None:
-        """Called when recording hits the max time limit — auto-stop."""
-        logger.info("Recording timeout: auto-stopping after max duration")
-        self._cancel_recording_timers()
-        # Reset locked state on the listener so it doesn't stay stale
-        if self._listener:
-            self._listener._locked = False
-            self._listener._recording = False
-        try:
-            self._mic.stop()
-        except Exception:
-            pass
-        threading.Thread(
-            target=self._run_pipeline,
-            daemon=True,
-            name="stt-pipeline-timeout",
-        ).start()
-
     def _on_record_locked(self) -> None:
         """Called by hotkey listener when lock key is pressed during recording."""
         self._set_status("locked")
+        logger.info("Recording locked — hands-free, no time limit")
         try:
             from tools.stt.sounds import play_locked
             play_locked(self._cfg)
@@ -284,19 +251,6 @@ class STTEngine:
             self._mute_audio(True)
             self._mic.start()
 
-            # Start recording timers
-            rec_cfg = self._cfg.get("recording", {})
-            warn_s = rec_cfg.get("warning_seconds", 300)
-            max_s = rec_cfg.get("max_seconds", 360)
-
-            self._warning_timer = threading.Timer(warn_s, self._on_recording_warning)
-            self._warning_timer.daemon = True
-            self._warning_timer.start()
-
-            self._timeout_timer = threading.Timer(max_s, self._on_recording_timeout)
-            self._timeout_timer.daemon = True
-            self._timeout_timer.start()
-
         except Exception as e:
             logger.error("Failed to start mic capture: %s", e)
             self._set_status("warm")
@@ -325,7 +279,6 @@ class STTEngine:
         # If not recording (e.g. cold press released after warmup finished), skip
         if not self._mic.is_recording:
             return
-        self._cancel_recording_timers()
         threading.Thread(
             target=self._run_pipeline,
             daemon=True,

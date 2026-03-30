@@ -156,6 +156,9 @@ class STTEngine:
 
     @property
     def status(self) -> str:
+        # Warmup takes priority — don't let stale is_recording override
+        if self._warming_up:
+            return "loading"
         if self._listener and self._listener.is_locked:
             return "locked"
         if self._listener and self._listener.is_recording:
@@ -225,6 +228,8 @@ class STTEngine:
 
             # Cold press — load model only, don't record
             if not is_model_loaded(model_name):
+                if self._warming_up:
+                    return  # Already warming up, don't spawn another thread
                 self._set_status("loading")
                 logger.info("Cold start — loading model '%s'", model_name)
                 self._warming_up = True

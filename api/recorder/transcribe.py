@@ -34,8 +34,6 @@ _model_lock = threading.Lock()
 # Detect sleep by comparing monotonic time (includes sleep on Python 3.7+)
 # against QueryUnbiasedInterruptTime (excludes sleep).  If the gap exceeds
 # a threshold, the system slept and cached GPU models must be discarded.
-_model_stamps: dict = {}  # cache_key → (monotonic_s, unbiased_100ns)
-
 if sys.platform == "win32":
     def _unbiased_100ns() -> int:
         """System uptime in 100ns units, excluding sleep/hibernate."""
@@ -45,15 +43,29 @@ if sys.platform == "win32":
 else:
     _unbiased_100ns = None  # type: ignore[assignment]
 
+# System-level sleep baseline — survives model unload/eviction.
+# Unlike per-model stamps, this always has a valid baseline.
+_last_active_mono: float = time.monotonic()
+_last_active_unbiased: int = _unbiased_100ns() if _unbiased_100ns is not None else 0
 
-def _slept_since(cache_key, threshold_s: float = 30.0) -> bool:
-    """True if the system slept for longer than *threshold_s* since the model was cached."""
-    if _unbiased_100ns is None or cache_key not in _model_stamps:
+
+def _check_system_sleep(threshold_s: float = 30.0) -> bool:
+    """True if system slept since last check. Updates baseline on every call.
+
+    Compares monotonic time (includes sleep) against
+    QueryUnbiasedInterruptTime (excludes sleep). The gap between them
+    is how long the system was asleep.
+    """
+    global _last_active_mono, _last_active_unbiased
+    if _unbiased_100ns is None:
         return False
-    mono_then, unbiased_then = _model_stamps[cache_key]
-    mono_elapsed = time.monotonic() - mono_then
-    unbiased_elapsed = (_unbiased_100ns() - unbiased_then) / 10_000_000
-    return (mono_elapsed - unbiased_elapsed) > threshold_s
+    mono_now = time.monotonic()
+    unbiased_now = _unbiased_100ns()
+    mono_gap = mono_now - _last_active_mono
+    unbiased_gap = (unbiased_now - _last_active_unbiased) / 10_000_000
+    _last_active_mono = mono_now
+    _last_active_unbiased = unbiased_now
+    return (mono_gap - unbiased_gap) > threshold_s
 
 # Cached VRAM query (nvidia-smi is slow; cache for 30s)
 _vram_cache: dict = {"value": None, "expires": 0}
@@ -123,43 +135,48 @@ def _get_model(model_size: str = "small"):
     at different compute types are cached separately.  If the model was
     previously unloaded from GPU via ``unload_model()``, it is reloaded
     transparently using CTranslate2's ``load_model()`` API.
+
+    The WhisperModel constructor runs OUTSIDE _model_lock so a hung
+    constructor (stale CUDA context after sleep) cannot deadlock
+    unload_model() or other callers.
     """
     device, compute_type = _pick_device(model_size)
     cache_key = (model_size, device, compute_type)
 
     # Flush stale CUDA context after system sleep (faster-whisper #829).
-    # Don't call unload_model() on the stale object — it can hang when
-    # the CUDA driver is in a post-sleep state.  Just drop the reference.
-    if cache_key in _model_cache and _slept_since(cache_key):
+    # System-level detection works even after idle-unload evicts the cache.
+    if _check_system_sleep():
         with _model_lock:
-            _model_cache.pop(cache_key, None)
-            _model_stamps.pop(cache_key, None)
-        print(f"[recorder] Sleep detected — flushed stale '{model_size}' model")
+            _model_cache.clear()
+        print("[recorder] Sleep detected — flushed all cached models")
 
-    if cache_key in _model_cache:
-        cached = _model_cache[cache_key]
-        if not cached.model.model_is_loaded:
-            print(f"[recorder] Reloading '{model_size}' on {device} ({compute_type})...")
-            cached.model.load_model()
-            print(f"[recorder] Model '{model_size}' reloaded on {device}.")
-        return cached
-
+    # Fast path: cache hit (lock protects read + potential CTranslate2 reload)
     with _model_lock:
         if cache_key in _model_cache:
             cached = _model_cache[cache_key]
             if not cached.model.model_is_loaded:
+                print(f"[recorder] Reloading '{model_size}' on {device} ({compute_type})...")
                 cached.model.load_model()
+                print(f"[recorder] Model '{model_size}' reloaded on {device}.")
             return cached
 
-        from faster_whisper import WhisperModel
+    # Slow path: construct new model OUTSIDE _model_lock.
+    # If two threads race here, one model is discarded — harmless for
+    # a single-user app, and far better than holding the lock during a
+    # constructor that can hang on post-sleep CUDA state.
+    from faster_whisper import WhisperModel
 
-        print(f"[recorder] Loading faster-whisper '{model_size}' on {device} ({compute_type})...")
-        model = WhisperModel(model_size, device=device, compute_type=compute_type)
-        _model_cache[cache_key] = model
-        if _unbiased_100ns is not None:
-            _model_stamps[cache_key] = (time.monotonic(), _unbiased_100ns())
-        print(f"[recorder] Model '{model_size}' loaded on {device}.")
-        return model
+    print(f"[recorder] Loading faster-whisper '{model_size}' on {device} ({compute_type})...")
+    model = WhisperModel(model_size, device=device, compute_type=compute_type)
+
+    with _model_lock:
+        if cache_key not in _model_cache:
+            _model_cache[cache_key] = model
+        else:
+            model = _model_cache[cache_key]
+
+    print(f"[recorder] Model '{model_size}' loaded on {device}.")
+    return model
 
 
 def _deloop_text(text: str) -> str:

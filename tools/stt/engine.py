@@ -242,7 +242,13 @@ class STTEngine:
                 ).start()
                 return
 
-            # Warm press — badge first, then everything else
+            # Warm press — normal recording
+            # Capture app context BEFORE recording
+            from tools.stt.app_context import get_active_app_context
+            self._app_context = get_active_app_context()
+            logger.debug("App context at record start: %s", self._app_context)
+
+            # Cancel idle timer while recording
             if self._idle_timer is not None:
                 self._idle_timer.cancel()
                 self._idle_timer = None
@@ -250,11 +256,6 @@ class STTEngine:
             self._set_status("recording")
             self._mute_audio(True)
             self._mic.start()
-
-            # Capture app context AFTER status update (badge responds instantly)
-            from tools.stt.app_context import get_active_app_context
-            self._app_context = get_active_app_context()
-            logger.debug("App context at record start: %s", self._app_context)
 
             # Start streaming transcriber
             try:

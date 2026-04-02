@@ -5,7 +5,7 @@
  */
 import { API, escapeHtml } from './app.js';
 
-let statusPollInterval = null;
+let statusSource = null;
 let lastDictationId = null;
 
 // =====================
@@ -39,22 +39,15 @@ export function toggleSTTWindow() {
 // =====================
 
 function startStatusPolling() {
-    if (statusPollInterval) return;
-    pollStatus();
-    statusPollInterval = setInterval(pollStatus, 2000);
+    if (statusSource) return;
+    statusSource = new EventSource(`${API}/api/stt/status/stream`);
+    statusSource.onmessage = (e) => {
+        try { renderStatus(JSON.parse(e.data)); } catch {}
+    };
 }
 
 function stopStatusPolling() {
-    if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; }
-}
-
-async function pollStatus() {
-    try {
-        const res = await fetch(`${API}/api/stt/status`);
-        if (!res.ok) return;
-        const data = await res.json();
-        renderStatus(data);
-    } catch (e) { /* silent — polling resilience */ }
+    if (statusSource) { statusSource.close(); statusSource = null; }
 }
 
 function renderStatus(data) {

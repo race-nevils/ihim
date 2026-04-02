@@ -150,13 +150,13 @@ class DictationBar:
     # ------------------------------------------------------------------
 
     def _tick(self):
-        """~20 FPS animation tick — only redraws when state has animation."""
-        self._pulse_phase += 0.15
-        self._spinner_angle = (self._spinner_angle + 8) % 360
+        """~60 FPS tick — keeps mainloop responsive to cross-thread state updates."""
+        self._pulse_phase += 0.05
+        self._spinner_angle = (self._spinner_angle + 2.5) % 360
         # Only redraw for animated states; idle/error are static
         if self._state in ("recording", "processing", "loading", "locked"):
             self._draw()
-        self.root.after(50, self._tick)
+        self.root.after(16, self._tick)
 
     # ------------------------------------------------------------------
     # Drawing

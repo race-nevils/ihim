@@ -103,6 +103,7 @@ class STTEngine:
         self._on_state_change: Optional[Callable[[str], None]] = None
         self._app_context: str = "prose"  # captured at record start
         self._idle_timer: Optional[threading.Timer] = None
+        self._streamer = None
         self._warming_up = False
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
@@ -256,6 +257,15 @@ class STTEngine:
             self._mute_audio(True)
             self._mic.start()
 
+            # Start streaming transcriber
+            try:
+                from tools.stt.streaming import StreamingTranscriber
+                self._streamer = StreamingTranscriber(self, model_name)
+                self._streamer.start()
+            except Exception as e:
+                logger.warning("Failed to start streamer: %s", e)
+                self._streamer = None
+
         except Exception as e:
             logger.error("Failed to start mic capture: %s", e)
             self._set_status("warm")
@@ -298,11 +308,52 @@ class STTEngine:
         dictation_id = uuid.uuid4().hex[:8]
 
         try:
-            # 1. Stop mic + transcribe (single Whisper pass — no seam artifacts)
+            # 1. Stop streamer FIRST (needs mic buffers for final run)
             model_name = self._cfg.get("model", "large-v3-turbo")
-            wav_path = self._mic.stop()
-            from tools.stt.transcribe import transcribe
-            raw_text = transcribe(wav_path, model_size=model_name)
+            streamer = self._streamer
+            self._streamer = None
+            streaming_text = None
+
+            if streamer:
+                streamer.stop()
+                sr = streamer.get_result()
+                if sr and sr.run_count >= 1 and sr.text.strip():
+                    # Check tail — how much audio did streaming miss?
+                    capture = self._mic._capture
+                    if capture is not None:
+                        total_blocks = len(list(capture._mic_buffers))
+                        tail_blocks = total_blocks - sr.blocks_covered
+                        native_rate = int(capture._mic_info["sample_rate"])
+                        # Estimate tail duration from block count (~0.5s per block)
+                        import numpy as np
+                        tail_samples = sum(
+                            len(b) for b in list(capture._mic_buffers)[sr.blocks_covered:]
+                        )
+                        tail_duration = tail_samples / native_rate if native_rate else 0
+                        if tail_duration < 1.0:
+                            streaming_text = sr.text
+                            logger.info(
+                                "STREAMING FAST PATH: %d words from %d runs, "
+                                "tail=%.2fs (< 1.0s threshold)",
+                                len(streaming_text.split()), sr.run_count, tail_duration,
+                            )
+
+            # 2. Get transcription — fast path or full pass
+            if streaming_text:
+                raw_text = streaming_text
+                retain_audio = self._cfg.get("audio_retention", {}).get("enabled", False)
+                if retain_audio:
+                    wav_path = self._mic.stop()
+                else:
+                    self._mic.stop_fast()
+            else:
+                wav_path = self._mic.stop()
+                from tools.stt.transcribe import transcribe
+                raw_text = transcribe(wav_path, model_size=model_name)
+                if streamer and streamer.get_result():
+                    logger.info("FULL PASS: streaming tail too long, ran full transcription")
+                else:
+                    logger.info("FULL PASS: no streaming result (short recording)")
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")

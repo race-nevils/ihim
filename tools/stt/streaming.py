@@ -130,11 +130,28 @@ class StreamingTranscriber:
         while not self._stop_event.is_set():
             self._stop_event.wait(self._interval)
             if self._stop_event.is_set():
+                # Final run — capture any audio that arrived since last result
+                self._maybe_final_run()
                 break
             try:
                 self._run_once()
             except Exception as e:
                 logger.warning("Streaming run failed: %s", e)
+
+    def _maybe_final_run(self) -> None:
+        """One last transcription with all current buffers if significant new audio exists."""
+        try:
+            capture = self._engine._mic._capture
+            if capture is None:
+                return
+            total_blocks = len(list(capture._mic_buffers))
+            covered = self._result.blocks_covered if self._result else 0
+            new_blocks = total_blocks - covered
+            if new_blocks >= 2:  # ~1s of new audio worth re-running
+                logger.info("FINAL RUN: %d new blocks since last result", new_blocks)
+                self._run_once()
+        except Exception as e:
+            logger.warning("Final streaming run failed: %s", e)
 
     def _run_once(self) -> None:
         """Single iteration: snapshot buffers → WAV → transcribe."""

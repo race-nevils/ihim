@@ -1,13 +1,16 @@
 """FastAPI router for the STT dictation system.
 
-Endpoints: history, correct, stats, start, status.
+Endpoints: history, correct, stats, start, status, status/stream (SSE).
 """
 
 import asyncio
+import json
 import logging
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 from api.errors import problem
 
 from api.stt.models import (
@@ -19,6 +22,53 @@ from api.stt.models import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/stt", tags=["stt"])
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SSE STATUS BROADCAST
+# ═══════════════════════════════════════════════════════════════════════
+
+_sse_queues: set[asyncio.Queue] = set()
+_sse_loop: Optional[asyncio.AbstractEventLoop] = None
+_sse_callback_installed = False
+
+
+def _build_status_payload(status: str) -> str:
+    """Build JSON payload matching StatusResponse shape."""
+    from tools.stt.engine import get_engine
+    from api.recorder.transcribe import _model_cache
+    engine = get_engine()
+    last_id = engine.last_result["id"] if engine.last_result else None
+    return json.dumps({
+        "status": status,
+        "active": engine._listener is not None and engine._listener.is_running,
+        "model_loaded": bool(_model_cache),
+        "last_result_id": last_id,
+    })
+
+
+def _broadcast_status(status: str) -> None:
+    """Push status to all SSE clients. Called from engine threads."""
+    loop = _sse_loop
+    if loop is None or not _sse_queues:
+        return
+    payload = _build_status_payload(status)
+    for q in list(_sse_queues):
+        try:
+            loop.call_soon_threadsafe(q.put_nowait, payload)
+        except Exception:
+            pass
+
+
+def _install_sse_callback() -> None:
+    """Wire engine state changes to SSE broadcast (idempotent)."""
+    global _sse_callback_installed, _sse_loop
+    if _sse_callback_installed:
+        return
+    _sse_callback_installed = True
+    _sse_loop = asyncio.get_running_loop()
+    from tools.stt.engine import get_engine
+    get_engine().set_state_callback(_broadcast_status)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -165,6 +215,36 @@ async def stt_stop(request: Request):
     except Exception as e:
         logger.error("Failed to stop STT engine: %s", e)
         return problem(503, f"Failed to stop STT: {e}", instance=request.url.path)
+
+
+@router.get("/status/stream")
+async def stt_status_stream():
+    """SSE stream — pushes status changes instantly."""
+    _install_sse_callback()
+
+    q: asyncio.Queue[str] = asyncio.Queue()
+    _sse_queues.add(q)
+
+    async def generate():
+        try:
+            # Send current status immediately on connect
+            from tools.stt.engine import get_engine
+            engine = get_engine()
+            yield f"data: {_build_status_payload(engine.status)}\n\n"
+
+            while True:
+                payload = await q.get()
+                yield f"data: {payload}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _sse_queues.discard(q)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/status", response_model=StatusResponse)

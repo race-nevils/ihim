@@ -166,7 +166,7 @@ RESEARCH_SOURCE = InboxSource(
 )
 
 EDGEFLOW_SOURCE = InboxSource(
-    path=WORKSPACE_ROOT / "EdgeFlow AI LLC",
+    path=WORKSPACE_ROOT / "<business>",
     cleanup="none",
     extensions={".md"},
     structured=True,
@@ -174,7 +174,7 @@ EDGEFLOW_SOURCE = InboxSource(
 )
 
 LEGAL_SOURCE = InboxSource(
-    path=WORKSPACE_ROOT / "Legal",
+    path=WORKSPACE_ROOT / "<business>" / "Legal",
     cleanup="none",
     extensions={".md"},
     recursive=True,
@@ -183,7 +183,7 @@ LEGAL_SOURCE = InboxSource(
 )
 
 YT_SOURCE = InboxSource(
-    path=WORKSPACE_ROOT / "YT Transcriptions",
+    path=WORKSPACE_ROOT / "yt-transcriptions",
     cleanup="none",
     extensions={".txt", ".md"},
     structured=True,
@@ -191,7 +191,7 @@ YT_SOURCE = InboxSource(
 )
 
 MEETING_SUMMARY_SOURCE = InboxSource(
-    path=WORKSPACE_ROOT / "Meeting Summary",
+    path=WORKSPACE_ROOT / "meeting-summary",
     cleanup="none",
     extensions={".md"},
     structured=True,

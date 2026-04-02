@@ -72,9 +72,10 @@ class InboxWatcher:
         self.failed_path = self.processed_path.parent / "failed"
         self._warm_up_event = threading.Event()
 
-        # Ensure directories exist
+        # Ensure inbox directories exist (only for sources that move files in)
         for source in self.sources:
-            source.path.mkdir(parents=True, exist_ok=True)
+            if source.cleanup == "move":
+                source.path.mkdir(parents=True, exist_ok=True)
         self.processed_path.mkdir(parents=True, exist_ok=True)
         self.failed_path.mkdir(parents=True, exist_ok=True)
 

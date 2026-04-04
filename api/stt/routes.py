@@ -31,6 +31,8 @@ router = APIRouter(prefix="/api/stt", tags=["stt"])
 _sse_queues: set[asyncio.Queue] = set()
 _sse_loop: Optional[asyncio.AbstractEventLoop] = None
 _sse_callback_installed = False
+_SSE_HEARTBEAT_S = 30.0
+_SSE_MAX_QUEUES = 50
 
 
 def _build_status_payload(status: str) -> str:
@@ -61,12 +63,16 @@ def _broadcast_status(status: str) -> None:
 
 
 def _install_sse_callback() -> None:
-    """Wire engine state changes to SSE broadcast (idempotent)."""
+    """Wire engine state changes to SSE broadcast (idempotent).
+
+    Always refreshes _sse_loop — after sleep/wake the event loop reference
+    can go stale, causing call_soon_threadsafe to silently fail.
+    """
     global _sse_callback_installed, _sse_loop
+    _sse_loop = asyncio.get_running_loop()
     if _sse_callback_installed:
         return
     _sse_callback_installed = True
-    _sse_loop = asyncio.get_running_loop()
     from tools.stt.engine import get_engine
     get_engine().set_state_callback(_broadcast_status)
 
@@ -219,22 +225,40 @@ async def stt_stop(request: Request):
 
 @router.get("/status/stream")
 async def stt_status_stream():
-    """SSE stream — pushes status changes instantly."""
+    """SSE stream — pushes status changes instantly.
+
+    Heartbeat timeout ensures dead queues get cleaned up even if
+    the ASGI server doesn't deliver CancelledError on disconnect.
+    """
     _install_sse_callback()
+
+    # Evict oldest queues if at capacity
+    while len(_sse_queues) >= _SSE_MAX_QUEUES:
+        try:
+            stale = next(iter(_sse_queues))
+            _sse_queues.discard(stale)
+            logger.debug("SSE queue evicted (at cap %d)", _SSE_MAX_QUEUES)
+        except StopIteration:
+            break
 
     q: asyncio.Queue[str] = asyncio.Queue()
     _sse_queues.add(q)
 
     async def generate():
         try:
-            # Send current status immediately on connect
             from tools.stt.engine import get_engine
             engine = get_engine()
             yield f"data: {_build_status_payload(engine.status)}\n\n"
 
             while True:
-                payload = await q.get()
-                yield f"data: {payload}\n\n"
+                try:
+                    payload = await asyncio.wait_for(
+                        q.get(), timeout=_SSE_HEARTBEAT_S,
+                    )
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    # Keepalive — if client is gone, yield raises on write
+                    yield ": keepalive\n\n"
         except asyncio.CancelledError:
             pass
         finally:
@@ -261,3 +285,27 @@ async def stt_status():
         model_loaded=bool(_model_cache),
         last_result_id=last_id,
     )
+
+
+@router.get("/health")
+async def stt_health():
+    """STT subsystem health — exposes resource counts for monitoring."""
+    import threading as _threading
+    from tools.stt.engine import get_engine
+    from api.recorder.transcribe import _model_cache
+
+    engine = get_engine()
+    stt_threads = [
+        t.name for t in _threading.enumerate() if "stt" in t.name.lower()
+    ]
+    return {
+        "sse_queue_count": len(_sse_queues),
+        "sse_queue_cap": _SSE_MAX_QUEUES,
+        "sse_loop_alive": _sse_loop is not None and _sse_loop.is_running(),
+        "listener_alive": (
+            engine._listener is not None and engine._listener.is_running
+        ),
+        "model_cache_keys": list(str(k) for k in _model_cache.keys()),
+        "stt_threads": stt_threads,
+        "total_thread_count": _threading.active_count(),
+    }

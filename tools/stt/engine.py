@@ -10,9 +10,11 @@ you press the stop key. faster-whisper handles arbitrarily long audio via
 its native 30-second sliding window chunking.
 """
 
+import ctypes
 import logging
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -27,6 +29,37 @@ from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
 logger = logging.getLogger(__name__)
 
 TRAINING_DIR = Path(__file__).parent / "data" / "voice-training"
+
+
+# ---------------------------------------------------------------------------
+# Sleep detection (independent baseline from transcribe.py — that one guards
+# CUDA models, this one guards pynput hooks and engine state)
+# ---------------------------------------------------------------------------
+
+if sys.platform == "win32":
+    def _unbiased_100ns() -> int:
+        t = ctypes.c_uint64()
+        ctypes.windll.kernel32.QueryUnbiasedInterruptTime(ctypes.byref(t))
+        return t.value
+else:
+    _unbiased_100ns = None  # type: ignore[assignment]
+
+_sleep_mono: float = time.monotonic()
+_sleep_unbiased: int = _unbiased_100ns() if _unbiased_100ns is not None else 0
+
+
+def _system_slept(threshold_s: float = 30.0) -> bool:
+    """True if system slept since last check. Updates baseline on every call."""
+    global _sleep_mono, _sleep_unbiased
+    if _unbiased_100ns is None:
+        return False
+    mono_now = time.monotonic()
+    unbiased_now = _unbiased_100ns()
+    mono_gap = mono_now - _sleep_mono
+    unbiased_gap = (unbiased_now - _sleep_unbiased) / 10_000_000
+    _sleep_mono = mono_now
+    _sleep_unbiased = unbiased_now
+    return (mono_gap - unbiased_gap) > threshold_s
 
 
 def _get_wav_duration(wav_path: Path) -> float:
@@ -217,12 +250,42 @@ class STTEngine:
         except Exception:
             pass
 
+    def _recycle_listener(self) -> None:
+        """Stop and restart the hotkey listener to clear stale OS hooks.
+
+        Called automatically when sleep/wake is detected.  pynput keyboard
+        hooks (SetWindowsHookEx) degrade after sleep — the hook thread's
+        message pump accumulates stale messages and can deliver duplicate
+        or phantom key events.
+        """
+        logger.info("Recycling hotkey listener (post-sleep cleanup)")
+        with self._lock:
+            if self._listener:
+                self._listener.stop()
+                self._listener = None
+            self._listener = HotkeyListener(
+                on_start=self._on_record_start,
+                on_stop=self._on_record_stop,
+                hotkey=self._hotkey,
+                lock_key=self._cfg.get("lock_key"),
+                stop_key=self._cfg.get("stop_key"),
+                on_locked=self._on_record_locked,
+            )
+            self._listener.start()
+        logger.info("Hotkey listener recycled — fresh OS hooks")
+
     def _on_record_start(self) -> None:
         """Called by hotkey listener on key press.
 
         If model is cold (not loaded), this press warms it up without recording.
         If model is warm, this press starts recording normally.
         """
+        # Recycle listener if system slept — pynput hooks go stale
+        if _system_slept():
+            logger.warning("Sleep detected — recycling hotkey listener before recording")
+            self._recycle_listener()
+            return  # Swallow this press; recycled listener catches the next one
+
         try:
             from api.recorder.transcribe import is_model_loaded, _get_model
             model_name = self._cfg.get("model", "large-v3-turbo")
@@ -337,8 +400,23 @@ class STTEngine:
                                 "tail=%.2fs (< 1.0s threshold)",
                                 len(streaming_text.split()), sr.run_count, tail_duration,
                             )
+                        else:
+                            # Tail too long for fast path — transcribe just
+                            # the tail and append to the streaming result
+                            # instead of re-transcribing the entire recording.
+                            tail_text = streamer.transcribe_tail()
+                            if tail_text:
+                                streaming_text = sr.text.rstrip() + " " + tail_text
+                            else:
+                                streaming_text = sr.text
+                            logger.info(
+                                "STREAMING+TAIL: %d words from %d runs + "
+                                "tail=%.2fs (%d blocks)",
+                                len(streaming_text.split()), sr.run_count,
+                                tail_duration, tail_blocks,
+                            )
 
-            # 2. Get transcription — fast path or full pass
+            # 2. Get transcription — fast path/hybrid or full pass
             if streaming_text:
                 raw_text = streaming_text
                 retain_audio = self._cfg.get("audio_retention", {}).get("enabled", False)
@@ -350,10 +428,7 @@ class STTEngine:
                 wav_path = self._mic.stop()
                 from tools.stt.transcribe import transcribe
                 raw_text = transcribe(wav_path, model_size=model_name)
-                if streamer and streamer.get_result():
-                    logger.info("FULL PASS: streaming tail too long, ran full transcription")
-                else:
-                    logger.info("FULL PASS: no streaming result (short recording)")
+                logger.info("FULL PASS: no streaming result (short recording)")
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")

@@ -129,18 +129,10 @@ def main() -> None:
     # 6. Alt+Shift+Z recall hotkey
     start_recall_listener()
 
-    # 7. Pre-sleep GPU cleanup (prevents BSOD from stale CUDA during S3)
-    from tools.stt.power import register as register_power, unregister as unregister_power
-    register_power(
-        on_suspend=engine.on_system_suspend,
-        on_resume=engine.on_system_resume,
-    )
-
-    # 8. Cleanup
+    # 7. Cleanup
     def cleanup():
         engine.stop_listening()
         stop_recall_listener()
-        unregister_power()
         tray.stop()
 
     atexit.register(cleanup)
@@ -152,13 +144,13 @@ def main() -> None:
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
 
-    # 9. Start engine (activates hotkey listener)
+    # 8. Start engine (activates hotkey listener)
     engine.start_listening()
 
     logger.info("STT dictation bar running  (hotkey: %s)", hotkey)
     logger.info("Hold hotkey to record, release to transcribe+inject")
 
-    # 10. Mainloop (blocks until bar.quit())
+    # 9. Mainloop (blocks until bar.quit())
     try:
         bar.run()
     finally:

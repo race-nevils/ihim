@@ -168,8 +168,15 @@ async def lifespan(app):
     if STT_AVAILABLE:
         try:
             from tools.stt.engine import get_engine
-            get_engine().start_listening()
-            print("STT: hotkey listener auto-started")
+            engine = get_engine()
+            engine.start_listening()
+            # Pre-sleep GPU cleanup (prevents BSOD from stale CUDA during S3)
+            from tools.stt.power import register as _register_power
+            _register_power(
+                on_suspend=engine.on_system_suspend,
+                on_resume=engine.on_system_resume,
+            )
+            print("STT: hotkey listener + power events registered")
         except Exception as e:
             print(f"STT: auto-start failed (non-fatal): {e}")
 
@@ -187,12 +194,14 @@ async def lifespan(app):
         except Exception as e:
             _logger.warning("Shutdown: AsyncOllamaAdapter close failed: %s", e)
 
-    # 2. Stop stt hotkey listener
+    # 2. Stop stt hotkey listener + power events
     if STT_AVAILABLE:
         try:
             from tools.stt.engine import get_engine
+            from tools.stt.power import unregister as _unregister_power
             get_engine().stop_listening()
-            _logger.info("Shutdown: STT hotkey listener stopped")
+            _unregister_power()
+            _logger.info("Shutdown: STT hotkey listener + power events stopped")
         except Exception as e:
             _logger.warning("Shutdown: STT stop failed: %s", e)
 

@@ -196,6 +196,38 @@ class STTEngine:
         self._idle_timer.daemon = True
         self._idle_timer.start()
 
+    def on_system_suspend(self) -> None:
+        """Proactively flush GPU models before system sleep.
+
+        Without this, active CUDA contexts cause the NVIDIA driver to fail
+        its power state transition (bugcheck 0x9F DRIVER_POWER_STATE_FAILURE).
+        Called from power event handler on a worker thread — thread-safe.
+        """
+        logger.info("System suspending — flushing GPU models to prevent BSOD")
+        if self._idle_timer is not None:
+            self._idle_timer.cancel()
+            self._idle_timer = None
+        try:
+            from api.recorder.transcribe import flush_all_models
+            flush_all_models()
+        except Exception as e:
+            logger.error("Pre-sleep GPU flush failed: %s", e)
+        self._set_status("cold")
+
+    def on_system_resume(self) -> None:
+        """Reset state after system wake.
+
+        Consumes the sleep gap in _check_system_sleep() so it doesn't
+        fire spuriously on the next _get_model() call.
+        """
+        logger.info("System resumed — resetting state")
+        try:
+            from api.recorder.transcribe import _check_system_sleep
+            _check_system_sleep()  # updates baseline as side effect
+        except Exception:
+            pass
+        self._set_status("cold")
+
     def _on_idle_timeout(self) -> None:
         """Unload the Whisper model to free VRAM after inactivity."""
         logger.info("Idle timeout reached — unloading Whisper model to free VRAM")

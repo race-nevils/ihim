@@ -226,6 +226,24 @@ def is_model_loaded(model_size: str = "small") -> bool:
     return False
 
 
+def flush_all_models() -> None:
+    """Unload all cached models and clear the cache.
+
+    Call before system sleep to give the NVIDIA driver a clean GPU state.
+    Without this, active CUDA contexts cause DRIVER_POWER_STATE_FAILURE
+    (bugcheck 0x9F) during S3 sleep transitions.
+    """
+    with _model_lock:
+        for key, cached in list(_model_cache.items()):
+            try:
+                if cached.model.model_is_loaded:
+                    cached.model.unload_model()
+            except Exception:
+                pass
+        _model_cache.clear()
+    print("[recorder] Flushed all GPU models — VRAM freed for sleep.")
+
+
 def unload_model(model_size: str = "small") -> bool:
     """Unload a cached Whisper model to free VRAM.
 

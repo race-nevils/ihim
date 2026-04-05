@@ -269,6 +269,37 @@
         </div>
     </ihim-panel>
 
+    <!-- Brain Pulse Window (Draggable) -->
+    <ihim-panel id="brain-pulse-window" class="brain-pulse-window" persist-key="brainPulseWindowPosition">
+        <div class="bp-header" data-drag-handle>
+            <span class="bp-label">Brain Pulse</span>
+            <button class="bp-close" data-close-btn aria-label="Close Brain Pulse">&times;</button>
+        </div>
+        <div class="bp-body">
+            <div id="bp-status" class="bp-status" role="status" aria-live="polite" aria-atomic="true">
+                <span class="bp-light"></span>
+                <span>Loading...</span>
+            </div>
+            <div class="bp-metrics-grid">
+                <div class="bp-metric">
+                    <span class="bp-metric-label">Total Entries</span>
+                    <span id="bp-total" class="bp-metric-value">--</span>
+                </div>
+                <div class="bp-metric">
+                    <span class="bp-metric-label">Embeddings</span>
+                    <span id="bp-coverage" class="bp-metric-value">--</span>
+                </div>
+            </div>
+            <div class="bp-categories">
+                <span class="bp-section-label">Top Categories</span>
+                <div id="bp-category-list" class="bp-category-list"></div>
+            </div>
+        </div>
+        <div class="bp-footer">
+            <span>JSON-LD source of truth</span>
+        </div>
+    </ihim-panel>
+
     <!-- agent node Agent Node Window (Draggable) -->
     <ihim-panel id="agentnode-window" class="agentnode-window" persist-key="agentnodeWindowPosition">
         <div class="k8-header" data-drag-handle>

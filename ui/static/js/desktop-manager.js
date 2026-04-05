@@ -196,6 +196,10 @@ if (actionId === 'standards_library') {
         const { openPipelineObserver } = await import('./pipeline-observer.js');
         openPipelineObserver(); return;
     }
+    if (actionId === 'brain_pulse') {
+        const { openBrainPulse } = await import('./brain-pulse.js');
+        openBrainPulse(); return;
+    }
     if (actionId === 'meeting_recorder') {
         const { toggleRecorderWindow } = await import('./recorder.js');
         toggleRecorderWindow(); return;

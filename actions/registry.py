@@ -105,6 +105,13 @@ ACTIONS = {
         "category": "tools",
         "has_modal": True,
     },
+    "brain_pulse": {
+        "name": "Brain Pulse",
+        "description": "JSON-LD brain stats at a glance",
+        "icon": "activity",
+        "category": "tools",
+        "has_modal": True,
+    },
     "meeting_recorder": {
         "name": "Meeting Recorder",
         "description": "Record meetings with dual-channel audio capture and transcription",
@@ -187,6 +194,10 @@ def run_action(action_id: str) -> dict:
     elif action_id == "pipeline_observer":
         # Handled by UI (modal for pipeline observer)
         return {"success": True, "message": "Opening Pipeline Observer..."}
+
+    elif action_id == "brain_pulse":
+        # Handled by UI (modal for brain pulse)
+        return {"success": True, "message": "Opening Brain Pulse..."}
 
     elif action_id == "meeting_recorder":
         # Handled by UI (modal for meeting recorder)

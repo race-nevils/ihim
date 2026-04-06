@@ -8,8 +8,9 @@ __pycache__/
 *.so
 .Python
 
-# Local data (brain storage, logs, etc)
-data/local/
+# Secrets
+.env
+*.env.local
 
 # IDE
 .idea/

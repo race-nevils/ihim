@@ -57,12 +57,22 @@ def classify_content(content: str, source_filename: Optional[str] = None) -> dic
         logger.info(f"[entity-skip-llm] High-confidence entity detected: {entity['entity_type']}")
     else:
         # === EXISTING Layer 3: LLM Classification ===
-        # Pass CLEAN content (instructions stripped) + title for context
-        title = extract_title(clean_content or content, source_filename)
-        classification = adapter.generate_json(
-            get_classify_prompt(clean_content or content, title),
-            model=OllamaAdapter.FAST_MODEL
-        )
+        # --- DISCONNECTED 2026-04-07 ---
+        # Qwen classifier disabled: misclassified 25 docs as People with 1.0 confidence.
+        # Reconnect after classification pipeline is reviewed.
+        #
+        # title = extract_title(clean_content or content, source_filename)
+        # classification = adapter.generate_json(
+        #     get_classify_prompt(clean_content or content, title),
+        #     model=OllamaAdapter.FAST_MODEL
+        # )
+        logger.warning("LLM classification DISABLED — falling back to Misc")
+        classification = {
+            "category": "Misc",
+            "confidence": 0.0,
+            "summary": (clean_content or content)[:100],
+            "calendar": None,
+        }
 
     # Guard: if LLM returned an error or unexpected type, provide safe defaults
     if classification.get("error"):

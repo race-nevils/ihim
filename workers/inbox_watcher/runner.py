@@ -264,19 +264,20 @@ def main():
         cleanup_days=14  # Auto-delete processed files older than 14 days
     )
 
-    # Warm Ollama before entering poll loop
-    watcher._warm_ollama()
-    warmed = watcher.wait_for_warmup(timeout=30.0)
-    if not warmed:
-        logger.warning("Ollama warm-up timed out after 30s, starting in degraded mode")
-    else:
-        logger.info("Ollama warm-up complete, starting watch loop")
-
-    # Create processor
-    processor = create_processor(orchestrator)
-
-    # Start watching
-    watcher.watch(processor)
+    # --- DISCONNECTED 2026-04-07 ---
+    # InboxWatcher disabled: architecture under review.
+    # Qwen classifier misclassified 25 documents as People with 1.0 confidence.
+    # Reconnect after classification pipeline is fixed.
+    #
+    # watcher._warm_ollama()
+    # warmed = watcher.wait_for_warmup(timeout=30.0)
+    # if not warmed:
+    #     logger.warning("Ollama warm-up timed out after 30s, starting in degraded mode")
+    # else:
+    #     logger.info("Ollama warm-up complete, starting watch loop")
+    # processor = create_processor(orchestrator)
+    # watcher.watch(processor)
+    logger.info("InboxWatcher DISABLED — classification pipeline under review")
 
 
 if __name__ == "__main__":

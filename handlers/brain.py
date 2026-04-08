@@ -12,7 +12,7 @@ import logging
 import time
 import json
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 from handlers.tracing import observe
 
@@ -51,67 +51,6 @@ def _persist_brain_metric(entry: dict):
         logger.debug(f"Brain metrics write failed (non-blocking): {e}")
 
 
-def _push_single_event(event_data: dict, classification: dict, content: str, creds,
-                       existing_gcal_id: str | None = None) -> str | None:
-    """Push or update a single calendar event. Returns GCal event ID on success."""
-    cls_title = classification.get("title", "")
-    cal_title = event_data.get("title", "")
-    title = cls_title if cls_title and cls_title != "Untitled" else (cal_title or "Untitled Event")
-    date_str = event_data.get("date", "")
-    time_str = event_data.get("time")
-    all_day = event_data.get("all_day", True)
-    rrule = event_data.get("rrule")
-
-    if not date_str:
-        logger.warning(f"Calendar event '{title}' has no date, skipping")
-        return None
-
-    from api.calendar.sync import push_event, update_event, save_event_jsonld
-
-    description = content or classification.get("summary", "")
-    recurrence = [rrule] if rrule else None
-
-    # Build start/end strings (unified for all-day and timed events)
-    is_all_day = all_day or not time_str
-    if is_all_day:
-        start_str, end_str = date_str, date_str
-    else:
-        start_str = f"{date_str}T{time_str}:00"
-        end_time = event_data.get("end_time")
-        if end_time:
-            end_str = f"{date_str}T{end_time}:00"
-        else:
-            start_obj = datetime.fromisoformat(start_str)
-            end_str = (start_obj + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
-
-    # Try update first if we have an existing event ID
-    if existing_gcal_id:
-        try:
-            result = update_event(creds, existing_gcal_id, summary=title,
-                                  start=start_str, end=end_str, description=description,
-                                  all_day=is_all_day, recurrence=recurrence)
-            save_event_jsonld(result)
-            gcal_id = result.get("id")
-            if not gcal_id:
-                logger.warning(f"GCal update returned no event ID for '{title}' on {date_str}")
-            else:
-                logger.info(f"Updated calendar event: {title} on {date_str}")
-            return gcal_id
-        except Exception as e:
-            logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
-
-    # Insert new event
-    result = push_event(creds, summary=title, start=start_str, end=end_str,
-                        description=description, all_day=is_all_day, recurrence=recurrence)
-    save_event_jsonld(result)
-    gcal_id = result.get("id")
-    if not gcal_id:
-        logger.warning(f"GCal push returned no event ID for '{title}' on {date_str}")
-    else:
-        logger.info(f"Auto-pushed calendar event: {title} on {date_str}")
-    return gcal_id
-
-
 def _push_to_calendar(classification: dict, content: str = "",
                       existing_gcal_id: str | None = None,
                       note_id: str | None = None) -> str | None:
@@ -142,7 +81,7 @@ def _push_to_calendar(classification: dict, content: str = "",
 
     try:
         from api.calendar.google_auth import get_credentials
-        from api.calendar.sync import pull_events, save_to_cache
+        from api.calendar.sync import pull_events, push_single_event, save_to_cache
 
         creds = get_credentials()
         if not creds:
@@ -157,7 +96,7 @@ def _push_to_calendar(classification: dict, content: str = "",
                 if len(events) > 1 and event_data.get("title"):
                     event_cls["title"] = event_data["title"]
                 # Only pass existing_gcal_id for the first event (dedup applies to single-event notes)
-                gcal_id = _push_single_event(
+                gcal_id = push_single_event(
                     event_data, event_cls, content, creds,
                     existing_gcal_id=existing_gcal_id if pushed == 0 else None
                 )

@@ -216,6 +216,65 @@ def delete_event(
     return _with_auth_refresh(creds, _do)
 
 
+def push_single_event(event_data: dict, classification: dict, content: str, creds,
+                      existing_gcal_id: str | None = None) -> str | None:
+    """Push or update a single calendar event. Returns GCal event ID on success."""
+    cls_title = classification.get("title", "")
+    cal_title = event_data.get("title", "")
+    title = cls_title if cls_title and cls_title != "Untitled" else (cal_title or "Untitled Event")
+    date_str = event_data.get("date", "")
+    time_str = event_data.get("time")
+    all_day = event_data.get("all_day", True)
+    rrule = event_data.get("rrule")
+
+    if not date_str:
+        logger.warning(f"Calendar event '{title}' has no date, skipping")
+        return None
+
+    description = content or classification.get("summary", "")
+    recurrence = [rrule] if rrule else None
+
+    # Build start/end strings (unified for all-day and timed events)
+    is_all_day = all_day or not time_str
+    if is_all_day:
+        start_str, end_str = date_str, date_str
+    else:
+        start_str = f"{date_str}T{time_str}:00"
+        end_time = event_data.get("end_time")
+        if end_time:
+            end_str = f"{date_str}T{end_time}:00"
+        else:
+            start_obj = datetime.fromisoformat(start_str)
+            end_str = (start_obj + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Try update first if we have an existing event ID
+    if existing_gcal_id:
+        try:
+            result = update_event(creds, existing_gcal_id, summary=title,
+                                  start=start_str, end=end_str, description=description,
+                                  all_day=is_all_day, recurrence=recurrence)
+            save_event_jsonld(result)
+            gcal_id = result.get("id")
+            if not gcal_id:
+                logger.warning(f"GCal update returned no event ID for '{title}' on {date_str}")
+            else:
+                logger.info(f"Updated calendar event: {title} on {date_str}")
+            return gcal_id
+        except Exception as e:
+            logger.warning(f"GCal update failed (404?), falling back to insert: {e}")
+
+    # Insert new event
+    result = push_event(creds, summary=title, start=start_str, end=end_str,
+                        description=description, all_day=is_all_day, recurrence=recurrence)
+    save_event_jsonld(result)
+    gcal_id = result.get("id")
+    if not gcal_id:
+        logger.warning(f"GCal push returned no event ID for '{title}' on {date_str}")
+    else:
+        logger.info(f"Auto-pushed calendar event: {title} on {date_str}")
+    return gcal_id
+
+
 # --- Local cache ---
 
 

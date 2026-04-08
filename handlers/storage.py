@@ -271,8 +271,12 @@ def store_new(
         try:
             footer = _generate_related_footer(note_id)
             if footer:
-                with open(obsidian_path, "a", encoding="utf-8") as f:
-                    f.write(footer)
+                existing_text = obsidian_path.read_text(encoding="utf-8")
+                import re as _re
+                existing_text = _re.sub(
+                    r'\n\n## Related\n(?:- \[\[.*\]\].*\n?)*', '', existing_text
+                )
+                obsidian_path.write_text(existing_text + footer, encoding="utf-8")
         except Exception as e:
             logger.debug(f"Wikilink append failed for {note_id} (non-blocking): {e}")
 

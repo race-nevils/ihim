@@ -67,6 +67,31 @@ def _check_system_sleep(threshold_s: float = 30.0) -> bool:
     _last_active_unbiased = unbiased_now
     return (mono_gap - unbiased_gap) > threshold_s
 
+
+def _reset_cuda_context() -> None:
+    """Reset the primary CUDA context to release all GPU allocations.
+
+    CTranslate2's unload_model() frees model weights but leaves the CUDA
+    runtime context alive in the process.  Across sleep/wake cycles, stale
+    CUDA contexts cause corrupt transcriptions and eventual BSOD.
+    cuDevicePrimaryCtxReset destroys the context — next model load gets
+    a fresh one.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        nvcuda = ctypes.windll.nvcuda
+        nvcuda.cuInit(0)
+        device = ctypes.c_int(0)
+        result = nvcuda.cuDevicePrimaryCtxReset(device)
+        if result == 0:
+            print("[recorder] CUDA primary context reset — clean GPU state.")
+        else:
+            print(f"[recorder] cuDevicePrimaryCtxReset returned {result}")
+    except Exception as e:
+        print(f"[recorder] CUDA context reset skipped: {e}")
+
+
 # Cached VRAM query (nvidia-smi is slow; cache for 30s)
 _vram_cache: dict = {"value": None, "expires": 0}
 
@@ -241,6 +266,9 @@ def flush_all_models() -> None:
             except Exception:
                 pass
         _model_cache.clear()
+    _reset_cuda_context()
+    _vram_cache["value"] = None
+    _vram_cache["expires"] = 0
     print("[recorder] Flushed all GPU models — VRAM freed for sleep.")
 
 

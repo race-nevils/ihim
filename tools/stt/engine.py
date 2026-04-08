@@ -250,15 +250,22 @@ class STTEngine:
     def on_system_resume(self) -> None:
         """Reset state after system wake.
 
-        Consumes the sleep gap in _check_system_sleep() so it doesn't
-        fire spuriously on the next _get_model() call.
+        Consumes the sleep gap in both transcribe.py and engine.py baselines,
+        then proactively recycles the pynput listener.  Without the proactive
+        recycle, the first keypress after wake gets swallowed (detected as
+        stale, triggers recycle, returns without recording).
         """
-        logger.info("System resumed — resetting state")
+        logger.info("System resumed — resetting state and recycling listener")
         try:
             from api.recorder.transcribe import _check_system_sleep
-            _check_system_sleep()  # updates baseline as side effect
+            _check_system_sleep()  # updates CUDA baseline as side effect
         except Exception:
             pass
+        # Consume engine-level sleep baseline so _on_record_start() doesn't
+        # also detect sleep and swallow the first keypress
+        _system_slept()
+        # Proactively recycle pynput listener — hooks go stale after sleep
+        self._recycle_listener()
         self._set_status("cold")
 
     def _on_idle_timeout(self) -> None:

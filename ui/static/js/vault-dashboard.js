@@ -222,10 +222,14 @@ export const workspacesManager = {
                     syncHtml = `<span class="ws-sync">${parts.join(' ')}</span>`;
                 }
 
-                // Dirty indicator
-                const dirtyHtml = ws.is_dirty
-                    ? `<span class="ws-dirty">\u25cf ${ws.dirty_files_count} uncommitted</span>`
-                    : '';
+                // Dirty indicator \u2014 break out by category so untracked vs. modified
+                // is readable at a glance instead of being lumped as "uncommitted".
+                const dirtyParts = [];
+                if (ws.conflicted_count > 0) dirtyParts.push(`<span class="ws-conflicted">\u26a0 ${ws.conflicted_count} conflicted</span>`);
+                if (ws.staged_count > 0) dirtyParts.push(`<span class="ws-staged">\u2713 ${ws.staged_count} staged</span>`);
+                if (ws.modified_count > 0) dirtyParts.push(`<span class="ws-modified">\u25cf ${ws.modified_count} modified</span>`);
+                if (ws.untracked_count > 0) dirtyParts.push(`<span class="ws-untracked">\u25cc ${ws.untracked_count} untracked</span>`);
+                const dirtyHtml = dirtyParts.join(' ');
 
                 // Remote indicator
                 const remoteHtml = !ws.has_remote

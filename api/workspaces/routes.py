@@ -115,13 +115,49 @@ def _ahead_behind(branch: str) -> Tuple[int, int]:
     return (0, 0)
 
 
-def _worktree_dirty(path: str) -> Tuple[bool, int]:
-    """Check if a branch has uncommitted changes. Returns (is_dirty, file_count)."""
+def _empty_status_counts() -> Dict[str, int]:
+    return {"total": 0, "staged": 0, "modified": 0, "untracked": 0, "conflicted": 0}
+
+
+def _parse_porcelain_status(output: str) -> Dict[str, int]:
+    """Categorize `git status --porcelain` output by what kind of dirty state each file is in.
+
+    Buckets are not mutually exclusive at the file level: a file with porcelain code
+    'MM' (staged change plus a later branch edit) counts in both `staged` and
+    `modified`. `total` is the line count and matches the legacy "dirty" count.
+    """
+    counts = _empty_status_counts()
+    if not output:
+        return counts
+
+    for line in output.splitlines():
+        if len(line) < 2:
+            continue
+        x, y = line[0], line[1]
+        xy = line[:2]
+        counts["total"] += 1
+
+        if xy == "??":
+            counts["untracked"] += 1
+        elif x == "U" or y == "U" or xy in ("AA", "DD"):
+            counts["conflicted"] += 1
+        else:
+            if x in "MADRCT":
+                counts["staged"] += 1
+            if y in "MDT":
+                counts["modified"] += 1
+
+    return counts
+
+
+def _worktree_dirty(path: str) -> Tuple[bool, Dict[str, int]]:
+    """Inspect a branch. Returns (is_dirty, breakdown) where breakdown has
+    total/staged/modified/untracked/conflicted counts."""
     output = _run_git("-C", path, "status", "--porcelain")
     if output is None:
-        return (False, 0)
-    lines = [l for l in output.splitlines() if l.strip()]
-    return (len(lines) > 0, len(lines))
+        return (False, _empty_status_counts())
+    counts = _parse_porcelain_status(output)
+    return (counts["total"] > 0, counts)
 
 
 def _compute_status(
@@ -193,9 +229,9 @@ def _build_workspaces() -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
 
         # Dirty check only for branches
         is_dirty = False
-        dirty_count = 0
+        status_counts = _empty_status_counts()
         if has_worktree:
-            is_dirty, dirty_count = _worktree_dirty(branches[branch])
+            is_dirty, status_counts = _worktree_dirty(branches[branch])
 
         status = _compute_status(
             has_worktree, is_merged, ahead, behind, meta.get("date")
@@ -214,7 +250,11 @@ def _build_workspaces() -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
             "last_commit_message": meta.get("message"),
             "has_remote": bool(meta.get("upstream")),
             "is_dirty": is_dirty,
-            "dirty_files_count": dirty_count,
+            "dirty_files_count": status_counts["total"],
+            "staged_count": status_counts["staged"],
+            "modified_count": status_counts["modified"],
+            "untracked_count": status_counts["untracked"],
+            "conflicted_count": status_counts["conflicted"],
         }
 
         if has_worktree:

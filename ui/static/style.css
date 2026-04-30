@@ -5378,11 +5378,32 @@ dialog.modal:not([open]) {
     color: #f87171;
 }
 
-/* Workspaces: Dirty indicator */
-.ws-dirty {
+/* Workspaces: Per-category git status indicators.
+   Distinguishes staged / modified / untracked / conflicted so the user can
+   troubleshoot at a glance instead of seeing everything lumped as "uncommitted". */
+.ws-staged,
+.ws-modified,
+.ws-untracked,
+.ws-conflicted {
     font-size: 0.7rem;
-    color: #fbbf24;
     font-weight: 500;
+}
+
+.ws-staged {
+    color: #34d399;
+}
+
+.ws-modified {
+    color: #fbbf24;
+}
+
+.ws-untracked {
+    color: #94a3b8;
+}
+
+.ws-conflicted {
+    color: #f87171;
+    font-weight: 600;
 }
 
 /* Workspaces: Local-only indicator */

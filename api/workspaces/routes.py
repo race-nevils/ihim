@@ -7,6 +7,7 @@ Rich git state: merge status, ahead/behind, dirty branches, remote tracking.
 """
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
@@ -73,7 +74,7 @@ def _batch_branch_metadata() -> Dict[str, Dict[str, Any]]:
     Returns {branch: {date, message, upstream}} for all branches.
     """
     fmt = "%(refname:short)%09%(committerdate:iso-strict)%09%(subject)%09%(upstream:short)"
-    output = _run_git("for-each-ref", f"--format={fmt}", "refs/heads/")
+    output = _run_git("for-each-ref", "--sort=-committerdate", f"--format={fmt}", "refs/heads/")
     if not output:
         return {}
 
@@ -263,9 +264,30 @@ def _build_workspaces() -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
         if enrichment.get("purpose"):
             ws["purpose"] = enrichment["purpose"]
 
-        # Last activity from git commit timestamp
+        # Last activity: latest of commit date and branch dir mtime.
+        # mtime catches branch switches and add/remove/rename ops that don't have a fresh commit yet.
+        activity_ts = 0.0
+        activity_iso = None
         if meta.get("date"):
-            ws["last_activity"] = meta["date"]
+            try:
+                dt = datetime.fromisoformat(meta["date"])
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                activity_ts = dt.timestamp()
+                activity_iso = dt.isoformat()
+            except Exception:
+                pass
+        if has_worktree:
+            try:
+                mtime = os.path.getmtime(branches[branch])
+                if mtime > activity_ts:
+                    activity_ts = mtime
+                    activity_iso = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+            except Exception:
+                pass
+        if activity_iso:
+            ws["last_activity"] = activity_iso
+        ws["_activity_ts"] = activity_ts
 
         workspaces.append(ws)
 
@@ -279,6 +301,8 @@ def _build_workspaces() -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
             summary["dirty"] += 1
         if has_worktree:
             summary["branches"] += 1
+
+    workspaces.sort(key=lambda w: w.pop("_activity_ts", 0.0), reverse=True)
 
     return workspaces, summary
 

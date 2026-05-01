@@ -46,7 +46,6 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
             if ((dx > 5 || dy > 5 || Date.now() - mouseDownTime > 150) && !isDragging) {
                 isDragging = true;
                 el.style.opacity = '0.9';
-                el.style.zIndex = '1000';
                 document.body.style.userSelect = 'none';
             }
             if (isDragging) {
@@ -75,7 +74,6 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
             }
             isDragging = false;
             el.style.opacity = '1';
-            el.style.zIndex = '';
             document.body.style.userSelect = '';
         };
 
@@ -136,45 +134,6 @@ window.addEventListener('resize', () => {
         }
     }
 });
-
-// Widget resize persistence via ResizeObserver
-export function initializeWidgetResize() {
-    const widgetIds = ['flightpath-window', 'mc-window', 'standards-library-window', 'calendar-window', 'health-window', 'chat-window', 'vault-window', 'workspaces-window', 'recorder-window'];
-
-    widgetIds.forEach(widgetId => {
-        const savedSize = localStorage.getItem(`${widgetId}-size`);
-        if (savedSize) {
-            try {
-                const { width, height } = JSON.parse(savedSize);
-                const widget = document.getElementById(widgetId);
-                if (widget) {
-                    if (width) widget.style.width = `${width}px`;
-                    if (height) widget.style.height = `${height}px`;
-                }
-            } catch (e) {
-                console.warn(`Failed to restore size for ${widgetId}:`, e);
-            }
-        }
-    });
-
-    const observer = new ResizeObserver(entries => {
-        for (const entry of entries) {
-            const widget = entry.target;
-            if (widget.style.display === 'none') continue;
-            const widgetId = widget.id;
-            if (!widgetIds.includes(widgetId)) continue;
-            localStorage.setItem(`${widgetId}-size`, JSON.stringify({
-                width: Math.round(entry.contentRect.width),
-                height: Math.round(entry.contentRect.height)
-            }));
-        }
-    });
-
-    widgetIds.forEach(widgetId => {
-        const widget = document.getElementById(widgetId);
-        if (widget) observer.observe(widget);
-    });
-}
 
 // Workspace state persistence
 export const WorkspaceState = {

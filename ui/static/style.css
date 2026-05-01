@@ -1046,12 +1046,9 @@ dialog.modal:not([open]) {
     border-radius: 8px;
     box-shadow: var(--shadow-lg);
     width: 700px;
-    max-width: 90vw;
     height: 550px;
-    max-height: 80vh;
     display: flex;
     flex-direction: column;
-    z-index: 1000;
     min-width: 300px;
     min-height: 250px;
     overflow: hidden;
@@ -3816,7 +3813,6 @@ dialog.modal:not([open]) {
     border-radius: var(--radius-md);
     padding: var(--space-3);
     width: 420px;
-    max-height: 600px;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-lg), 0 2px 6px rgba(66, 133, 244, 0.2);
@@ -4421,7 +4417,6 @@ dialog.modal:not([open]) {
     border-radius: var(--radius-md);
     padding: var(--space-3);
     width: 700px;
-    max-height: 80vh;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-lg), 0 2px 6px rgba(220, 38, 38, 0.15);
@@ -4763,7 +4758,6 @@ dialog.modal:not([open]) {
     border-radius: var(--radius-md);
     padding: var(--space-3);
     width: 700px;
-    max-height: 80vh;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-lg), 0 2px 6px rgba(218, 165, 32, 0.15);
@@ -5086,7 +5080,6 @@ dialog.modal:not([open]) {
     border-radius: var(--radius-md);
     padding: var(--space-3);
     width: 600px;
-    max-height: 70vh;
     display: flex;
     flex-direction: column;
     box-shadow: var(--shadow-lg), 0 2px 6px rgba(139, 92, 246, 0.15);
@@ -5488,6 +5481,8 @@ dialog.modal:not([open]) {
 /* ============================================ */
 
 /* Draggable window component — visibility via [open] attribute */
+/* ihim-panel widgets: no max-width / max-height. Keep min-* to prevent collapse.
+   Stacking order is managed by click-to-focus in ihim-panel.js (pointerdown raises). */
 ihim-panel { position: fixed; z-index: 100; }
 ihim-panel:not([open]) { display: none; }
 ihim-panel[open] { display: flex; flex-direction: column; }
@@ -5613,7 +5608,6 @@ button:focus-visible {
 
 .recorder-window {
     width: 680px;
-    max-height: 80vh;
     min-width: 380px;
     min-height: 300px;
     background: var(--glass-bg);
@@ -6069,7 +6063,6 @@ button:focus-visible {
 .stt-window {
     width: 420px;
     min-height: 320px;
-    max-height: 80vh;
     background: rgba(24, 24, 37, 0.96);
     border: 1px solid rgba(108, 112, 134, 0.3);
     border-radius: 12px;

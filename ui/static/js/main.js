@@ -3,7 +3,7 @@
  * Imports all modules, initializes the app, and wires up event listeners.
  */
 import { API, showStatus, updateSystemMonitor, startSystemMonitor, stopSystemMonitor, updateWatcherStatus } from './app.js';
-import { initializeWidgetResize, WorkspaceState } from './draggable.js';
+import { WorkspaceState } from './draggable.js';
 import { desktopManager } from './desktop-manager.js';
 import { stopwatchManager } from './stopwatch.js';
 import { flightPath } from './flight-path.js';
@@ -58,7 +58,6 @@ function initializeApp() {
     startSystemMonitor();
     updateWatcherStatus();
     setInterval(updateWatcherStatus, 5000);
-    initializeWidgetResize();
     WorkspaceState.init();
     stopwatchManager.init();
 

@@ -18,6 +18,10 @@
 import { makeDraggable } from '../draggable.js';
 import { initWindowEscapeClose } from '../a11y.js';
 
+// Click-to-focus: monotonic counter shared across all ihim-panels.
+// Pointerdown anywhere in a panel raises it above its siblings.
+let topZ = 100;
+
 class IhimPanel extends HTMLElement {
     connectedCallback() {
         // Defer to ensure light-DOM children are parsed
@@ -40,6 +44,38 @@ class IhimPanel extends HTMLElement {
         for (const btn of this.querySelectorAll('[data-close-btn]')) {
             btn.addEventListener('click', () => this.close());
         }
+
+        // Click-to-focus: capture-phase so it runs before any child handler
+        this.addEventListener('pointerdown', () => {
+            topZ += 1;
+            this.style.zIndex = String(topZ);
+        }, { capture: true });
+
+        // Size persistence: localStorage[`${persistKey}-size`]
+        if (persistKey) this._wireSizePersistence(persistKey);
+    }
+
+    _wireSizePersistence(persistKey) {
+        const sizeKey = `${persistKey}-size`;
+        try {
+            const saved = localStorage.getItem(sizeKey);
+            if (saved) {
+                const { width, height } = JSON.parse(saved);
+                if (width) this.style.width = `${width}px`;
+                if (height) this.style.height = `${height}px`;
+            }
+        } catch (e) { /* corrupt — ignore */ }
+
+        // ResizeObserver doesn't fire for display:none, so closed widgets won't write.
+        const observer = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                const w = Math.round(entry.contentRect.width);
+                const h = Math.round(entry.contentRect.height);
+                if (w === 0 || h === 0) continue;
+                localStorage.setItem(sizeKey, JSON.stringify({ width: w, height: h }));
+            }
+        });
+        observer.observe(this);
     }
 
     open() {

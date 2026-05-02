@@ -53,6 +53,12 @@ class IhimPanel extends HTMLElement {
 
         // Size persistence: localStorage[`${persistKey}-size`]
         if (persistKey) this._wireSizePersistence(persistKey);
+
+        // Open-state persistence: re-open panels that were open last session.
+        // localStorage[`${persistKey}-open`] = "1" while open, removed on close.
+        if (persistKey && localStorage.getItem(`${persistKey}-open`) === '1') {
+            this.open();
+        }
     }
 
     _wireSizePersistence(persistKey) {
@@ -115,11 +121,14 @@ class IhimPanel extends HTMLElement {
         }
 
         this.classList.remove('minimized');
+        if (persistKey) localStorage.setItem(`${persistKey}-open`, '1');
         this.dispatchEvent(new CustomEvent('panel:open', { bubbles: true }));
     }
 
     close() {
+        const persistKey = this.getAttribute('persist-key');
         this.removeAttribute('open');
+        if (persistKey) localStorage.removeItem(`${persistKey}-open`);
         this.dispatchEvent(new CustomEvent('panel:close', { bubbles: true }));
     }
 

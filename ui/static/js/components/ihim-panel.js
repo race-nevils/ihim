@@ -57,12 +57,18 @@ class IhimPanel extends HTMLElement {
 
     _wireSizePersistence(persistKey) {
         const sizeKey = `${persistKey}-size`;
+        // Clamp to viewport so the resize handle never lands off-screen.
+        const clamp = (w, h) => ({
+            width: Math.min(w, window.innerWidth - 40),
+            height: Math.min(h, window.innerHeight - 40),
+        });
         try {
             const saved = localStorage.getItem(sizeKey);
             if (saved) {
                 const { width, height } = JSON.parse(saved);
-                if (width) this.style.width = `${width}px`;
-                if (height) this.style.height = `${height}px`;
+                const c = clamp(width || 0, height || 0);
+                if (width) this.style.width = `${c.width}px`;
+                if (height) this.style.height = `${c.height}px`;
             }
         } catch (e) { /* corrupt — ignore */ }
 
@@ -72,7 +78,8 @@ class IhimPanel extends HTMLElement {
                 const w = Math.round(entry.contentRect.width);
                 const h = Math.round(entry.contentRect.height);
                 if (w === 0 || h === 0) continue;
-                localStorage.setItem(sizeKey, JSON.stringify({ width: w, height: h }));
+                const c = clamp(w, h);
+                localStorage.setItem(sizeKey, JSON.stringify(c));
             }
         });
         observer.observe(this);

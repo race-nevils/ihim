@@ -80,9 +80,18 @@ class HotkeyListener:
                 # Stale-key guard: clear if no activity for 2s or set suspiciously large
                 if (now - self._last_key_time > 2.0) or len(self._current_keys) > 4:
                     self._current_keys.clear()
-                    # Clear stuck recording state (e.g. system slept mid-recording)
+                    # Clear stuck recording state (e.g. system slept mid-recording).
+                    # Skip when the incoming key is the lock/stop key during active
+                    # recording — pynput doesn't repeat-fire while the chord is held,
+                    # so a >2s hold before tapping the lock key looks identical to
+                    # stale state. Treat action-key presses as proof of liveness.
+                    is_action_key = (
+                        (lock_key is not None and key == lock_key)
+                        or (stop_key is not None and key == stop_key)
+                    )
                     with self._lock:
-                        if self._recording and not self._locked:
+                        if (self._recording and not self._locked
+                                and not is_action_key):
                             logger.info("Stale-key guard: cleared stuck recording state")
                             self._recording = False
                 self._last_key_time = now

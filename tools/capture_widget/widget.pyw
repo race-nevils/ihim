@@ -4,7 +4,7 @@ Second Brain Capture Widget
 System tray app with floating search bar for quick thought capture.
 
 - Alt+Space opens floating input bar (configurable)
-- Enter saves to inbox/, Esc cancels
+- Enter saves to IDEAS.md, Esc cancels
 - Runs in system tray
 
 Usage:
@@ -21,8 +21,7 @@ import socket
 import sys
 import threading
 import time
-import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import font as tkfont
@@ -49,7 +48,7 @@ TRIGGER_PORT = 47778
 CONFIG_PATH = Path(__file__).parent / "config.json"
 DEFAULT_CONFIG = {
     "hotkey": "<alt>+<space>",  # pynput format
-    "inbox_path": "C:/Users/<user>/workspace/IHIM/data/local/brain/inbox",
+    "ideas_path": "C:/Users/<user>/workspace/IDEAS.md",
     "window": {
         "width": 600,
         "height": 50,
@@ -86,8 +85,7 @@ class CaptureWidget:
 
     def __init__(self):
         self.config = load_config()
-        self.inbox_path = Path(self.config["inbox_path"])
-        self.inbox_path.mkdir(parents=True, exist_ok=True)
+        self.ideas_path = Path(self.config["ideas_path"])
 
         # Hotkey listener
         self.hotkey_listener = None
@@ -545,7 +543,7 @@ class CaptureWidget:
             title = ""
         text = self.entry.get("1.0", "end-1c").strip()
         if text and text != self.placeholder:
-            self._save_to_inbox(text, title)
+            self._append_to_ideas(text, title)
         self.hide()
         return "break"
 
@@ -554,34 +552,24 @@ class CaptureWidget:
         self.hide()
         return "break"
 
-    def _save_to_inbox(self, text: str, title: str = ""):
-        """Save captured text to inbox as markdown file."""
-        timestamp = datetime.now(timezone.utc)
-        date_str = timestamp.strftime("%Y%m%d_%H%M%S")
-        short_id = uuid.uuid4().hex[:8]
+    def _append_to_ideas(self, text: str, title: str = ""):
+        """Append a bullet entry to IDEAS.md.
 
-        # Use title for filename if provided, otherwise timestamp
-        if title:
-            # Sanitize title for filename (remove invalid chars)
-            safe_title = "".join(c for c in title if c not in r'\/:*?"<>|')
-            safe_title = safe_title.strip()[:50]  # Limit length
-            filename = f"{safe_title}.md"
-        else:
-            filename = f"{date_str}_{short_id}.md"
+        Mode 'a' append never reads existing content, so concurrent
+        branch additions stay merge=union safe.
+        """
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        lines = text.split("\n")
+        first = f"- **{title}** — {lines[0]}" if title else f"- {lines[0]}"
+        # 2-space indent on continuation lines keeps them inside the bullet.
+        rest = [f"  {line}" for line in lines[1:]]
+        body = [first] + rest
+        body[-1] = f"{body[-1]} _({timestamp})_"
+        entry = "\n".join(body) + "\n"
 
-        filepath = self.inbox_path / filename
-
-        # Create markdown with frontmatter (title in frontmatter for extract_title)
-        title_line = f'title: "{title}"\n' if title else ""
-        content = f"""---
-captured_at: "{timestamp.isoformat()}"
-source: "capture_widget"
-{title_line}---
-
-{text}
-"""
-        filepath.write_text(content, encoding="utf-8")
-        print(f"Saved: {filepath.name}")
+        with open(self.ideas_path, "a", encoding="utf-8") as f:
+            f.write(entry)
+        print(f"Appended to: {self.ideas_path}")
 
     def _exit_app(self, icon=None, item=None):
         """Exit the application."""
@@ -593,7 +581,7 @@ source: "capture_widget"
         print("=" * 50)
         print("Second Brain Capture Widget")
         print("=" * 50)
-        print(f"Inbox: {self.inbox_path}")
+        print(f"Ideas: {self.ideas_path}")
         print(f"Hotkey: Alt+Space")
         print("Running in system tray. Right-click tray icon to exit.")
         print("=" * 50)

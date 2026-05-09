@@ -14,20 +14,12 @@ let recordingStartedAt = null;
 // Window lifecycle
 // =====================
 
-export async function openRecorderWindow() {
-    const win = document.getElementById('recorder-window');
-    if (!win) return;
-    win.open();
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    if (!devicesData) await loadDevices();
-    startStatusPolling();
+export function openRecorderWindow() {
+    document.getElementById('recorder-window')?.open();
 }
 
 export function closeRecorderWindow() {
-    const win = document.getElementById('recorder-window');
-    if (win) win.close();
-    stopStatusPolling();
-    clearElapsedTimer();
+    document.getElementById('recorder-window')?.close();
 }
 
 export function toggleRecorderWindow() {
@@ -598,6 +590,13 @@ function hideRecorderError() {
 export function initRecorderEvents() {
     const win = document.getElementById('recorder-window');
     if (!win) return;
+
+    // Data init on panel open (manual click + auto-restore on reload).
+    win.addEventListener('panel:open', async () => {
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (!devicesData) await loadDevices();
+        startStatusPolling();
+    });
 
     // Cleanup on panel close (Escape key, close button)
     win.addEventListener('panel:close', () => {

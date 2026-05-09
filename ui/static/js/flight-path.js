@@ -260,13 +260,20 @@ export const flightPath = {
 };
 
 export function openFlightPathWindow() {
-    const fpWindow = document.getElementById('flightpath-window');
-    fpWindow.open();
-    setTimeout(() => flightPath.init(), 50);
+    document.getElementById('flightpath-window')?.open();
 }
 
 export function closeFlightPathWindow() {
-    document.getElementById('flightpath-window').close();
-    flightPath.stopHealthPolling();
-    flightPath.cleanupEventListeners();
+    document.getElementById('flightpath-window')?.close();
+}
+
+export function initFlightPathEvents() {
+    const win = document.getElementById('flightpath-window');
+    if (!win) return;
+    // 50ms delay preserves the original timing — gives layout a tick to settle.
+    win.addEventListener('panel:open', () => setTimeout(() => flightPath.init(), 50));
+    win.addEventListener('panel:close', () => {
+        flightPath.stopHealthPolling();
+        flightPath.cleanupEventListeners();
+    });
 }

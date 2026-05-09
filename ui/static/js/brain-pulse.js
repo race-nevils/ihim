@@ -70,10 +70,19 @@ export const brainPulse = {
 
 export function openBrainPulse() {
     const win = document.getElementById('brain-pulse-window');
-    if (win) { win.open(); brainPulse.init(); }
+    if (win) win.open();
 }
 
 export function closeBrainPulse() {
     const win = document.getElementById('brain-pulse-window');
     if (win) win.close();
+}
+
+// Single source of truth for "panel became visible → load data."
+// Catches both manual click (openBrainPulse → win.open) and auto-restore
+// from <ihim-panel>._setup() reopening on page load after server restart.
+export function initBrainPulseEvents() {
+    const win = document.getElementById('brain-pulse-window');
+    if (!win) return;
+    win.addEventListener('panel:open', () => brainPulse.init());
 }

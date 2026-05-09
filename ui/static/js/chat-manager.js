@@ -170,7 +170,6 @@ export function openChatWindow() {
     const win = document.getElementById('chat-window');
     if (!win) return;
     win.open();
-    if (!chatManager.ws || chatManager.ws.readyState !== WebSocket.OPEN) chatManager.init();
     document.getElementById('chat-input').focus();
 }
 
@@ -348,6 +347,16 @@ export async function spawnAgentTeam() {
 // =====================
 
 export function initChatEvents() {
+    // (Re)connect WebSocket on panel open. Covers manual click AND auto-restore
+    // on page reload after server restart — without it, a survived chat panel
+    // sits with a dead socket until the user clicks elsewhere.
+    const chatWin = document.getElementById('chat-window');
+    if (chatWin) {
+        chatWin.addEventListener('panel:open', () => {
+            if (!chatManager.ws || chatManager.ws.readyState !== WebSocket.OPEN) chatManager.init();
+        });
+    }
+
     // Chat input handlers
     const chatInput = document.getElementById('chat-input');
     if (chatInput) {

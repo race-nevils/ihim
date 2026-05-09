@@ -8,14 +8,12 @@ let standardsLibraryModules = [];
 let selectedModuleId = null;
 let referencesData = null;
 
-export async function openStandardsLibraryWindow() {
-    const win = document.getElementById('standards-library-window');
-    win.open();
-    await loadStandardsLibraryModules();
+export function openStandardsLibraryWindow() {
+    document.getElementById('standards-library-window')?.open();
 }
 
 export function closeStandardsLibraryWindow() {
-    document.getElementById('standards-library-window').close();
+    document.getElementById('standards-library-window')?.close();
 }
 
 async function loadStandardsLibraryModules() {
@@ -202,6 +200,9 @@ function toggleReferenceExpand(stdId) {
 export function initStandardsLibraryEvents() {
     const win = document.getElementById('standards-library-window');
     if (!win) return;
+
+    // Data init on panel open (manual click + auto-restore on reload).
+    win.addEventListener('panel:open', () => loadStandardsLibraryModules());
 
     const tabs = win.querySelector('ihim-tabs');
     if (tabs) {

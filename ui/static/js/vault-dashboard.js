@@ -300,14 +300,8 @@ export const workspacesManager = {
 // Window management
 // =====================
 
-export async function openVaultWindow() {
-    const win = document.getElementById('vault-window');
-    if (!win) return;
-    win.open();
-    if (!vaultManager.initialized) vaultManager.initialized = true;
-    vaultManager.loadTasks();
-    vaultManager.loadCategories();
-    if (window.lucide) lucide.createIcons();
+export function openVaultWindow() {
+    document.getElementById('vault-window')?.open();
 }
 
 export function closeVaultWindow() {
@@ -322,17 +316,8 @@ export function toggleVaultWindow() {
     else openVaultWindow();
 }
 
-export async function openWorkspacesWindow() {
-    const win = document.getElementById('workspaces-window');
-    if (!win) return;
-    win.open();
-    if (!workspacesManager.initialized) {
-        workspacesManager.initialized = true;
-        const refreshBtn = document.getElementById('workspaces-refresh-btn');
-        if (refreshBtn) refreshBtn.addEventListener('click', () => workspacesManager.refresh());
-    }
-    await workspacesManager.loadWorkspaces();
-    if (window.lucide) lucide.createIcons();
+export function openWorkspacesWindow() {
+    document.getElementById('workspaces-window')?.open();
 }
 
 export function closeWorkspacesWindow() {
@@ -351,6 +336,24 @@ export function toggleWorkspacesWindow() {
 export function initVaultEvents() {
     const vaultWin = document.getElementById('vault-window');
     if (!vaultWin) return;
+
+    // Vault data init on panel open (manual click + auto-restore on reload).
+    vaultWin.addEventListener('panel:open', () => {
+        vaultManager.loadTasks();
+        vaultManager.loadCategories();
+        if (window.lucide) lucide.createIcons();
+    });
+
+    // Workspaces panel: data init + one-time refresh-button wiring.
+    const wsWin = document.getElementById('workspaces-window');
+    if (wsWin) {
+        const refreshBtn = document.getElementById('workspaces-refresh-btn');
+        if (refreshBtn) refreshBtn.addEventListener('click', () => workspacesManager.refresh());
+        wsWin.addEventListener('panel:open', () => {
+            workspacesManager.loadWorkspaces();
+            if (window.lucide) lucide.createIcons();
+        });
+    }
 
     const tabs = vaultWin.querySelector('ihim-tabs');
     if (tabs) {

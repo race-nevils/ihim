@@ -12,19 +12,12 @@ let lastDictationId = null;
 // Window lifecycle
 // =====================
 
-export async function openSTTWindow() {
-    const win = document.getElementById('stt-window');
-    if (!win) return;
-    win.open();
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    startStatusPolling();
-    loadHistory();  // History is the default tab — load immediately
+export function openSTTWindow() {
+    document.getElementById('stt-window')?.open();
 }
 
 export function closeSTTWindow() {
-    const win = document.getElementById('stt-window');
-    if (win) win.close();
-    stopStatusPolling();
+    document.getElementById('stt-window')?.close();
 }
 
 export function toggleSTTWindow() {
@@ -316,6 +309,13 @@ function hideSTTError() {
 export function initSTTEvents() {
     const win = document.getElementById('stt-window');
     if (!win) return;
+
+    // Data init on panel open (manual click + auto-restore on reload).
+    win.addEventListener('panel:open', () => {
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        startStatusPolling();
+        loadHistory();  // History is the default tab — load immediately
+    });
 
     // Cleanup on panel close
     win.addEventListener('panel:close', () => {

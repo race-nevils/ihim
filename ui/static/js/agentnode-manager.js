@@ -21,17 +21,11 @@ let lastStatus = null;
 // ---------------------------------------------------------------------------
 
 export function openAgentNodeWindow() {
-    const panel = document.getElementById('agentnode-window');
-    if (!panel) return;
-    panel.open();
-    refreshStatus();
-    startPolling();
+    document.getElementById('agentnode-window')?.open();
 }
 
 export function closeAgentNodeWindow() {
-    stopPolling();
-    const panel = document.getElementById('agentnode-window');
-    if (panel) panel.close();
+    document.getElementById('agentnode-window')?.close();
 }
 
 export function initAgentNodeEvents() {
@@ -50,6 +44,12 @@ export function initAgentNodeEvents() {
     win.querySelector('.k8-task-submit')?.addEventListener('click', submitTask);
     win.querySelector('#k8-task-input')?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitTask(); }
+    });
+
+    // Data init on panel open (manual click + auto-restore on reload).
+    win.addEventListener('panel:open', () => {
+        refreshStatus();
+        startPolling();
     });
 
     // Stop polling when panel closes

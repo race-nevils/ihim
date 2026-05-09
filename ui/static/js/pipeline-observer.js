@@ -195,15 +195,22 @@ export const pipelineObserver = {
 
 export function openPipelineObserver() {
     const panel = document.getElementById('pipeline-observer-window');
-    if (!panel) return;
-    panel.open();
-    pipelineObserver.init();
+    if (panel) panel.open();
 }
 
 export function closePipelineObserver() {
-    pipelineObserver.stopPolling();
     const panel = document.getElementById('pipeline-observer-window');
     if (panel) panel.close();
+}
+
+// Wire init to panel:open so auto-restore (page reload after server restart)
+// flows through the same path as a manual click. panel:close stops polling
+// for X-button closes too, not just programmatic closePipelineObserver().
+export function initPipelineObserverEvents() {
+    const panel = document.getElementById('pipeline-observer-window');
+    if (!panel) return;
+    panel.addEventListener('panel:open', () => pipelineObserver.init());
+    panel.addEventListener('panel:close', () => pipelineObserver.stopPolling());
 }
 
 

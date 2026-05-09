@@ -5,17 +5,21 @@ import { API, showStatus } from './app.js';
 
 let calendarCache = null;
 
-export async function openCalendarWindow() {
-    const win = document.getElementById('calendar-window');
-    if (!win) return;
-    win.open();
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    await loadCalendarEvents();
+export function openCalendarWindow() {
+    document.getElementById('calendar-window')?.open();
 }
 
 export function closeCalendarWindow() {
+    document.getElementById('calendar-window')?.close();
+}
+
+export function initCalendarEvents() {
     const win = document.getElementById('calendar-window');
-    if (win) win.close();
+    if (!win) return;
+    win.addEventListener('panel:open', () => {
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        loadCalendarEvents();
+    });
 }
 
 async function loadCalendarEvents() {

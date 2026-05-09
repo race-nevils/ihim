@@ -6,7 +6,7 @@ import { API, showStatus, updateSystemMonitor, startSystemMonitor, stopSystemMon
 import { WorkspaceState } from './draggable.js';
 import { desktopManager } from './desktop-manager.js';
 import { stopwatchManager } from './stopwatch.js';
-import { flightPath } from './flight-path.js';
+import { flightPath, initFlightPathEvents } from './flight-path.js';
 import { initChatEvents, toggleChatWindow } from './chat-manager.js';
 import { initSlashEvents } from './slash-commands.js';
 import { initStandardsLibraryEvents } from './standards-library.js';
@@ -14,9 +14,10 @@ import { initHealthEvents } from './health-dashboard.js';
 import { initVaultEvents } from './vault-dashboard.js';
 import { initRecorderEvents } from './recorder.js';
 import { initSTTEvents } from './stt.js';
-import { pipelineObserver, closePipelineObserver } from './pipeline-observer.js';
+import { pipelineObserver, closePipelineObserver, initPipelineObserverEvents } from './pipeline-observer.js';
 import { initAgentNodeEvents, openAgentNodeWindow } from './agentnode-manager.js';
-import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent } from './calendar.js';
+import { initBrainPulseEvents } from './brain-pulse.js';
+import { syncCalendar, toggleCalendarAddForm, pushNewCalendarEvent, initCalendarEvents } from './calendar.js';
 import { initGlobalEscapeHandler } from './a11y.js';
 import './components/ihim-panel.js';
 import './components/ihim-tabs.js';
@@ -70,6 +71,10 @@ function initializeApp() {
     initRecorderEvents();
     initSTTEvents();
     initAgentNodeEvents();
+    initBrainPulseEvents();
+    initPipelineObserverEvents();
+    initFlightPathEvents();
+    initCalendarEvents();
 
     // Global Escape handler (individual windows self-register via <ihim-panel>)
     initGlobalEscapeHandler();

@@ -8,18 +8,12 @@ let workoutsData = null;
 let nutritionData = null;
 let glossaryData = null;
 
-export async function openHealthWindow() {
-    const win = document.getElementById('health-window');
-    if (!win) return;
-    win.open();
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    if (!workoutsData) await loadWorkouts();
-    if (!nutritionData) await loadNutrition();
+export function openHealthWindow() {
+    document.getElementById('health-window')?.open();
 }
 
 export function closeHealthWindow() {
-    const win = document.getElementById('health-window');
-    if (win) win.close();
+    document.getElementById('health-window')?.close();
 }
 
 async function loadWorkouts() {
@@ -149,6 +143,13 @@ function renderGlossary(data) {
 export function initHealthEvents() {
     const win = document.getElementById('health-window');
     if (!win) return;
+
+    // Data init on panel open (manual click + auto-restore on reload).
+    win.addEventListener('panel:open', async () => {
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (!workoutsData) await loadWorkouts();
+        if (!nutritionData) await loadNutrition();
+    });
 
     const tabs = win.querySelector('ihim-tabs');
     if (tabs) {

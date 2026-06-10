@@ -1,0 +1,60 @@
+# iHIM — the operator's Command Center
+
+Local-first personal dashboard: Whisper dictation, git workspace monitor, meeting recorder, Google Calendar, health program, agent node control, and the JSON-LD second-brain data layer. FastAPI backend, vanilla-JS Web-Component frontend, everything served from one process on `127.0.0.1:7777`.
+
+Rebuilt from scratch 2026-06-10 (design + audit: `design-notes/ihim/refactor-2026-06/`). Pre-refactor code archived at `archive/ihim-pre-refactor-20260609/`.
+
+## Run
+
+```powershell
+# canonical (idempotent — no-op if already healthy)
+powershell -File scripts\server.ps1 start            # port 7777
+powershell -File scripts\server.ps1 restart -Port 7778   # test instance
+powershell -File scripts\server.ps1 status|stop
+
+# direct
+python run.py [--port 7777] [--dev]    # --dev = auto-reload (development only)
+```
+
+- **No reloader in normal operation** — one process, one PID. `--dev` opts in.
+- Test instances: set `IHIM_STT_AUTOSTART=0` so they never grab the global dictation hotkey or GPU.
+- Login autostart: `ihim-master.ahk` (shell:startup) → `server.ps1 start`.
+- Server console: `data/server-console.log` · lifecycle log: `data/server-lifecycle.log`.
+
+## Layout
+
+```
+run.py / run_silent.py     entry + silent shim (startup .vbs contract)
+scripts/server.ps1         the ONLY start/stop/restart/status tool
+api/
+  main.py                  app factory — explicit router registration
+  runtime.py middleware.py errors.py responses.py site.py server.py
+  stt/ recorder/         dictation + meeting recorder (shared whisper core)
+  workspaces/ calendar/ health/ agentnode/ vault/ brain/ graph/ preferences.py
+tools/stt/               dictation engine (hotkey→capture→transcribe→inject)
+                           data/ = dictation history + voice-training audio
+handlers/ adapters/ data/  brain ingestion pipeline + JSON-LD source of truth
+                           (data/local/brain/ = SSOT; data/brain.db = index)
+ui/                        index.html + static/js (components/, widgets) + style.css
+tests/                     pytest; smoke_test*.py live at the repo root
+```
+
+## Widgets
+
+STT Dictation (history/copy/correct/vocab, SSE status) · Workspaces (live git branch state) · Meeting Recorder · Google Calendar · Health · Vault (brain tasks/projects/docs) · agent node (status/tasks/power) · Stopwatch (client-side) · CPU/RAM bar.
+
+## Architecture notes
+
+- **Zero WebSockets.** STT status = SSE (`/api/stt/status/stream`); everything else polls. Nothing to leak or drop.
+- Errors are RFC 9457 `application/problem+json`; success uses `{"success": true}` envelopes.
+- CSP/security headers on every response (report-only CSP while UI stabilizes).
+- Frontend cache busting: per-boot `BOOT_ID` importmap + 3s `/api/boot-id` polling → edits to ui/ hot-reload the page without a server restart.
+- Brain data contracts (Unison sync, /rebuild, agent node brain API) documented in `harness/rules/ihim.md`.
+
+## Test gates
+
+```powershell
+cd IHIM && python -m pytest                          # route + guard tests
+python smoke_test.py http://127.0.0.1:7778           # every endpoint non-500
+python smoke_test_frontend.py http://127.0.0.1:7778  # shell + every module served
+```

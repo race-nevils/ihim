@@ -45,13 +45,6 @@
             <span id="ram-value" class="bar-value">--</span>
         </div>
 
-        <!-- Inbox Watcher -->
-        <div class="bar-widget" id="watcher-widget" title="Inbox Watcher">
-            <span class="status-dot inactive" id="watcher-dot"></span>
-            <span class="bar-label">Watcher</span>
-            <span id="watcher-value" class="bar-value">OFF</span>
-        </div>
-
         <!-- agent node Status -->
         <div class="bar-widget" id="agentnode-widget" style="cursor:pointer;" title="agent node Agent Node">
             <span class="status-dot inactive" id="agentnode-dot"></span>
@@ -60,11 +53,6 @@
         </div>
 
         <div class="bar-spacer"></div>
-
-        <!-- Brain Chat toggle -->
-        <div class="bar-widget" style="cursor:pointer;" title="Brain Chat">
-            <span class="bar-label" style="color:var(--color-power);">Chat</span>
-        </div>
     </nav>
 
     <div class="container">
@@ -74,231 +62,11 @@
         </header>
 
         <main id="actions-grid">
-            <!-- Actions loaded dynamically -->
+            <!-- Desktop tiles rendered by desktop.js -->
         </main>
 
         <div id="status" class="status" role="status" aria-live="polite"></div>
     </div>
-
-    <!-- Team Modal -->
-    <dialog id="team-modal" class="modal" aria-labelledby="team-modal-title">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="team-modal-title">Feature Builder</h2>
-                <button class="close-btn" aria-label="Close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p class="modal-desc" id="team-modal-desc">Enter your task. It will be morphed into 5 tailored prompts for each specialist.
-                </p>
-                <label for="team-prompt" class="sr-only">Task description</label>
-                <textarea id="team-prompt" placeholder="e.g., Build a waitlist signup feature for EdgeFlow AI" aria-describedby="team-modal-desc"></textarea>
-                <div class="team-agents">
-                    <span class="agent-badge">Frontend</span>
-                    <span class="agent-badge">Backend</span>
-                    <span class="agent-badge">DevOps</span>
-                    <span class="agent-badge">QA</span>
-                    <span class="agent-badge">Security</span>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="spawn-btn">Spawn Team</button>
-            </div>
-        </div>
-    </dialog>
-
-
-<!-- Standards Library Window (Draggable) -->
-    <ihim-panel id="standards-library-window" class="standards-library-window" persist-key="standardsLibraryWindowPosition">
-        <div class="standards-library-header standards-library-drag-handle" data-drag-handle>
-            <span class="standards-library-label">🛡️ Standards Library</span>
-            <button class="standards-library-close" data-close-btn aria-label="Close Standards Library">&times;</button>
-        </div>
-        <div class="standards-library-body">
-            <ihim-tabs>
-            <!-- Tabs -->
-            <div class="standards-library-tabs" id="sl-tablist" role="tablist" aria-label="Standards Library">
-                <button class="sl-tab-btn active" data-tab="modules" role="tab" id="sl-tab-modules" aria-selected="true" aria-controls="sl-modules-panel" tabindex="0">Modules</button>
-                <button class="sl-tab-btn" data-tab="references" role="tab" id="sl-tab-references" aria-selected="false" aria-controls="sl-references-panel" tabindex="-1">References</button>
-            </div>
-
-            <!-- Modules Panel -->
-            <div class="sl-tab-panel active" id="sl-modules-panel" role="tabpanel" aria-labelledby="sl-tab-modules">
-                <div class="standards-library-search">
-                    <label for="standards-library-search-input" class="sr-only">Search modules</label>
-                    <input type="text" id="standards-library-search-input" placeholder="Search modules...">
-                </div>
-                <div class="standards-library-content">
-                    <div class="standards-library-list-panel">
-                        <div id="standards-library-modules-list" class="standards-library-modules-list">
-                            <!-- Modules loaded dynamically -->
-                        </div>
-                    </div>
-                    <div class="standards-library-detail-panel">
-                        <div id="standards-library-module-detail" class="standards-library-module-detail">
-                            <div class="standards-library-empty-state">
-                                <p>Select a module to view details</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- References Panel -->
-            <div class="sl-tab-panel" id="sl-references-panel" role="tabpanel" aria-labelledby="sl-tab-references" style="display: none;">
-                <div id="standards-references-list" class="standards-references-list">
-                    <!-- Loaded dynamically -->
-                </div>
-            </div>
-            </ihim-tabs>
-        </div>
-        <div class="standards-library-footer">
-            <span id="standards-library-count">0 modules</span>
-        </div>
-    </ihim-panel>
-
-    <!-- Flight Path Window (Draggable) -->
-    <ihim-panel id="flightpath-window" class="flightpath-window" persist-key="flightpathWindowPosition">
-        <div class="flightpath-header flightpath-drag-handle" data-drag-handle>
-            <span class="flightpath-label">Flight Path</span>
-            <div class="flightpath-controls">
-                <button class="fp-control-btn" title="Refresh" aria-label="Refresh Flight Path">↻</button>
-            </div>
-            <button class="flightpath-close" data-close-btn aria-label="Close Flight Path">&times;</button>
-        </div>
-        <div class="flightpath-body">
-            <!-- Traffic Light Overview -->
-            <div class="fp-traffic-light" id="fp-traffic-light">
-                <div class="fp-traffic-item fp-healthy">
-                    <span class="fp-traffic-dot">●</span>
-                    <span class="fp-traffic-count" id="fp-count-healthy">0</span>
-                </div>
-                <div class="fp-traffic-item fp-degraded">
-                    <span class="fp-traffic-dot">●</span>
-                    <span class="fp-traffic-count" id="fp-count-degraded">0</span>
-                </div>
-                <div class="fp-traffic-item fp-error">
-                    <span class="fp-traffic-dot">●</span>
-                    <span class="fp-traffic-count" id="fp-count-error">0</span>
-                </div>
-                <span class="fp-traffic-label" id="fp-overall-status">Loading...</span>
-            </div>
-
-            <!-- Main Content: List + Detail -->
-            <div class="fp-content">
-                <!-- System List (Left) -->
-                <div class="fp-list-panel" id="fp-list-panel">
-                    <div class="fp-list" id="fp-system-list">
-                        <!-- Populated by JavaScript -->
-                    </div>
-                </div>
-
-                <!-- Detail Panel (Right) -->
-                <div class="fp-detail-panel" id="fp-detail-panel">
-                    <div class="fp-detail-placeholder">
-                        Click a system to see details
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="flightpath-footer">
-            <span id="fp-status">Click system for details • Auto-refresh every 5s</span>
-        </div>
-    </ihim-panel>
-
-    <!-- Pipeline Observer Window (Draggable) -->
-    <ihim-panel id="pipeline-observer-window" class="pipeline-observer-window" persist-key="pipelineObserverWindowPosition">
-        <div class="pipeline-header" data-drag-handle>
-            <span class="pipeline-label">Pipeline Observer</span>
-            <button class="pipeline-close" data-close-btn aria-label="Close Pipeline Observer">&times;</button>
-        </div>
-        <div class="pipeline-body">
-            <!-- Status Indicator (WAI-ARIA 1.2 role="status") -->
-            <div id="pipeline-status" class="pipeline-status" role="status" aria-live="polite" aria-atomic="true">
-                <span class="pipeline-light"></span>
-                <span>Loading...</span>
-            </div>
-
-            <!-- Metrics Grid (2x2) -->
-            <div class="pipeline-metrics-grid">
-                <div id="pipeline-metric-entries" class="pipeline-metric">
-                    <span class="pipeline-metric-label">Entries</span>
-                    <span class="pipeline-metric-value">--</span>
-                </div>
-                <div id="pipeline-metric-relations" class="pipeline-metric">
-                    <span class="pipeline-metric-label">Relations</span>
-                    <span class="pipeline-metric-value">--</span>
-                </div>
-                <div id="pipeline-metric-orphans" class="pipeline-metric">
-                    <span class="pipeline-metric-label">Orphan Rate</span>
-                    <span class="pipeline-metric-value">--</span>
-                </div>
-                <div id="pipeline-metric-embeddings" class="pipeline-metric">
-                    <span class="pipeline-metric-label">Embeddings</span>
-                    <span class="pipeline-metric-value">--</span>
-                </div>
-            </div>
-
-            <!-- Sparkline Trends -->
-            <div class="pipeline-trends">
-                <div class="pipeline-trend-section">
-                    <span class="pipeline-trend-label">Entry Trend</span>
-                    <div id="pipeline-trend-entries" class="pipeline-sparkline"></div>
-                </div>
-            </div>
-
-            <!-- Detail Rows -->
-            <div class="pipeline-details">
-                <div id="pipeline-detail-rebuild" class="pipeline-detail-row">
-                    <span class="pipeline-detail-label">Last Rebuild</span>
-                    <span>--</span>
-                </div>
-                <div id="pipeline-detail-watcher" class="pipeline-detail-row">
-                    <span class="pipeline-detail-label">Watcher</span>
-                    <span>--</span>
-                </div>
-            </div>
-
-            <!-- Errors (hidden when empty) -->
-            <div id="pipeline-errors" class="pipeline-errors" style="display: none;">
-                <span class="pipeline-errors-label">Recent Errors</span>
-                <div class="pipeline-error-list"></div>
-            </div>
-        </div>
-        <div class="pipeline-footer">
-            <span>Polls every 30s • application/health+json</span>
-        </div>
-    </ihim-panel>
-
-    <!-- Brain Pulse Window (Draggable) -->
-    <ihim-panel id="brain-pulse-window" class="brain-pulse-window" persist-key="brainPulseWindowPosition">
-        <div class="bp-header" data-drag-handle>
-            <span class="bp-label">Brain Pulse</span>
-            <button class="bp-close" data-close-btn aria-label="Close Brain Pulse">&times;</button>
-        </div>
-        <div class="bp-body">
-            <div id="bp-status" class="bp-status" role="status" aria-live="polite" aria-atomic="true">
-                <span class="bp-light"></span>
-                <span>Loading...</span>
-            </div>
-            <div class="bp-metrics-grid">
-                <div class="bp-metric">
-                    <span class="bp-metric-label">Total Entries</span>
-                    <span id="bp-total" class="bp-metric-value">--</span>
-                </div>
-                <div class="bp-metric">
-                    <span class="bp-metric-label">Embeddings</span>
-                    <span id="bp-coverage" class="bp-metric-value">--</span>
-                </div>
-            </div>
-            <div class="bp-categories">
-                <span class="bp-section-label">Top Categories</span>
-                <div id="bp-category-list" class="bp-category-list"></div>
-            </div>
-        </div>
-        <div class="bp-footer">
-            <span>JSON-LD source of truth</span>
-        </div>
-    </ihim-panel>
 
     <!-- agent node Agent Node Window (Draggable) -->
     <ihim-panel id="agentnode-window" class="agentnode-window" persist-key="agentnodeWindowPosition">
@@ -389,149 +157,7 @@
         </div>
     </ihim-panel>
 
-    <!-- Agent Team Builder Modal -->
-    <dialog id="agent-team-modal" class="modal" aria-labelledby="agent-team-modal-title">
-        <div class="modal-content agent-team-modal-content">
-            <div class="modal-header">
-                <h2 id="agent-team-modal-title">Agent Team Builder</h2>
-                <button class="close-btn" aria-label="Close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p class="modal-desc" id="agent-team-modal-desc">Describe your goal. We'll spawn a specialized agent team (3-5 agents) to
-                    accomplish it.</p>
-
-                <!-- Team Type Selector -->
-                <div class="team-type-selector">
-                    <button class="team-type-btn active" data-type="auto">
-                        <span class="team-type-icon">🤖</span>
-                        <span class="team-type-label">Auto-detect</span>
-                    </button>
-                    <button class="team-type-btn" data-type="project">
-                        <span class="team-type-icon">📋</span>
-                        <span class="team-type-label">Project Team</span>
-                    </button>
-                    <button class="team-type-btn" data-type="research">
-                        <span class="team-type-icon">🔬</span>
-                        <span class="team-type-label">Research Team</span>
-                    </button>
-                    <button class="team-type-btn" data-type="custom">
-                        <span class="team-type-icon">⚙️</span>
-                        <span class="team-type-label">Custom</span>
-                    </button>
-                </div>
-
-                <!-- Task Description -->
-                <div class="team-input-section">
-                    <label class="team-input-label" for="agent-team-prompt">What do you want to accomplish?</label>
-                    <textarea id="agent-team-prompt"
-                        placeholder="e.g., Create a compliance monitoring dashboard for RIA clients&#10;e.g., Research best practices for document automation in financial advisory" aria-describedby="agent-team-modal-desc"></textarea>
-                </div>
-
-                <!-- Complexity Slider -->
-                <div class="complexity-section">
-                    <label class="team-input-label" for="team-size-slider">Team Size</label>
-                    <div class="complexity-slider-row">
-                        <input type="range" id="team-size-slider" min="3" max="5" value="3" aria-describedby="team-size-display">
-                        <span id="team-size-display" class="team-size-value">3 agents</span>
-                    </div>
-                    <div class="complexity-hints">
-                        <span class="hint-label">Simple</span>
-                        <span class="hint-label">Complex</span>
-                    </div>
-                </div>
-
-                <!-- Agent Preview -->
-                <div class="agent-preview-section">
-                    <label class="team-input-label">Team Composition</label>
-                    <div id="agent-preview-list" class="agent-preview-list">
-                        <div class="agent-preview-item">
-                            <span class="agent-preview-icon">🎯</span>
-                            <span class="agent-preview-name">Lead</span>
-                            <span class="agent-preview-role">Coordinates team</span>
-                        </div>
-                        <div class="agent-preview-item">
-                            <span class="agent-preview-icon">🔍</span>
-                            <span class="agent-preview-name">Analyst</span>
-                            <span class="agent-preview-role">Research & planning</span>
-                        </div>
-                        <div class="agent-preview-item">
-                            <span class="agent-preview-icon">⚡</span>
-                            <span class="agent-preview-name">Executor</span>
-                            <span class="agent-preview-role">Implementation</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Optional: Agent Configuration Accordion -->
-                <details class="agent-config-details">
-                    <summary class="agent-config-summary">Advanced Options</summary>
-                    <div class="agent-config-content">
-                        <div class="config-row">
-                            <label for="config-feedback">
-                                <input type="checkbox" id="config-feedback" checked>
-                                Enable feedback loop
-                            </label>
-                        </div>
-                        <div class="config-row">
-                            <label for="config-parallel">
-                                <input type="checkbox" id="config-parallel">
-                                Allow parallel execution
-                            </label>
-                        </div>
-                    </div>
-                </details>
-            </div>
-            <div class="modal-footer agent-team-footer">
-                <div class="footer-hint">Agents will write task files to <code>IHIM/team/tasks/</code></div>
-                <button class="spawn-team-btn">
-                    <span class="spawn-icon">🚀</span>
-                    <span>Spawn Team</span>
-                </button>
-            </div>
-        </div>
-    </dialog>
-
-    <!-- Slash Command Center Modal -->
-    <dialog id="slash-modal" class="modal" aria-labelledby="slash-modal-title">
-        <div class="modal-content slash-modal-content">
-            <div class="modal-header">
-                <h2 id="slash-modal-title">/ Command Center</h2>
-                <button class="close-btn" aria-label="Close">&times;</button>
-            </div>
-            <div class="modal-body slash-body">
-                <p class="slash-intro">the agent harness commands for workspace. Click to copy, then paste in the agent harness.</p>
-
-                <div class="slash-search-row">
-                    <label for="slash-search" class="sr-only">Search commands</label>
-                    <input type="text" id="slash-search" placeholder="Search commands...">
-                </div>
-
-                <div id="slash-list" class="slash-list">
-                    <!-- Commands loaded dynamically -->
-                </div>
-
-                <div class="slash-brainstorm">
-                    <h3>Brainstorm New Commands</h3>
-                    <div class="brainstorm-input-row">
-                        <label for="brainstorm-input" class="sr-only">Brainstorm a new command idea</label>
-                        <textarea id="brainstorm-input"
-                            placeholder="Describe a commands idea...&#10;e.g., '/standup - Generate a daily standup summary from git commits and task list'"></textarea>
-                        <button class="save-idea-btn">Save Idea</button>
-                    </div>
-                    <div id="slash-ideas" class="slash-ideas">
-                        <!-- Saved ideas loaded dynamically -->
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer slash-footer">
-                <span id="slash-count">0 commands</span>
-                <span class="slash-hint">Tip: Commands can auto-trigger via hooks</span>
-            </div>
-        </div>
-    </dialog>
-
-
-<!-- Google Calendar Window (Draggable) -->
+    <!-- Google Calendar Window (Draggable) -->
     <ihim-panel id="calendar-window" class="calendar-window" persist-key="calendarWindowPosition">
         <div class="calendar-header calendar-drag-handle" data-drag-handle>
             <span class="calendar-label"><i data-lucide="calendar-days" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Google Calendar</span>
@@ -569,7 +195,7 @@
         </div>
     </ihim-panel>
 
-<!-- Health Window (Draggable) -->
+    <!-- Health Window (Draggable) -->
     <ihim-panel id="health-window" class="health-window" persist-key="healthWindowPosition">
         <div class="health-header health-drag-handle" data-drag-handle>
             <span class="health-label"><i data-lucide="heart-pulse" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Health Dashboard</span>
@@ -607,9 +233,7 @@
         </ihim-tabs>
     </ihim-panel>
 
-
-
-<!-- Vault Dashboard Window (Draggable) -->
+    <!-- Vault Window (Draggable) -->
     <ihim-panel id="vault-window" class="vault-window" persist-key="vaultWindowPosition">
         <div class="vault-header vault-drag-handle" data-drag-handle>
             <span class="vault-label"><i data-lucide="archive" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Vault</span>
@@ -659,7 +283,7 @@
         </ihim-tabs>
     </ihim-panel>
 
-<!-- Workspaces Window (Draggable) -->
+    <!-- Workspaces Window (Draggable) -->
     <ihim-panel id="workspaces-window" class="workspaces-window" persist-key="workspacesWindowPosition">
         <div class="workspaces-header workspaces-drag-handle" data-drag-handle>
             <span class="workspaces-label"><i data-lucide="git-branch" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Workspaces</span>
@@ -674,7 +298,7 @@
         </div>
     </ihim-panel>
 
-<!-- STT Dictation Window (Draggable) -->
+    <!-- STT Dictation Window (Draggable) -->
     <ihim-panel id="stt-window" class="stt-window" persist-key="sttWindowPosition">
         <div class="stt-header" data-drag-handle>
             <span class="stt-label"><i data-lucide="mic" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>STT Dictation</span>
@@ -720,7 +344,7 @@
         </ihim-tabs>
     </ihim-panel>
 
-<!-- Meeting Recorder Window (Draggable) -->
+    <!-- Meeting Recorder Window (Draggable) -->
     <ihim-panel id="recorder-window" class="recorder-window" persist-key="recorderWindowPosition">
         <div class="recorder-header recorder-drag-handle" data-drag-handle>
             <span class="recorder-label"><i data-lucide="mic" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Meeting Recorder</span>
@@ -793,37 +417,6 @@
             </div>
         </div>
         </ihim-tabs>
-    </ihim-panel>
-
-<!-- Brain Chat Window (Draggable) -->
-    <ihim-panel id="chat-window" class="chat-window" persist-key="chatWindowPosition">
-        <div class="chat-header chat-drag-handle" data-drag-handle>
-            <div class="chat-header-left">
-                <span class="chat-status-dot" id="chat-status-dot"></span>
-                <span class="chat-header-label">Brain Chat</span>
-            </div>
-            <div class="chat-header-actions">
-                <button title="Clear history" aria-label="Clear chat history">&#8634;</button>
-                <button title="Minimize" aria-label="Minimize chat">&#8722;</button>
-                <button title="Close" data-close-btn aria-label="Close chat">&times;</button>
-            </div>
-        </div>
-        <div class="chat-messages" id="chat-messages" aria-live="polite" aria-relevant="additions">
-            <div class="chat-welcome">
-                <strong>Brain Chat</strong>
-                Ask questions about your Second Brain.<br>
-                RAG-powered by the 14B model.
-            </div>
-        </div>
-        <div class="chat-retrieval-indicator" id="chat-retrieval-indicator">
-            <span class="chat-retrieval-pulse"></span>
-            <span>Searching brain...</span>
-        </div>
-        <div class="chat-input-area">
-            <label for="chat-input" class="sr-only">Chat message</label>
-            <textarea id="chat-input" placeholder="Ask your brain..." rows="1"></textarea>
-            <button class="chat-send-btn" id="chat-send-btn">Send</button>
-        </div>
     </ihim-panel>
 
     <!-- Import Map — cache-busts ALL JS module imports with BOOT_ID -->

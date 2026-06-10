@@ -16,6 +16,7 @@ from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 _STATUS_TITLES = {
     400: "Bad Request",
@@ -83,7 +84,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 
 def register_exception_handlers(app) -> None:
-    app.add_exception_handler(HTTPException, http_exception_handler)
+    # Register on the STARLETTE base class: the router raises it directly for
+    # unmatched routes/methods, and fastapi.HTTPException subclasses it — a
+    # handler bound to the subclass would miss router-level 404/405s.
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(ValidationError, pydantic_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

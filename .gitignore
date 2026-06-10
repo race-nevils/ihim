@@ -33,3 +33,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Runtime state
+data/server.pid

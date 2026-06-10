@@ -1,27 +1,37 @@
-"""FastAPI routes for Google Calendar integration."""
+"""Google Calendar integration routes.
+
+OAuth + cached-events model: /sync pulls from Google and refreshes the local
+cache + Calendar JSON-LD; /events serves from cache only (the widget decides
+when to sync). Errors raise HTTPException, which the global handler converts
+to RFC 9457 Problem Details.
+
+Removed in the 2026-06 refactor: /entries (brain-calendar join) and
+/push-entry — no consumers.
+"""
+
 import asyncio
 import logging
+
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
 from googleapiclient.errors import HttpError
 
 from api.calendar.google_auth import (
+    CREDS_FILE,
     get_credentials,
-    start_auth_flow,
     is_authenticated,
     revoke_auth,
+    start_auth_flow,
     token_health,
-    CREDS_FILE,
 )
-from api.calendar.models import CreateEventRequest, PushBrainEntryRequest, SyncRequest
+from api.calendar.models import CreateEventRequest, SyncRequest
 from api.calendar.sync import (
-    load_from_cache,
-    sync_and_store,
-    push_event,
     delete_event,
+    load_from_cache,
+    pull_events,
+    push_event,
     save_event_jsonld,
     save_to_cache,
-    pull_events,
+    sync_and_store,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,19 +40,23 @@ router = APIRouter(prefix="/api/calendar", tags=["Calendar"])
 
 
 def _require_auth():
-    """Get credentials or raise 401."""
     creds = get_credentials()
     if not creds:
         raise HTTPException(status_code=401, detail="Google Calendar not authenticated")
     return creds
 
 
-# --- Auth endpoints ---
+def _raise_google_error(action: str, e: HttpError):
+    if e.resp.status == 401:
+        logger.error("%s failed: auth expired", action)
+        raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
+    logger.error("%s failed: Google API error %s: %s", action, e.resp.status, e)
+    raise HTTPException(status_code=502, detail=f"Google API error: {e}")
 
 
 @router.get("/status")
 async def calendar_status():
-    """Check authentication status and last sync info."""
+    """Auth state + last sync info."""
     cache = load_from_cache()
     return {
         "authenticated": is_authenticated(),
@@ -55,49 +69,29 @@ async def calendar_status():
 
 @router.post("/auth/start")
 async def calendar_auth_start():
-    """Initiate OAuth2 flow. Opens browser for Google sign-in."""
+    """Start the OAuth2 browser flow."""
     try:
         start_auth_flow()
         return {"success": True, "message": "Google Calendar connected"}
     except FileNotFoundError as e:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "success": False,
-                "error": str(e),
-                "message": "Place credentials.json in IHIM/data/ first",
-            },
-        )
+        raise HTTPException(status_code=400, detail=f"{e} — place credentials.json in IHIM/data/ first")
     except Exception as e:
-        logger.error(f"Auth flow failed: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)},
-        )
+        logger.error("Auth flow failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/auth/revoke")
 async def calendar_auth_revoke():
-    """Delete stored OAuth2 token."""
+    """Delete the stored OAuth2 token."""
     revoked = revoke_auth()
-    return {
-        "success": True,
-        "message": "Token revoked" if revoked else "No token to revoke",
-    }
-
-
-# --- Event endpoints ---
+    return {"success": True, "message": "Token revoked" if revoked else "No token to revoke"}
 
 
 @router.get("/events")
-async def get_events(days_ahead: int = 365):
-    """Get calendar events from local cache.
-
-    The frontend should call /sync to refresh the cache when needed.
-    """
+async def get_events():
+    """Events from the local cache (call /sync to refresh)."""
     if not is_authenticated():
         return {"authenticated": False, "events": [], "cached_at": None}
-
     cache = load_from_cache()
     return {
         "authenticated": True,
@@ -108,7 +102,7 @@ async def get_events(days_ahead: int = 365):
 
 @router.post("/sync")
 async def sync_calendar(request: SyncRequest = SyncRequest()):
-    """Force pull from Google Calendar and refresh local cache + JSON-LD."""
+    """Pull from Google Calendar; refresh cache + Calendar JSON-LD."""
     creds = _require_auth()
     try:
         loop = asyncio.get_event_loop()
@@ -125,20 +119,17 @@ async def sync_calendar(request: SyncRequest = SyncRequest()):
             "count": len(cache.get("events", [])),
         }
     except HttpError as e:
-        status = e.resp.status
-        if status == 401:
-            logger.error(f"Sync failed: auth expired")
-            raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
-        logger.error(f"Sync failed: Google API error {status}: {e}")
-        raise HTTPException(status_code=502, detail=f"Google API error: {e}")
+        _raise_google_error("Sync", e)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Sync failed: {e}")
+        logger.error("Sync failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Sync failed: {e}")
 
 
 @router.post("/events")
 async def create_event(request: CreateEventRequest):
-    """Create a new event on Google Calendar."""
+    """Create an event on Google Calendar (+ local JSON-LD + cache refresh)."""
     creds = _require_auth()
     try:
         loop = asyncio.get_event_loop()
@@ -150,106 +141,33 @@ async def create_event(request: CreateEventRequest):
             description=request.description,
             calendar_id=request.calendar_id,
         ))
-        # Save locally as JSON-LD
         await loop.run_in_executor(None, save_event_jsonld, created)
-        # Refresh cache
         events = await loop.run_in_executor(None, lambda: pull_events(creds, calendar_id=request.calendar_id))
         save_to_cache(events)
-
-        return {
-            "success": True,
-            "event": created,
-            "message": f"Created: {request.summary}",
-        }
+        return {"success": True, "event": created, "message": f"Created: {request.summary}"}
     except HttpError as e:
-        status = e.resp.status
-        if status == 401:
-            logger.error(f"Create event failed: auth expired")
-            raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
-        logger.error(f"Create event failed: Google API error {status}: {e}")
-        raise HTTPException(status_code=502, detail=f"Google API error: {e}")
+        _raise_google_error("Create event", e)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Create event failed: {e}")
+        logger.error("Create event failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Create event failed: {e}")
 
 
 @router.delete("/events/{event_id}")
 async def remove_event(event_id: str, calendar_id: str = "primary"):
-    """Delete an event from Google Calendar."""
+    """Delete an event from Google Calendar (+ cache refresh)."""
     creds = _require_auth()
     try:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: delete_event(creds, event_id, calendar_id))
-        # Refresh cache
         events = await loop.run_in_executor(None, lambda: pull_events(creds, calendar_id=calendar_id))
         save_to_cache(events)
-
         return {"success": True, "message": f"Deleted event {event_id}"}
     except HttpError as e:
-        status = e.resp.status
-        if status == 401:
-            logger.error(f"Delete event failed: auth expired")
-            raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
-        logger.error(f"Delete event failed: Google API error {status}: {e}")
-        raise HTTPException(status_code=502, detail=f"Google API error: {e}")
-    except Exception as e:
-        logger.error(f"Delete event failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Delete event failed: {e}")
-
-
-@router.get("/entries")
-async def get_brain_calendar_entries(days_ahead: int = 365):
-    """Get brain entries that have calendar event data."""
-    from data.database import get_upcoming_events
-    entries = get_upcoming_events(days_ahead=days_ahead)
-    return {
-        "entries": entries,
-        "count": len(entries),
-    }
-
-
-@router.post("/push-entry")
-async def push_brain_entry(request: PushBrainEntryRequest):
-    """Push an existing brain entry as a Google Calendar event."""
-    creds = _require_auth()
-
-    # Look up the brain entry
-    try:
-        import sys
-        from pathlib import Path
-
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-        from data.database import get_entry
-
-        entry = get_entry(request.entry_id)
-        if not entry:
-            raise HTTPException(status_code=404, detail=f"Brain entry not found: {request.entry_id}")
-
-        loop = asyncio.get_event_loop()
-        created = await loop.run_in_executor(None, lambda: push_event(
-            creds,
-            summary=entry.get("title", "Untitled"),
-            start=request.start,
-            end=request.end,
-            description=entry.get("content", ""),
-            calendar_id=request.calendar_id,
-        ))
-        await loop.run_in_executor(None, save_event_jsonld, created)
-
-        return {
-            "success": True,
-            "event": created,
-            "message": f"Pushed '{entry.get('title')}' to Google Calendar",
-        }
+        _raise_google_error("Delete event", e)
     except HTTPException:
         raise
-    except HttpError as e:
-        status = e.resp.status
-        if status == 401:
-            logger.error(f"Push brain entry failed: auth expired")
-            raise HTTPException(status_code=401, detail="Google auth expired — reconnect via Settings")
-        logger.error(f"Push brain entry failed: Google API error {status}: {e}")
-        raise HTTPException(status_code=502, detail=f"Google API error: {e}")
     except Exception as e:
-        logger.error(f"Push brain entry failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Push failed: {e}")
+        logger.error("Delete event failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Delete event failed: {e}")

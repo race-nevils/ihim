@@ -1,44 +1,18 @@
-"""Standardized API response helpers.
+"""Standardized success-response helpers.
 
-Success responses use a consistent envelope:
+    {"success": true, ...}                          # single resource / action
+    {"success": true, "count": N, "items": [...]}   # collection
 
-    {"success": true, "data": {...}}           # single resource
-    {"success": true, "items": [...], "count": N}  # collection
-
-Error responses use RFC 9457 Problem Details (see ``api.errors``).
-
-Usage in route handlers::
-
-    from api.responses import ok, created, collection
-
-    @router.get("/widgets/{id}")
-    async def get_widget(id: str):
-        widget = find_widget(id)
-        return ok(widget)
-
-    @router.post("/widgets", status_code=201)
-    async def create_widget(req: WidgetCreate):
-        widget = save_widget(req)
-        return created(widget, message="Widget created")
-
-    @router.get("/widgets")
-    async def list_widgets():
-        widgets = get_all_widgets()
-        return collection(widgets)
+Errors are RFC 9457 Problem Details — see api.errors.
 """
 
-from fastapi.responses import JSONResponse
 from typing import Any
+
+from fastapi.responses import JSONResponse
 
 
 def ok(data: Any = None, *, message: str | None = None, **extra) -> dict:
-    """Standard success envelope for a single resource or action result.
-
-    Args:
-        data: The payload (dict, list, or scalar). Merged at top level if dict.
-        message: Optional human-readable message.
-        **extra: Additional top-level keys.
-    """
+    """Success envelope. A dict payload merges at top level."""
     body: dict[str, Any] = {"success": True}
     if message is not None:
         body["message"] = message
@@ -53,18 +27,11 @@ def ok(data: Any = None, *, message: str | None = None, **extra) -> dict:
 
 def created(data: Any = None, *, message: str | None = None, **extra) -> JSONResponse:
     """201 Created with success envelope."""
-    body = ok(data, message=message, **extra)
-    return JSONResponse(status_code=201, content=body)
+    return JSONResponse(status_code=201, content=ok(data, message=message, **extra))
 
 
 def collection(items: list, *, key: str = "items", **extra) -> dict:
-    """Standard success envelope for a list of resources.
-
-    Args:
-        items: The list of resources.
-        key: Top-level key name for the list (default "items").
-        **extra: Additional top-level keys (e.g., pagination).
-    """
+    """Success envelope for a list of resources."""
     body: dict[str, Any] = {"success": True, "count": len(items), key: items}
     if extra:
         body.update(extra)

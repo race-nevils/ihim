@@ -1,21 +1,23 @@
 """Preferences API — server-side persistence for user settings.
 
-Stores preferences as JSON on disk so they survive browser cache clears.
-Device names (not indices) are stored since names are stable across reboots.
+Stored as JSON on disk so settings survive browser cache clears. Device
+NAMES (not indices) are what widgets store — names are stable across
+reboots, indices are not.
 """
 
 import json
-from pathlib import Path
+
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+
+from api.errors import problem
+from api.runtime import DATA_DIR
 
 router = APIRouter(prefix="/api/preferences", tags=["preferences"])
 
-PREFS_PATH = Path(__file__).parent.parent / "data" / "local" / "preferences.json"
+PREFS_PATH = DATA_DIR / "local" / "preferences.json"
 
 
 def _read_prefs() -> dict:
-    """Read preferences from disk, returning empty dict if missing/corrupt."""
     if not PREFS_PATH.exists():
         return {}
     try:
@@ -25,13 +27,13 @@ def _read_prefs() -> dict:
 
 
 def _write_prefs(data: dict) -> None:
-    """Write preferences to disk."""
     PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PREFS_PATH.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    tmp = PREFS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    tmp.replace(PREFS_PATH)
 
 
 def _deep_merge(base: dict, updates: dict) -> dict:
-    """Recursively merge updates into base. Returns merged dict."""
     result = base.copy()
     for key, value in updates.items():
         if isinstance(value, dict) and isinstance(result.get(key), dict):
@@ -43,17 +45,19 @@ def _deep_merge(base: dict, updates: dict) -> dict:
 
 @router.get("")
 async def get_preferences():
-    """Return all stored preferences."""
+    """All stored preferences."""
     return _read_prefs()
 
 
 @router.put("")
 async def put_preferences(request: Request):
-    """Deep-merge incoming JSON into existing preferences and persist."""
-    body = await request.json()
+    """Deep-merge the JSON body into stored preferences; returns the result."""
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return problem(400, "Request body must be valid JSON", instance=request.url.path)
     if not isinstance(body, dict):
-        return JSONResponse(status_code=400, content={"detail": "Request body must be a JSON object"})
-    existing = _read_prefs()
-    merged = _deep_merge(existing, body)
+        return problem(400, "Request body must be a JSON object", instance=request.url.path)
+    merged = _deep_merge(_read_prefs(), body)
     _write_prefs(merged)
     return merged

@@ -1,8 +1,7 @@
 """RFC 9457 Problem Details for HTTP APIs.
 
-Provides a unified error response format across all iHIM API endpoints.
-Every error — whether raised via HTTPException, validation failure, or
-unhandled exception — gets serialized as:
+Every error response from iHIM — HTTPException, validation failure, or
+unhandled exception — is serialized as application/problem+json:
 
     {
         "type": "about:blank",
@@ -11,16 +10,13 @@ unhandled exception — gets serialized as:
         "detail": "Entry xyz not found",
         "instance": "/api/brain/entries/xyz"
     }
-
-Content-Type: application/problem+json
 """
 
-from fastapi import Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-# Standard HTTP reason phrases (subset we actually use)
 _STATUS_TITLES = {
     400: "Bad Request",
     401: "Unauthorized",
@@ -46,16 +42,7 @@ def problem(
     title: str | None = None,
     **extra,
 ) -> JSONResponse:
-    """Build an RFC 9457 Problem Details response.
-
-    Args:
-        status: HTTP status code.
-        detail: Human-readable explanation specific to this occurrence.
-        instance: URI reference identifying the specific occurrence (usually request path).
-        type: URI reference identifying the problem type. Defaults to ``about:blank``.
-        title: Short human-readable summary. Defaults to the HTTP reason phrase.
-        **extra: Additional members merged into the response body.
-    """
+    """Build an RFC 9457 Problem Details response."""
     body = {
         "type": type,
         "title": title or _STATUS_TITLES.get(status, "Error"),
@@ -66,66 +53,37 @@ def problem(
         body["instance"] = instance
     if extra:
         body.update(extra)
-
-    return JSONResponse(
-        status_code=status,
-        content=body,
-        media_type="application/problem+json",
-    )
+    return JSONResponse(status_code=status, content=body, media_type="application/problem+json")
 
 
-# ---------------------------------------------------------------------------
-# Global exception handlers — register these on the FastAPI app
-# ---------------------------------------------------------------------------
+def _first_error_detail(errors: list) -> str:
+    if not errors:
+        return "Invalid request data"
+    first = errors[0]
+    field = " -> ".join(str(loc) for loc in first.get("loc", ()))
+    return f"{field}: {first.get('msg', 'invalid')}"
+
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """Convert FastAPI HTTPException to Problem Details."""
-    return problem(
-        status=exc.status_code,
-        detail=str(exc.detail),
-        instance=request.url.path,
-    )
+    return problem(exc.status_code, str(exc.detail), instance=request.url.path)
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    """Convert FastAPI request-validation errors to Problem Details."""
     errors = exc.errors()
-    if errors:
-        first = errors[0]
-        field = " -> ".join(str(loc) for loc in first["loc"])
-        detail = f"{field}: {first['msg']}"
-    else:
-        detail = "Invalid request data"
-
-    return problem(
-        status=422,
-        detail=detail,
-        instance=request.url.path,
-        errors=errors,  # include full list as extension member
-    )
+    return problem(422, _first_error_detail(errors), instance=request.url.path, errors=errors)
 
 
 async def pydantic_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
-    """Convert raw Pydantic ValidationError to Problem Details."""
-    errors = exc.errors()
-    if errors:
-        first = errors[0]
-        field = " -> ".join(str(loc) for loc in first["loc"])
-        detail = f"{field}: {first['msg']}"
-    else:
-        detail = "Invalid request data"
-
-    return problem(
-        status=422,
-        detail=detail,
-        instance=request.url.path,
-    )
+    return problem(422, _first_error_detail(exc.errors()), instance=request.url.path)
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Catch-all for unhandled exceptions. Prevents leaking stack traces."""
-    return problem(
-        status=500,
-        detail="An unexpected error occurred",
-        instance=request.url.path,
-    )
+    # Never leak stack traces to the client; uvicorn logs the traceback.
+    return problem(500, "An unexpected error occurred", instance=request.url.path)
+
+
+def register_exception_handlers(app) -> None:
+    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(ValidationError, pydantic_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)

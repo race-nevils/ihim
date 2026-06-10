@@ -25,14 +25,6 @@ class CreateEventRequest(BaseModel):
     calendar_id: str = Field("primary")
 
 
-class PushBrainEntryRequest(BaseModel):
-    """Request to push an existing brain entry as a calendar event."""
-    entry_id: str
-    start: str = Field(..., description="ISO 8601 datetime")
-    end: str = Field(..., description="ISO 8601 datetime")
-    calendar_id: str = Field("primary")
-
-
 class SyncRequest(BaseModel):
     """Request to sync events from Google Calendar."""
     days_ahead: int = Field(365, ge=1, le=730)

@@ -1,13 +1,13 @@
 """Dictation pipeline orchestrator — record → transcribe → cleanup → inject → log.
 
-Ties together audio capture, Whisper transcription, deterministic cleanup,
-clipboard injection, and JSONL logging. Manages the hotkey listener lifecycle,
-VRAM lazy loading/unloading, and app-context detection.
+Ties together audio capture, chunked Whisper transcription, deterministic
+cleanup, clipboard injection, and JSONL logging. Manages the hotkey
+listener lifecycle, VRAM lazy loading/unloading, and app-context detection.
 
 No artificial recording time limits — this is local processing with zero
 marginal cost. Hold-to-talk stops when you release; locked mode stops when
-you press the stop key. faster-whisper handles arbitrarily long audio via
-its native 30-second sliding window chunking.
+you press the stop key. The chunked transcriber banks finished speech
+during recording, so release latency stays flat at any dictation length.
 """
 
 import ctypes
@@ -18,11 +18,10 @@ import sys
 import threading
 import time
 import uuid
-import wave
 from pathlib import Path
 from typing import Callable, Optional
 
-from tools.stt.audio import MicCapture
+from tools.stt.audio import MicCapture, write_wav
 from tools.stt.config import load_config
 from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
 
@@ -62,30 +61,20 @@ def _system_slept(threshold_s: float = 30.0) -> bool:
     return (mono_gap - unbiased_gap) > threshold_s
 
 
-def _get_wav_duration(wav_path: Path) -> float:
-    """Return WAV file duration in seconds."""
-    try:
-        with wave.open(str(wav_path), "rb") as wf:
-            return wf.getnframes() / wf.getframerate()
-    except Exception:
-        return 0.0
-
-
 def _maybe_retain_audio(
-    wav_path: Path, dictation_id: str, cfg: dict
-) -> tuple[Optional[Path], float]:
+    wav_path: Path, dictation_id: str, duration_s: float, cfg: dict
+) -> Optional[Path]:
     """Retain audio as FLAC for voice model training if enabled.
 
-    Returns (saved_path, duration_s) or (None, 0.0) if retention disabled.
+    Returns the saved path, or None if retention is disabled or failed.
     """
     retention = cfg.get("audio_retention", {})
     if not retention.get("enabled", False):
-        return None, 0.0
+        return None
 
     segments_dir = TRAINING_DIR / "segments"
     segments_dir.mkdir(parents=True, exist_ok=True)
 
-    duration_s = _get_wav_duration(wav_path)
     fmt = retention.get("format", "flac")
     out_path = segments_dir / f"{dictation_id}.{fmt}"
 
@@ -97,7 +86,7 @@ def _maybe_retain_audio(
         )
         if result.returncode == 0:
             logger.info("Audio retained: %s (%.1fs)", out_path.name, duration_s)
-            return out_path, duration_s
+            return out_path
         logger.warning("ffmpeg failed (rc=%d), falling back to WAV copy",
                        result.returncode)
     except FileNotFoundError:
@@ -110,12 +99,11 @@ def _maybe_retain_audio(
     try:
         shutil.copy2(str(wav_path), str(wav_out))
         logger.info("Audio retained (WAV fallback): %s (%.1fs)",
-                     wav_out.name, duration_s)
-        return wav_out, duration_s
+                    wav_out.name, duration_s)
+        return wav_out
     except Exception as exc:
         logger.warning("WAV fallback also failed: %s", exc)
-        return None, 0.0
-
+        return None
 
 
 class STTEngine:
@@ -132,7 +120,7 @@ class STTEngine:
         self._listener: Optional[HotkeyListener] = None
         self._lock = threading.Lock()
         self._last_result: Optional[dict] = None
-        self._status = "cold"  # cold | warm | recording | processing | locked | error
+        self._status = "cold"  # cold | warm | loading | recording | locked | processing | error
         self._on_state_change: Optional[Callable[[str], None]] = None
         self._app_context: str = "prose"  # captured at record start
         self._idle_timer: Optional[threading.Timer] = None
@@ -163,16 +151,8 @@ class STTEngine:
         with self._lock:
             if self._listener and self._listener.is_running:
                 return
-            self._listener = HotkeyListener(
-                on_start=self._on_record_start,
-                on_stop=self._on_record_stop,
-                hotkey=self._hotkey,
-                lock_key=self._cfg.get("lock_key"),
-                stop_key=self._cfg.get("stop_key"),
-                on_locked=self._on_record_locked,
-            )
+            self._listener = self._new_listener()
             self._listener.start()
-            # Check if model is already loaded
             from api.recorder.transcribe import is_model_loaded
             model_name = self._cfg.get("model", "large-v3-turbo")
             self._set_status("warm" if is_model_loaded(model_name) else "cold")
@@ -187,6 +167,16 @@ class STTEngine:
                 self._idle_timer.cancel()
                 self._idle_timer = None
             self._set_status("cold")
+
+    def _new_listener(self) -> HotkeyListener:
+        return HotkeyListener(
+            on_start=self._on_record_start,
+            on_stop=self._on_record_stop,
+            hotkey=self._hotkey,
+            lock_key=self._cfg.get("lock_key"),
+            stop_key=self._cfg.get("stop_key"),
+            on_locked=self._on_record_locked,
+        )
 
     @property
     def status(self) -> str:
@@ -204,7 +194,7 @@ class STTEngine:
         return self._last_result
 
     def _mute_audio(self, mute: bool) -> None:
-        """Mute/unmute system audio — runs on own thread to avoid blocking hotkey listener."""
+        """Mute/unmute system audio — own thread to avoid blocking the hotkey listener."""
         threading.Thread(target=self._set_system_mute, args=(mute,), daemon=True).start()
 
     def _set_system_mute(self, mute: bool) -> None:
@@ -301,51 +291,43 @@ class STTEngine:
         with self._lock:
             if self._listener:
                 self._listener.stop()
-                self._listener = None
-            self._listener = HotkeyListener(
-                on_start=self._on_record_start,
-                on_stop=self._on_record_stop,
-                hotkey=self._hotkey,
-                lock_key=self._cfg.get("lock_key"),
-                stop_key=self._cfg.get("stop_key"),
-                on_locked=self._on_record_locked,
-            )
+            self._listener = self._new_listener()
             self._listener.start()
         logger.info("Hotkey listener recycled — fresh OS hooks")
 
-    def _on_record_start(self) -> None:
-        """Called by hotkey listener on key press.
+    def _on_record_start(self) -> bool:
+        """Called by hotkey listener on chord press.
 
-        If model is cold (not loaded), this press warms it up without recording.
-        If model is warm, this press starts recording normally.
+        Returns True only if recording actually started — the listener's
+        recording/lock state machine follows this ack. A cold press warms
+        the model without recording; a post-sleep press recycles the
+        listener and is swallowed; a mic failure aborts. All return False.
         """
         # Recycle listener if system slept — pynput hooks go stale
         if _system_slept():
             logger.warning("Sleep detected — recycling hotkey listener before recording")
             self._recycle_listener()
-            return  # Swallow this press; recycled listener catches the next one
+            return False  # Swallow this press; recycled listener catches the next one
 
         try:
-            from api.recorder.transcribe import is_model_loaded, _get_model
+            from api.recorder.transcribe import is_model_loaded
             model_name = self._cfg.get("model", "large-v3-turbo")
 
             # Cold press — load model only, don't record
             if not is_model_loaded(model_name):
-                if self._warming_up:
-                    return  # Already warming up, don't spawn another thread
-                self._set_status("loading")
-                logger.info("Cold start — loading model '%s'", model_name)
-                self._warming_up = True
-                threading.Thread(
-                    target=self._warm_up_model,
-                    args=(model_name,),
-                    daemon=True,
-                    name="stt-warmup",
-                ).start()
-                return
+                if not self._warming_up:
+                    self._set_status("loading")
+                    logger.info("Cold start — loading model '%s'", model_name)
+                    self._warming_up = True
+                    threading.Thread(
+                        target=self._warm_up_model,
+                        args=(model_name,),
+                        daemon=True,
+                        name="stt-warmup",
+                    ).start()
+                return False
 
-            # Warm press — normal recording
-            # Capture app context BEFORE recording
+            # Warm press — capture app context BEFORE recording
             from tools.stt.app_context import get_active_app_context
             self._app_context = get_active_app_context()
             logger.debug("App context at record start: %s", self._app_context)
@@ -359,18 +341,21 @@ class STTEngine:
             self._mute_audio(True)
             self._mic.start()
 
-            # Start streaming transcriber
+            # Start the chunked streaming transcriber
             try:
-                from tools.stt.streaming import StreamingTranscriber
-                self._streamer = StreamingTranscriber(self, model_name)
+                from tools.stt.streaming import ChunkedTranscriber
+                self._streamer = ChunkedTranscriber(self._mic, model_name)
                 self._streamer.start()
             except Exception as e:
-                logger.warning("Failed to start streamer: %s", e)
+                logger.warning("Failed to start chunked transcriber: %s", e)
                 self._streamer = None
+            return True
 
         except Exception as e:
             logger.error("Failed to start mic capture: %s", e)
+            self._mute_audio(False)
             self._set_status("warm")
+            return False
 
     def _warm_up_model(self, model_name: str) -> None:
         """Load the Whisper model in a background thread (cold → warm)."""
@@ -388,12 +373,8 @@ class STTEngine:
             self._warming_up = False
 
     def _on_record_stop(self) -> None:
-        """Called by hotkey listener on key release. Runs pipeline in background thread."""
+        """Called by hotkey listener on release. Runs pipeline in background thread."""
         self._mute_audio(False)  # unmute on same thread where mute worked
-        # If we were warming up (cold press), don't run pipeline
-        if self._warming_up:
-            return
-        # If not recording (e.g. cold press released after warmup finished), skip
         if not self._mic.is_recording:
             return
         threading.Thread(
@@ -406,73 +387,29 @@ class STTEngine:
         """Full dictation pipeline: transcribe → cleanup → inject → log."""
         self._set_status("processing")
         start_time = time.time()
-        wav_path = None
         dictation_id = uuid.uuid4().hex[:8]
+        wav_path: Optional[Path] = None
 
         try:
-            # 1. Stop streamer FIRST (needs mic buffers for final run)
             model_name = self._cfg.get("model", "large-v3-turbo")
-            streamer = self._streamer
-            self._streamer = None
-            streaming_text = None
 
-            if streamer:
-                streamer.stop()
-                sr = streamer.get_result()
-                if sr and sr.run_count >= 1 and sr.text.strip():
-                    # Check tail — how much audio did streaming miss?
-                    capture = self._mic._capture
-                    if capture is not None:
-                        total_blocks = len(list(capture._mic_buffers))
-                        tail_blocks = total_blocks - sr.blocks_covered
-                        native_rate = int(capture._mic_info["sample_rate"])
-                        # Estimate tail duration from block count (~0.5s per block)
-                        import numpy as np
-                        tail_samples = sum(
-                            len(b) for b in list(capture._mic_buffers)[sr.blocks_covered:]
-                        )
-                        tail_duration = tail_samples / native_rate if native_rate else 0
-                        if tail_duration < 1.0:
-                            streaming_text = sr.text
-                            logger.info(
-                                "STREAMING FAST PATH: %d words from %d runs, "
-                                "tail=%.2fs (< 1.0s threshold)",
-                                len(streaming_text.split()), sr.run_count, tail_duration,
-                            )
-                        else:
-                            # Tail too long for fast path — transcribe just
-                            # the tail and append to the streaming result
-                            # instead of re-transcribing the entire recording.
-                            tail_text = streamer.transcribe_tail()
-                            if tail_text:
-                                streaming_text = sr.text.rstrip() + " " + tail_text
-                            else:
-                                streaming_text = sr.text
-                            logger.info(
-                                "STREAMING+TAIL: %d words from %d runs + "
-                                "tail=%.2fs (%d blocks)",
-                                len(streaming_text.split()), sr.run_count,
-                                tail_duration, tail_blocks,
-                            )
+            # 1. Freeze the audio at release — everything after is dead air.
+            blocks, rate = self._mic.stop()
+            duration_s = sum(len(b) for b in blocks) / rate if rate else 0.0
 
-            # 2. Get transcription — fast path/hybrid or full pass
-            if streaming_text:
-                raw_text = streaming_text
-                retain_audio = self._cfg.get("audio_retention", {}).get("enabled", False)
-                if retain_audio:
-                    wav_path = self._mic.stop()
-                else:
-                    self._mic.stop_fast()
+            # 2. Transcribe: banked chunks + one bounded final window.
+            streamer, self._streamer = self._streamer, None
+            if streamer is not None:
+                raw_text = streamer.finalize(blocks, rate)
             else:
-                wav_path = self._mic.stop()
+                # Chunked transcriber never started — single full pass.
                 from tools.stt.transcribe import transcribe
+                wav_path = write_wav(blocks, rate)
                 raw_text = transcribe(wav_path, model_size=model_name)
-                logger.info("FULL PASS: no streaming result (short recording)")
+                logger.info("FULL PASS: chunked transcriber unavailable")
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")
-                self._set_status("warm")
-                self._reset_idle_timer()
                 return
 
             # 3. Deterministic cleanup (no LLM, no VRAM) — context-aware
@@ -481,8 +418,7 @@ class STTEngine:
 
             # 4. Inject text into active window
             from tools.stt.inject import inject_text
-            inj_cfg = self._cfg.get("injection", {})
-            method = inj_cfg.get("method", "auto")
+            method = self._cfg.get("injection", {}).get("method", "auto")
             inject_text(cleaned_text, method=method)
 
             # 5. Success sound
@@ -492,11 +428,13 @@ class STTEngine:
             except Exception:
                 pass
 
-            # 6. Retain audio for voice model training (before WAV cleanup)
-            audio_path, duration_s = (None, 0.0)
-            if wav_path is not None:
-                audio_path, duration_s = _maybe_retain_audio(
-                    wav_path, dictation_id, self._cfg
+            # 6. Retain audio for voice model training
+            audio_path = None
+            if self._cfg.get("audio_retention", {}).get("enabled", False):
+                if wav_path is None:
+                    wav_path = write_wav(blocks, rate)
+                audio_path = _maybe_retain_audio(
+                    wav_path, dictation_id, duration_s, self._cfg
                 )
 
             # 7. Log to JSONL + manifest
@@ -515,12 +453,12 @@ class STTEngine:
 
             self._last_result = record
             logger.info(
-                "Dictation complete: %s (%dms) — '%s'",
-                record["id"], latency_ms, cleaned_text[:80],
+                "Dictation complete: %s (%.1fs audio, %dms to inject) — '%s'",
+                record["id"], duration_s, latency_ms, cleaned_text[:80],
             )
 
         except Exception as e:
-            logger.error("Dictation pipeline failed: %s", e)
+            logger.error("Dictation pipeline failed: %s", e, exc_info=True)
             self._set_status("error")
             try:
                 from tools.stt.sounds import play_error
@@ -531,7 +469,6 @@ class STTEngine:
             time.sleep(2)
 
         finally:
-            # Clean up temp WAV
             try:
                 if wav_path is not None and wav_path.exists():
                     wav_path.unlink()
@@ -539,48 +476,6 @@ class STTEngine:
                 pass
             self._set_status("warm")
             self._reset_idle_timer()
-
-    def on_dictation_complete(self, wav_path: Path) -> Optional[dict]:
-        """Manual pipeline trigger (for API use without hotkey).
-
-        Returns the dictation record or None on failure.
-        """
-        self._set_status("processing")
-        start_time = time.time()
-
-        try:
-            from tools.stt.transcribe import transcribe
-            model_name = self._cfg.get("model", "large-v3-turbo")
-            raw_text = transcribe(wav_path, model_size=model_name)
-
-            if not raw_text.strip():
-                return None
-
-            from tools.stt.cleanup import cleanup_transcript
-            cleaned_text = cleanup_transcript(raw_text, context=self._app_context)
-
-            from tools.stt.inject import inject_text
-            inj_cfg = self._cfg.get("injection", {})
-            inject_text(cleaned_text, method=inj_cfg.get("method", "auto"))
-
-            latency_ms = int((time.time() - start_time) * 1000)
-            from tools.stt.logger import log_dictation
-            record = log_dictation(
-                raw_transcript=raw_text,
-                cleaned_text=cleaned_text,
-                latency_ms=latency_ms,
-                whisper_model=model_name,
-                cleanup_model="deterministic",
-            )
-
-            self._last_result = record
-            return record
-
-        except Exception as e:
-            logger.error("Manual dictation pipeline failed: %s", e)
-            return None
-        finally:
-            self._set_status("warm" if self._listener else "cold")
 
 
 # Module-level singleton

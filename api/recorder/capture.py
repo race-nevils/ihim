@@ -236,6 +236,7 @@ class DualStreamCapture:
         checkpoint_interval: int = 60,
     ):
         self._stop_event = threading.Event()
+        self._mic_drained = threading.Event()
         self._mic_buffers: list = []
         self._sys_buffers: list = []
         self._mic_thread: Optional[threading.Thread] = None
@@ -293,6 +294,7 @@ class DualStreamCapture:
     def start(self) -> None:
         """Start capturing both streams."""
         self._stop_event.clear()
+        self._mic_drained.clear()
         self._mic_buffers.clear()
         self._sys_buffers.clear()
         self._mic_error = None
@@ -324,6 +326,27 @@ class DualStreamCapture:
             self._mic_thread.join(timeout=5)
         if self._sys_thread:
             self._sys_thread.join(timeout=5)
+
+    def stop_mic_and_drain(self, timeout: float = 1.5) -> bool:
+        """Signal stop and wait for the mic loop's in-flight block to land.
+
+        The mic thread's blocking stream.read() completes its current
+        ~0.5s block after the stop signal, appends it, and only then sets
+        the drained event — so a snapshot after this call includes the
+        tail of the last spoken word. Never joins the thread: sounddevice's
+        stream.stop() hangs on Windows, so the daemon thread is left to
+        die on its own.
+        """
+        self._stop_event.set()
+        return self._mic_drained.wait(timeout)
+
+    def mic_blocks(self) -> list:
+        """Snapshot of mic blocks captured so far (safe during capture)."""
+        return list(self._mic_buffers)
+
+    @property
+    def mic_sample_rate(self) -> int:
+        return int(self._mic_info["sample_rate"])
 
     def save(self, mic_path: Path, sys_path: Path) -> tuple[str, str]:
         """Write captured audio to WAV files. Returns (mic_name, sys_name)."""
@@ -417,11 +440,15 @@ class DualStreamCapture:
                         except Exception as e:
                             logger.warning("mic checkpoint failed: %s", e)
             finally:
+                # Drained BEFORE stream.stop() — stop() can hang on Windows,
+                # and by this point every block is already appended.
+                self._mic_drained.set()
                 stream.stop()
                 stream.close()
         except Exception as e:
             self._mic_error = str(e)
             logger.error("mic capture error: %s", e)
+            self._mic_drained.set()
 
     def _capture_system(self) -> None:
         """Capture system audio via PyAudioWPatch WASAPI loopback."""

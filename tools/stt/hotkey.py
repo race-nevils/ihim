@@ -1,14 +1,18 @@
 """Hold-to-record hotkey listener using pynput.
 
-Reuses stale-key guard pattern from tools/capture_widget/widget.pyw.
 Default hotkey: Left Ctrl + Windows key chord (hold both to record,
-release either to process).
+release either to process). Supports single-key mode (str) and chord
+mode (tuple of str).
 
-Lock mode (Sticky Keys pattern): while recording, press the lock key
-to keep recording after releasing the chord. Press the stop key to
-finish and trigger the pipeline.
+Lock mode (Sticky Keys pattern): while recording, press the lock key to
+keep recording after releasing the chord. Press the stop key to finish
+and trigger the pipeline.
 
-Supports single-key mode (str) and chord mode (tuple of str).
+``on_start`` must return True only if recording actually began.
+``_recording`` follows that ack — a chord press that merely warms the
+model, gets swallowed post-sleep, or errors leaves the listener idle,
+so the lock key can never lock a recording that doesn't exist (the
+"fast lock after cold press" dead-hotkey ghost state).
 """
 
 import logging
@@ -21,6 +25,9 @@ logger = logging.getLogger(__name__)
 # Default: Left Ctrl + Windows key chord (matches Whisper Flow)
 DEFAULT_HOTKEY: Tuple[str, ...] = ("Key.ctrl_l", "Key.cmd")
 
+# No key events for this long → treat held-key state as stale.
+_STALE_AFTER_S = 2.0
+
 
 class HotkeyListener:
     """Hold-to-record listener using pynput.
@@ -31,7 +38,7 @@ class HotkeyListener:
 
     def __init__(
         self,
-        on_start: Callable[[], None],
+        on_start: Callable[[], bool],
         on_stop: Callable[[], None],
         hotkey: Union[str, Tuple[str, ...]] = DEFAULT_HOTKEY,
         lock_key: Optional[str] = None,
@@ -50,103 +57,39 @@ class HotkeyListener:
         self._locked = False
         self._lock = threading.Lock()
 
+        # Resolved at start() — pynput key objects
+        self._target_keys: frozenset = frozenset()
+        self._lock_key = None
+        self._stop_key = None
+
         # Stale-key guard state
         self._current_keys: set = set()
         self._last_key_time: float = 0.0
 
     def start(self) -> None:
-        """Start the hotkey listener as a daemon thread."""
+        """Resolve keys and start the pynput listener as a daemon thread."""
         if self._listener is not None:
             logger.warning("HotkeyListener already running")
             return
 
         from pynput import keyboard as pynput_keyboard
 
-        # Resolve target keys
-        if self._is_chord:
-            target_keys = frozenset(
-                self._resolve_key(k) for k in self._hotkey
-            )
-        else:
-            target_keys = frozenset([self._resolve_key(self._hotkey)])
-
-        # Resolve lock/stop keys (None if not configured)
-        lock_key = self._resolve_key(self._lock_key_str) if self._lock_key_str else None
-        stop_key = self._resolve_key(self._stop_key_str) if self._stop_key_str else None
-
-        def on_press(key):
-            try:
-                now = time.time()
-                # Stale-key guard: clear if no activity for 2s or set suspiciously large
-                if (now - self._last_key_time > 2.0) or len(self._current_keys) > 4:
-                    self._current_keys.clear()
-                    # Clear stuck recording state (e.g. system slept mid-recording).
-                    # Skip when the incoming key is the lock/stop key during active
-                    # recording — pynput doesn't repeat-fire while the chord is held,
-                    # so a >2s hold before tapping the lock key looks identical to
-                    # stale state. Treat action-key presses as proof of liveness.
-                    is_action_key = (
-                        (lock_key is not None and key == lock_key)
-                        or (stop_key is not None and key == stop_key)
-                    )
-                    with self._lock:
-                        if (self._recording and not self._locked
-                                and not is_action_key):
-                            logger.info("Stale-key guard: cleared stuck recording state")
-                            self._recording = False
-                self._last_key_time = now
-                self._current_keys.add(key)
-
-                with self._lock:
-                    # Lock mode: stop_key pressed while locked → stop recording
-                    if self._locked and stop_key is not None and key == stop_key:
-                        self._locked = False
-                        self._recording = False
-                        self._on_stop()
-                        return
-
-                    # Lock mode: lock_key pressed while recording (not yet locked) → lock
-                    if (self._recording and not self._locked
-                            and lock_key is not None and key == lock_key):
-                        self._locked = True
-                        logger.info("Recording locked — release chord, press stop key to finish")
-                        if self._on_locked:
-                            self._on_locked()
-                        return
-
-                    # Normal: check if ALL target keys are currently held
-                    if target_keys.issubset(self._current_keys):
-                        if not self._recording:
-                            self._recording = True
-                            self._on_start()
-            except Exception as e:
-                logger.debug("Hotkey on_press error: %s", e)
-
-        def on_release(key):
-            try:
-                self._current_keys.discard(key)
-                # If locked, releasing chord keys does NOT stop recording
-                if self._locked:
-                    return
-                # Normal: if recording and ANY target key released → stop
-                if key in target_keys:
-                    with self._lock:
-                        if self._recording:
-                            self._recording = False
-                            self._on_stop()
-            except Exception as e:
-                logger.debug("Hotkey on_release error: %s", e)
-
+        self._resolve_keys()
         self._listener = pynput_keyboard.Listener(
-            on_press=on_press,
-            on_release=on_release,
+            on_press=self._handle_press,
+            on_release=self._handle_release,
             suppress=False,
         )
         self._listener.daemon = True
         self._listener.start()
+
         hotkey_display = " + ".join(self._hotkey) if self._is_chord else self._hotkey
-        lock_display = f", lock: {self._lock_key_str}, stop: {self._stop_key_str}" if lock_key else ""
-        logger.info("Hotkey listener started: %s (hold to record%s)", hotkey_display, lock_display)
+        lock_display = (
+            f", lock: {self._lock_key_str}, stop: {self._stop_key_str}"
+            if self._lock_key else ""
+        )
+        logger.info("Hotkey listener started: %s (hold to record%s)",
+                    hotkey_display, lock_display)
 
     def stop(self) -> None:
         """Stop the hotkey listener."""
@@ -169,6 +112,79 @@ class HotkeyListener:
     def is_locked(self) -> bool:
         return self._locked
 
+    # ------------------------------------------------------------------
+    # Key event handlers (methods, not closures — unit-testable)
+    # ------------------------------------------------------------------
+
+    def _resolve_keys(self) -> None:
+        if self._is_chord:
+            self._target_keys = frozenset(self._resolve_key(k) for k in self._hotkey)
+        else:
+            self._target_keys = frozenset([self._resolve_key(self._hotkey)])
+        self._lock_key = self._resolve_key(self._lock_key_str) if self._lock_key_str else None
+        self._stop_key = self._resolve_key(self._stop_key_str) if self._stop_key_str else None
+
+    def _handle_press(self, key) -> None:
+        try:
+            now = time.time()
+            # Stale-key guard: clear if no activity or set suspiciously large.
+            if (now - self._last_key_time > _STALE_AFTER_S) or len(self._current_keys) > 4:
+                self._current_keys.clear()
+                # Clear stuck recording state (e.g. system slept mid-recording).
+                # Skip when the incoming key is the lock/stop key during active
+                # recording — pynput doesn't repeat-fire while the chord is held,
+                # so a >2s hold before tapping the lock key looks identical to
+                # stale state. Action-key presses are proof of liveness.
+                # (bug note 2026-05-01_stt-stale-key-guard-breaks-lock-during-long-hold)
+                is_action_key = (
+                    (self._lock_key is not None and key == self._lock_key)
+                    or (self._stop_key is not None and key == self._stop_key)
+                )
+                with self._lock:
+                    if self._recording and not self._locked and not is_action_key:
+                        logger.info("Stale-key guard: cleared stuck recording state")
+                        self._recording = False
+            self._last_key_time = now
+            self._current_keys.add(key)
+
+            with self._lock:
+                # Lock mode: stop_key pressed while locked → stop recording
+                if self._locked and self._stop_key is not None and key == self._stop_key:
+                    self._locked = False
+                    self._recording = False
+                    self._on_stop()
+                    return
+
+                # Lock mode: lock_key pressed while recording → lock
+                if (self._recording and not self._locked
+                        and self._lock_key is not None and key == self._lock_key):
+                    self._locked = True
+                    logger.info("Recording locked — release chord, press stop key to finish")
+                    if self._on_locked:
+                        self._on_locked()
+                    return
+
+                # Normal: ALL target keys held → start, gated on the ack.
+                if self._target_keys.issubset(self._current_keys) and not self._recording:
+                    self._recording = bool(self._on_start())
+        except Exception as e:
+            logger.debug("Hotkey on_press error: %s", e)
+
+    def _handle_release(self, key) -> None:
+        try:
+            self._current_keys.discard(key)
+            # If locked, releasing chord keys does NOT stop recording
+            if self._locked:
+                return
+            # Normal: if recording and ANY target key released → stop
+            if key in self._target_keys:
+                with self._lock:
+                    if self._recording:
+                        self._recording = False
+                        self._on_stop()
+        except Exception as e:
+            logger.debug("Hotkey on_release error: %s", e)
+
     @staticmethod
     def _resolve_key(hotkey_str: str):
         """Resolve a hotkey string to a pynput Key object."""
@@ -176,8 +192,7 @@ class HotkeyListener:
 
         # Handle pynput Key enum values like "Key.ctrl_r"
         if hotkey_str.startswith("Key."):
-            attr = hotkey_str[4:]
-            return getattr(pynput_keyboard.Key, attr)
+            return getattr(pynput_keyboard.Key, hotkey_str[4:])
 
         # Handle single character keys
         if len(hotkey_str) == 1:

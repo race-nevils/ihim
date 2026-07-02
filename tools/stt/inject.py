@@ -1,12 +1,9 @@
 """Text injection into the active window via clipboard paste or pynput typing.
 
 Primary method: write text to the Windows clipboard, simulate Ctrl+V, then
-restore the previous clipboard contents in a daemon thread (50ms after paste).
+restore the previous clipboard contents in a daemon thread after the paste.
 
 Fallback method: pynput keyboard controller's type() — slower but always works.
-
-Alt+Shift+Z recall: re-injects the last successfully injected transcript.
-Same hotkey as STT Flow.
 """
 
 import logging
@@ -21,13 +18,6 @@ FOCUS_DELAY_S: float = 0.25
 
 # Delay before restoring the clipboard (gives Ctrl+V time to complete).
 CLIPBOARD_RESTORE_DELAY_S: float = 0.15
-
-# Module-level store for the last successfully injected text.
-_last_injected: Optional[str] = None
-
-# Recall listener state.
-_recall_listener: Optional[object] = None
-_recall_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -207,8 +197,6 @@ def inject_text(text: str, method: str = "auto") -> bool:
     Returns:
         True if injection succeeded, False otherwise.
     """
-    global _last_injected
-
     if not text:
         return False
 
@@ -241,7 +229,6 @@ def inject_text(text: str, method: str = "auto") -> bool:
                 logger.error("pynput fallback injection also failed: %s", exc)
 
     if success:
-        _last_injected = text
         logger.info(
             "Injected %d characters via %s",
             len(text),
@@ -249,61 +236,3 @@ def inject_text(text: str, method: str = "auto") -> bool:
         )
 
     return success
-
-
-# ---------------------------------------------------------------------------
-# Alt+Shift+Z recall hotkey
-# ---------------------------------------------------------------------------
-
-def _recall_handler() -> None:
-    """Re-inject the last transcript when the recall hotkey fires."""
-    text = _last_injected
-    if not text:
-        logger.debug("Recall hotkey fired but no previous transcript to inject")
-        return
-    logger.info("Recall hotkey: re-injecting last transcript (%d chars)", len(text))
-    inject_text(text, method="auto")
-
-
-def start_recall_listener() -> None:
-    """Start the Alt+Shift+Z global hotkey listener in a daemon thread.
-
-    Idempotent — calling when already running is a no-op.
-    """
-    global _recall_listener
-
-    with _recall_lock:
-        if _recall_listener is not None:
-            logger.debug("Recall listener already running")
-            return
-
-        try:
-            from pynput import keyboard as pynput_keyboard
-
-            # pynput GlobalHotKeys uses a string mapping.
-            hotkeys = {
-                "<alt>+<shift>+z": _recall_handler,
-            }
-            listener = pynput_keyboard.GlobalHotKeys(hotkeys)
-            listener.daemon = True
-            listener.start()
-            _recall_listener = listener
-            logger.info("Recall hotkey listener started: Alt+Shift+Z")
-        except Exception as exc:
-            logger.error("Failed to start recall listener: %s", exc)
-
-
-def stop_recall_listener() -> None:
-    """Stop the Alt+Shift+Z hotkey listener."""
-    global _recall_listener
-
-    with _recall_lock:
-        if _recall_listener is None:
-            return
-        try:
-            _recall_listener.stop()
-        except Exception as exc:
-            logger.debug("Error stopping recall listener: %s", exc)
-        finally:
-            _recall_listener = None
-            logger.info("Recall hotkey listener stopped")

@@ -1,4 +1,10 @@
-"""Mic capture for dictation — wraps DualStreamCapture in mic-only mode."""
+"""Mic capture for dictation — wraps DualStreamCapture in mic-only mode.
+
+Audio lives as a list of ~0.5s float32 blocks that grows while recording.
+The streaming transcriber reads a live snapshot() during recording;
+stop() freezes the buffer at release (drain-aware, so the in-flight
+block holding the last word's tail is included) and returns it.
+"""
 
 import logging
 import tempfile
@@ -10,8 +16,36 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def write_wav(blocks: list, sample_rate: int, path: Optional[Path] = None) -> Path:
+    """Write float32 mono blocks as a 16-bit WAV at native sample rate.
+
+    No normalization, no resampling — faster-whisper resamples internally
+    with its own anti-aliasing filter. Creates a temp file when *path* is
+    None. Returns the path written.
+    """
+    import numpy as np
+
+    if path is None:
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        path = Path(tmp.name)
+        tmp.close()
+
+    if blocks:
+        audio = np.concatenate(blocks)
+        pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
+    else:
+        pcm = np.zeros(0, dtype=np.int16)
+
+    with wave.open(str(path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm.tobytes())
+    return path
+
+
 class MicCapture:
-    """Record microphone audio to a temp WAV file.
+    """Record microphone audio into float32 blocks.
 
     Uses DualStreamCapture with sys_device_index=None (mic-only mode).
     """
@@ -36,58 +70,32 @@ class MicCapture:
             self._capture.start()
             logger.info("Mic capture started")
 
-    def stop(self) -> Path:
-        """Stop capture, write WAV from buffers, return path.
+    def snapshot(self) -> tuple[list, int]:
+        """Live (blocks so far, native sample rate). Safe during capture."""
+        capture = self._capture
+        if capture is None:
+            return [], 16000
+        return capture.mic_blocks(), capture.mic_sample_rate
 
-        Signals stop without joining threads — capture.stop() has a 5s
-        thread.join timeout that blocks every time (sounddevice stream.stop
-        hangs on Windows). Instead, read buffers directly and write WAV.
-        Threads are daemon and clean up on their own.
+    def stop(self) -> tuple[list, int]:
+        """Stop capture and return the frozen (blocks, sample_rate).
+
+        Waits for the capture thread's in-flight block read to land before
+        snapshotting, so the audio ends at the release point — including
+        the tail of the last spoken word — with no post-release dead air.
         """
-        import numpy as np
-        import time
-
         with self._lock:
             if self._capture is None:
                 raise RuntimeError("MicCapture.stop() called but not recording")
             capture = self._capture
             self._capture = None
 
-        # Signal stop, then wait for the in-flight stream.read (~500ms block)
-        # to finish and append its buffer before snapshotting.
-        capture._stop_event.set()
-        time.sleep(0.3)
-        buffers = list(capture._mic_buffers)
-        native_rate = int(capture._mic_info["sample_rate"])
-
-        # Write WAV at native rate — Whisper resamples internally
-        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        mic_path = Path(tmp.name)
-        tmp.close()
-
-        if buffers:
-            audio = np.concatenate(buffers)
-            pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
-        else:
-            pcm = np.zeros(0, dtype=np.int16)
-
-        with wave.open(str(mic_path), "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(native_rate)
-            wf.writeframes(pcm.tobytes())
-
-        logger.info("Mic capture saved: %s (%d buffers)", mic_path, len(buffers))
-        return mic_path
-
-    def stop_fast(self) -> None:
-        """Stop capture without saving to disk. Use when transcription is already done."""
-        with self._lock:
-            if self._capture is None:
-                raise RuntimeError("MicCapture.stop_fast() called but not recording")
-            self._capture._stop_event.set()
-            self._capture = None
-        logger.info("Mic capture stopped (no save)")
+        if not capture.stop_mic_and_drain(timeout=1.5):
+            logger.warning("Mic drain timed out — snapshotting current buffers")
+        blocks = capture.mic_blocks()
+        rate = capture.mic_sample_rate
+        logger.info("Mic capture stopped (%d blocks)", len(blocks))
+        return blocks, rate
 
     @property
     def is_recording(self) -> bool:

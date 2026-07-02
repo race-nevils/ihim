@@ -4,9 +4,6 @@ Whisper's raw output is already high quality. This module applies fast
 regex/rule-based cleanup: hallucination filtering, stutter detection,
 verbal punctuation commands, filler removal, false start detection,
 deduplication, capitalization, whitespace normalization.
-
-The old LLM approach is preserved as cleanup_transcript_llm() in case
-a better model warrants revisiting.
 """
 
 import logging
@@ -15,19 +12,27 @@ import re
 logger = logging.getLogger(__name__)
 
 # ── Whisper hallucination patterns ────────────────────────────────────
-# Known artifacts from YouTube training data that Whisper hallucinates
-# on silence or low-confidence audio.
+# Known artifacts from YouTube/broadcast training data that Whisper
+# hallucinates on silence or low-confidence audio. The "by ..." credits
+# swallow through the end of the sentence — the fabricated attribution
+# name is part of the artifact ("Closed captioning by Kris Kobus.").
+# Intra-token dots (Amara.org) don't end the sentence.
+_REST_OF_SENTENCE = r"(?:[^.!?\n]|\.(?=\S))*[.!?]?"
+
 _HALLUCINATION_PATTERNS = [
     r"thanks?\s+for\s+watching",
     r"subscribe\s+to\s+my\s+channel",
     r"like\s+and\s+subscribe",
     r"please\s+subscribe",
     r"hit\s+the\s+(?:bell|notification)",
-    r"subtitles?\s+by\b",
+    r"subtitles?\s+by\b" + _REST_OF_SENTENCE,
+    r"closed\s+caption(?:s|ing)?\s+by\b" + _REST_OF_SENTENCE,
+    r"caption(?:s|ing)?\s+provided\s+by\b" + _REST_OF_SENTENCE,
+    r"transcri(?:bed|ption)\s+by\b" + _REST_OF_SENTENCE,
 ]
 
 _HALLUCINATION_RE = re.compile(
-    "|".join(_HALLUCINATION_PATTERNS),
+    "(?:" + "|".join(_HALLUCINATION_PATTERNS) + r")[.!?]*",
     re.IGNORECASE,
 )
 

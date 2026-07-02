@@ -1,232 +1,178 @@
-"""Streaming Whisper — transcribe during recording for lower release latency.
+"""Chunked streaming transcription — flat release latency at any length.
 
-Runs Whisper back-to-back on growing mic buffers during recording.
-On release, the engine uses the streaming result and only transcribes
-the small tail of audio the streamer didn't cover.
+While recording, audio since the last COMMIT POINT is transcribed once
+it grows past ``_COMMIT_AT_S``. Segments followed by a clear silence gap
+are then committed: their text is banked and the commit point advances
+to a block boundary inside that gap. Everything after the commit point
+is re-transcribed next round with the committed tail as decoder context,
+so no cut ever lands mid-word and each pass costs one bounded window —
+never the whole recording.
+
+On release, ``finalize()`` transcribes only the final window (commit
+point → release). Whisper always sees real speech context there; it is
+never handed an isolated sub-second tail — the historical source of
+hallucinated endings ("closed captioning by...") and vocabulary spew.
 """
 
 import logging
-import tempfile
+import math
 import threading
 import time
-import wave
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
+
+from tools.stt.audio import MicCapture, write_wav
 
 logger = logging.getLogger(__name__)
 
+# Run a commit pass once this much uncommitted audio has accumulated.
+_COMMIT_AT_S = 10.0
+# A segment is committable only if the NEXT segment starts at least this
+# long after it ends — the cut lands in real silence, never mid-word.
+_MIN_GAP_S = 1.0
+# Keep the cut clear of the live edge of the window snapshot.
+_EDGE_GUARD_S = 2.0
+# VAD pads speech starts by 200ms — the cut must stay clear of that too.
+_SPEECH_PAD_S = 0.2
+# How often the loop re-checks the buffer.
+_POLL_S = 1.0
 
-@dataclass
-class StreamResult:
-    """Snapshot of what the streamer has transcribed so far."""
-    text: str
-    word_count: int
-    run_count: int
-    last_run_time: float       # time.monotonic()
-    blocks_covered: int        # how many blocks were in the last transcription
+
+def _pick_cut(segments: list[dict], window_s: float, block_s: float) -> Optional[tuple[int, int]]:
+    """Choose the latest safe commit cut.
+
+    Returns (last committed segment index, blocks to advance) or None.
+    The cut is a block boundary inside an inter-segment silence gap of at
+    least ``_MIN_GAP_S``, clear of both the following speech (VAD pad) and
+    the live edge of the window. The final segment is never committable —
+    its speech may continue beyond the snapshot.
+    """
+    best = None
+    for i in range(len(segments) - 1):
+        end = segments[i]["end"]
+        gap = segments[i + 1]["start"] - end
+        if gap < _MIN_GAP_S or end > window_s - _EDGE_GUARD_S:
+            continue
+        advance = math.ceil((end + 0.05) / block_s)
+        if advance * block_s <= segments[i + 1]["start"] - _SPEECH_PAD_S:
+            best = (i, advance)
+    return best
 
 
-class StreamingTranscriber:
-    """Daemon thread that transcribes growing mic audio during recording."""
+class ChunkedTranscriber:
+    """Daemon thread that commits finished speech chunks during recording."""
 
-    def __init__(self, engine_ref, model_name: str):
-        self._engine = engine_ref
+    def __init__(self, mic: MicCapture, model_name: str):
+        self._mic = mic
         self._model_name = model_name
-        self._interval = 2.0
-
-        self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
-        self._result: Optional[StreamResult] = None
-        self._run_count = 0
-        self._last_block_count = 0
+        self._committed_text: list[str] = []
+        self._committed_blocks = 0
 
     def start(self) -> None:
-        """Launch the streaming daemon thread."""
-        self._stop_event.clear()
-        self._run_count = 0
-        self._last_block_count = 0
-        self._result = None
         self._thread = threading.Thread(
             target=self._loop, daemon=True, name="stt-streaming",
         )
         self._thread.start()
-        logger.info("Streaming transcriber started (interval=%.1fs)", self._interval)
+        logger.info("Chunked transcriber started (commit at %.0fs)", _COMMIT_AT_S)
 
-    def stop(self) -> None:
-        """Signal stop and wait for current GPU work to finish.
+    @property
+    def committed(self) -> tuple[str, int]:
+        """(banked text, commit point in blocks) — thread-safe snapshot."""
+        with self._lock:
+            return " ".join(self._committed_text), self._committed_blocks
 
-        Must join the thread so that any in-flight Whisper call completes
-        before the caller starts a new one — two concurrent GPU calls crash.
+    def finalize(self, blocks: list, sample_rate: int) -> str:
+        """Stop the loop and transcribe commit point → end of frozen buffer.
+
+        Joining the loop thread first guarantees no concurrent GPU calls
+        and that any commit already in flight lands before the offset is
+        read. Returns the full raw transcript (committed + final window).
         """
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=30)
 
-    def get_result(self) -> Optional[StreamResult]:
-        with self._lock:
-            return self._result
+        committed_text, committed_blocks = self.committed
+        window = blocks[committed_blocks:]
+        if not window:
+            return committed_text
 
-    def transcribe_tail(self) -> str:
-        """Transcribe audio the streamer missed (call after stop).
-
-        Grabs buffers beyond what the last streaming run covered,
-        writes a tiny WAV, and transcribes just that tail.
-        """
-        capture = self._engine._mic._capture
-        if capture is None:
-            return ""
-
-        result = self.get_result()
-        if result is None:
-            return ""
-
-        all_buffers = list(capture._mic_buffers)
-        covered = result.blocks_covered
-        if len(all_buffers) <= covered:
-            return ""
-
-        tail_buffers = all_buffers[covered:]
-        native_rate = int(capture._mic_info["sample_rate"])
-
-        # Estimate tail duration — skip if too short (Whisper hallucinates on <0.5s)
-        import numpy as np
-        total_samples = sum(len(b) for b in tail_buffers)
-        tail_duration_s = total_samples / native_rate
-        if tail_duration_s < 0.5:
-            logger.info("TAIL SKIP: %.2fs too short, would hallucinate", tail_duration_s)
-            return ""
-
-        wav_path = self._write_wav(tail_buffers, native_rate)
-        if wav_path is None:
-            return ""
-
+        window_s = sum(len(b) for b in window) / sample_rate
+        wav_path = write_wav(window, sample_rate)
         try:
-            t0 = time.monotonic()
             from tools.stt.transcribe import transcribe
-            text = transcribe(wav_path, model_size=self._model_name)
-            elapsed = time.monotonic() - t0
-            tail_text = text.strip()
+            t0 = time.monotonic()
+            tail_text = transcribe(
+                wav_path, model_size=self._model_name, prev_text=committed_text,
+            ).strip()
             logger.info(
-                "TAIL TRANSCRIPTION: %.1fs for %d blocks (%.2fs audio) → '%s'",
-                elapsed, len(tail_buffers), tail_duration_s, tail_text[:80],
+                "FINAL WINDOW: %.1fs audio in %.1fs → %d chars "
+                "(%d chars committed earlier)",
+                window_s, time.monotonic() - t0, len(tail_text), len(committed_text),
             )
-            return tail_text
-        except Exception as e:
-            logger.warning("Tail transcription failed: %s", e)
-            return ""
         finally:
             try:
                 wav_path.unlink()
             except Exception:
                 pass
 
+        return (committed_text + " " + tail_text).strip()
+
     # ------------------------------------------------------------------
-    # Main loop
+    # Commit loop
     # ------------------------------------------------------------------
 
     def _loop(self) -> None:
-        while not self._stop_event.is_set():
-            self._stop_event.wait(self._interval)
-            if self._stop_event.is_set():
-                # Final run — capture any audio that arrived since last result
-                self._maybe_final_run()
-                break
+        while not self._stop_event.wait(_POLL_S):
             try:
-                self._run_once()
-            except Exception as e:
-                logger.warning("Streaming run failed: %s", e)
+                self._maybe_commit()
+            except Exception:
+                logger.warning("Commit pass failed", exc_info=True)
 
-    def _maybe_final_run(self) -> None:
-        """One last transcription with all current buffers if significant new audio exists."""
+    def _maybe_commit(self) -> None:
+        blocks, rate = self._mic.snapshot()
+        window = blocks[self._committed_blocks :]
+        if not window:
+            return
+        block_s = len(window[0]) / rate
+        window_s = sum(len(b) for b in window) / rate
+        if window_s < _COMMIT_AT_S:
+            return
+
+        wav_path = write_wav(window, rate)
         try:
-            capture = self._engine._mic._capture
-            if capture is None:
-                return
-            total_blocks = len(list(capture._mic_buffers))
-            covered = self._result.blocks_covered if self._result else 0
-            new_blocks = total_blocks - covered
-            if new_blocks >= 2:  # ~1s of new audio worth re-running
-                logger.info("FINAL RUN: %d new blocks since last result", new_blocks)
-                self._run_once()
-        except Exception as e:
-            logger.warning("Final streaming run failed: %s", e)
-
-    def _run_once(self) -> None:
-        """Single iteration: snapshot buffers → WAV → transcribe."""
-        capture = self._engine._mic._capture
-        if capture is None:
-            return
-
-        buffers = list(capture._mic_buffers)
-        if len(buffers) < 4:  # need ~2s of audio before first streaming run
-            return
-
-        if len(buffers) == self._last_block_count:
-            return
-        self._last_block_count = len(buffers)
-
-        native_rate = int(capture._mic_info["sample_rate"])
-        wav_path = self._write_wav(buffers, native_rate)
-        if wav_path is None:
-            return
-
-        try:
+            from tools.stt.transcribe import transcribe_segments
+            prev_text, offset = self.committed
             t0 = time.monotonic()
-            from tools.stt.transcribe import transcribe
-            text = transcribe(wav_path, model_size=self._model_name)
+            segments = transcribe_segments(
+                wav_path, model_size=self._model_name, prev_text=prev_text,
+            )
             elapsed = time.monotonic() - t0
-
-            self._run_count += 1
-            words = text.split() if text.strip() else []
-
-            result = StreamResult(
-                text=text.strip(),
-                word_count=len(words),
-                run_count=self._run_count,
-                last_run_time=time.monotonic(),
-                blocks_covered=len(buffers),
-            )
-            with self._lock:
-                self._result = result
-
-            logger.info(
-                "STREAMING RUN #%d: %.1fs to transcribe %d blocks → %d words: '%s'",
-                self._run_count, elapsed, len(buffers), len(words),
-                text.strip()[:100],
-            )
         finally:
             try:
                 wav_path.unlink()
             except Exception:
                 pass
 
-    # ------------------------------------------------------------------
-    # WAV helper
-    # ------------------------------------------------------------------
+        cut = _pick_cut(segments, window_s, block_s)
+        if cut is None:
+            if window_s > 60.0:
+                logger.warning(
+                    "No committable pause in %.0fs of audio — window keeps growing",
+                    window_s,
+                )
+            return
 
-    def _write_wav(self, buffers, native_rate) -> Optional[Path]:
-        """Concatenate mic buffers into a temp WAV at native sample rate.
-
-        No normalization — matches capture.py's approach so Whisper sees
-        consistent audio across streaming runs and the normal path.
-        """
-        try:
-            import numpy as np
-            audio = np.concatenate(buffers)
-            pcm = (audio * 32767).clip(-32768, 32767).astype(np.int16)
-
-            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            path = Path(tmp.name)
-            tmp.close()
-
-            with wave.open(str(path), "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(native_rate)
-                wf.writeframes(pcm.tobytes())
-            return path
-        except Exception as e:
-            logger.warning("Failed to write streaming WAV: %s", e)
-            return None
+        cut_index, advance = cut
+        text = " ".join(s["text"] for s in segments[: cut_index + 1]).strip()
+        with self._lock:
+            if text:
+                self._committed_text.append(text)
+            self._committed_blocks = offset + advance
+        logger.info(
+            "COMMIT: %.1fs window in %.1fs → banked %d segs (%d chars), "
+            "commit point now block %d",
+            window_s, elapsed, cut_index + 1, len(text), offset + advance,
+        )

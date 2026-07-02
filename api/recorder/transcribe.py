@@ -310,6 +310,7 @@ def transcribe_channel(
     vad_filter: bool = True,
     repetition_penalty: float = 1.0,
     word_timestamps: bool = False,
+    hotwords: Optional[str] = None,
 ) -> list[dict]:
     """Transcribe a single WAV file, returning labeled segments.
 
@@ -331,6 +332,8 @@ def transcribe_channel(
         temperature: Sampling temperature or tuple for fallback sequence.
             Default (0.0, 0.2, 0.4, 0.6, 0.8, 1.0) — greedy first, falls
             back to higher temperatures if quality checks fail on a segment.
+        hotwords: Vocabulary terms injected into the decoder prompt of
+            EVERY window (initial_prompt only seeds the first).
 
     Returns list of:
         {"speaker": str, "start": float, "end": float, "text": str, "confidence": float}
@@ -355,6 +358,8 @@ def transcribe_channel(
     )
     if initial_prompt:
         transcribe_kwargs["initial_prompt"] = initial_prompt
+    if hotwords:
+        transcribe_kwargs["hotwords"] = hotwords
     if hallucination_silence_threshold is not None:
         transcribe_kwargs["hallucination_silence_threshold"] = hallucination_silence_threshold
     if language is not None:

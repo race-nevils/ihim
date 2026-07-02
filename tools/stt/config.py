@@ -1,7 +1,8 @@
-"""Configuration for the floating dictation bar.
+"""Dictation engine configuration.
 
-Loads from stt_bar.json on first run; creates the file with defaults
-if it doesn't exist.  Mirrors the load pattern from capture_widget.
+Loads from stt_bar.json (filename is historical — it once configured a
+floating Tk bar that no longer exists); creates the file with defaults on
+first run so hotkeys/model/timeouts are easy to customize.
 """
 
 import json
@@ -18,14 +19,8 @@ DEFAULT_CONFIG = {
     "stop_key": "Key.ctrl_r",
     "model": "large-v3-turbo",
     "idle_timeout_s": 600,
-    "position": "bottom_center",
-    "offset_y": 80,
-    "recording": {},
     "injection": {
         "method": "auto",
-        "focus_delay_s": 0.15,
-        "restore_delay_s": 0.05,
-        "recall_hotkey": "alt+shift+z",
     },
     "audio_retention": {
         "enabled": False,
@@ -35,24 +30,7 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "success": True,
         "error": True,
-    },
-    "window": {
-        "idle_width": 200,
-        "idle_height": 36,
-        "recording_width": 400,
-        "recording_height": 52,
-        "opacity": 0.92,
-    },
-    "appearance": {
-        "bg_idle": "#1e1e2e",
-        "bg_recording": "#313244",
-        "accent": "#89b4fa",
-        "accent_recording": "#f38ba8",
-        "accent_error": "#f38ba8",
-        "accent_loading": "#f9e2af",
-        "text_color": "#cdd6f4",
-        "font_family": "Segoe UI",
-        "font_size": 13,
+        "locked": True,
     },
 }
 

@@ -25,11 +25,22 @@ _CONTEXT_CHARS = 200
 
 
 def _load_vocab() -> str:
-    """Load vocabulary terms from vocab.txt as a hotwords string."""
+    """Load vocabulary terms from vocab.txt as a hotwords string.
+
+    The terms are wrapped in a cased, punctuated sentence — Whisper
+    mimics the STYLE of its prompt, and a bare comma-list in every
+    window suppresses periods and capitalization in the output.
+    """
     if not VOCAB_FILE.exists():
         return ""
     terms = [t.strip() for t in VOCAB_FILE.read_text(encoding="utf-8").splitlines() if t.strip()]
-    return ", ".join(terms)
+    if not terms:
+        return ""
+    return (
+        "Okay, here's what I'm thinking. This dictation may mention "
+        + ", ".join(terms)
+        + ". Let me walk through it."
+    )
 
 
 def _context_tail(prev_text: str) -> str:

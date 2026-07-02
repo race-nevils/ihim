@@ -65,8 +65,17 @@ _PUNCTUATION_COMMANDS = [
 # Build regex patterns — word-boundary safe, case-insensitive.
 # Uses [^\S\n]* (horizontal whitespace) instead of \s* to avoid eating
 # newlines inserted by earlier punctuation commands (e.g. "new paragraph").
+# A preceding determiner means the speaker is talking ABOUT the mark
+# ("the colon is missing"), not commanding it — leave the word alone.
+_NOT_AFTER_DETERMINER = r"(?<!\bthe )(?<!\bthis )(?<!\bthat )(?<!\ban )(?<!\ba )"
 _PUNCT_CMD_PATTERNS = [
-    (re.compile(r"[^\S\n]*\b" + re.escape(cmd) + r"\b[^\S\n]*", re.IGNORECASE), repl)
+    (
+        re.compile(
+            r"[^\S\n]*" + _NOT_AFTER_DETERMINER + r"\b" + re.escape(cmd) + r"\b[^\S\n]*",
+            re.IGNORECASE,
+        ),
+        repl,
+    )
     for cmd, repl in _PUNCTUATION_COMMANDS
 ]
 

@@ -28,6 +28,13 @@ DEFAULT_HOTKEY: Tuple[str, ...] = ("Key.ctrl_l", "Key.cmd")
 # No key events for this long → treat held-key state as stale.
 _STALE_AFTER_S = 2.0
 
+# Ignore a lock/stop key event this soon after the previous lock/stop.
+# With lock_key == stop_key the action is a toggle, so a phantom/duplicate
+# press (the pynput hook emits these under heavy load — e.g. the GPU model
+# load during a cold-start warm-up) double-toggles lock → stop and ends the
+# dictation the instant it locks. the operator never toggles this fast on purpose.
+_TOGGLE_DEBOUNCE_S = 0.4
+
 
 class HotkeyListener:
     """Hold-to-record listener using pynput.
@@ -65,6 +72,8 @@ class HotkeyListener:
         # Stale-key guard state
         self._current_keys: set = set()
         self._last_key_time: float = 0.0
+        # Toggle-debounce state (last time a lock/stop action fired)
+        self._last_toggle_time: float = 0.0
 
     def start(self) -> None:
         """Resolve keys and start the pynput listener as a daemon thread."""
@@ -148,8 +157,19 @@ class HotkeyListener:
             self._current_keys.add(key)
 
             with self._lock:
+                # Debounce the lock/stop toggle: swallow a duplicate/phantom
+                # action-key press that lands within the window of the last
+                # toggle (would otherwise flip lock → stop the instant it locks).
+                is_action_press = (
+                    (self._lock_key is not None and key == self._lock_key)
+                    or (self._stop_key is not None and key == self._stop_key)
+                )
+                if is_action_press and now - self._last_toggle_time <= _TOGGLE_DEBOUNCE_S:
+                    return
+
                 # Lock mode: stop_key pressed while locked → stop recording
                 if self._locked and self._stop_key is not None and key == self._stop_key:
+                    self._last_toggle_time = now
                     self._locked = False
                     self._recording = False
                     self._on_stop()
@@ -158,6 +178,7 @@ class HotkeyListener:
                 # Lock mode: lock_key pressed while recording → lock
                 if (self._recording and not self._locked
                         and self._lock_key is not None and key == self._lock_key):
+                    self._last_toggle_time = now
                     self._locked = True
                     logger.info("Recording locked — release chord, press stop key to finish")
                     if self._on_locked:

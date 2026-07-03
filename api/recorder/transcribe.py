@@ -252,24 +252,54 @@ def is_model_loaded(model_size: str = "small") -> bool:
 
 
 def flush_all_models() -> None:
-    """Unload all cached models and clear the cache.
+    """Unload all cached models' weights before system sleep.
 
     Call before system sleep to give the NVIDIA driver a clean GPU state.
     Without this, active CUDA contexts cause DRIVER_POWER_STATE_FAILURE
     (bugcheck 0x9F) during S3 sleep transitions.
+
+    Deliberately does NOT evict the cache here: dropping the last reference
+    runs the CTranslate2 C++ destructor mid-suspend-transition, which can
+    raise a raw C++ exception (0xe06d7363) that no Python try/except can
+    catch — it killed the whole server on 2026-07-02. Eviction is deferred
+    to ``evict_model_cache()`` on the post-wake path, when the driver is
+    stable again.
     """
+    had_cuda = False
     with _model_lock:
+        if not _model_cache:
+            print("[recorder] Pre-sleep flush: no cached models, nothing to unload.")
         for key, cached in list(_model_cache.items()):
+            if isinstance(key, tuple) and len(key) > 1 and key[1] == "cuda":
+                had_cuda = True
             try:
                 if cached.model.model_is_loaded:
+                    print(f"[recorder] Pre-sleep flush: unloading {key}...")
                     cached.model.unload_model()
-            except Exception:
-                pass
-        _model_cache.clear()
-    _reset_cuda_context()
+                    print(f"[recorder] Pre-sleep flush: {key} unloaded.")
+            except Exception as e:
+                print(f"[recorder] Pre-sleep flush: unload of {key} failed: {e}")
+    if had_cuda:
+        print("[recorder] Pre-sleep flush: resetting CUDA context...")
+        _reset_cuda_context()
     _vram_cache["value"] = None
     _vram_cache["expires"] = 0
-    print("[recorder] Flushed all GPU models — VRAM freed for sleep.")
+    print("[recorder] Pre-sleep flush complete — GPU clean for sleep.")
+
+
+def evict_model_cache() -> None:
+    """Drop all cached model objects. Post-wake only.
+
+    Dropping references runs CTranslate2 C++ destructors — safe once the
+    system has resumed and the driver is stable, never mid-suspend (see
+    ``flush_all_models``). A fresh model (and fresh CUDA context) is
+    constructed on next use.
+    """
+    with _model_lock:
+        evicted = len(_model_cache)
+        _model_cache.clear()
+    if evicted:
+        print(f"[recorder] Evicted {evicted} cached model object(s) after wake.")
 
 
 def unload_model(model_size: str = "small") -> bool:

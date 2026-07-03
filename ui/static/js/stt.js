@@ -37,6 +37,12 @@ function startStatusPolling() {
     statusSource.onmessage = (e) => {
         try { renderStatus(JSON.parse(e.data)); } catch {}
     };
+    // Connection lost (server down, sleep/wake drop) — say so instead of
+    // freezing the badge at the last known state. On reconnect the server
+    // pushes current status immediately, which overwrites this.
+    statusSource.onerror = () => {
+        renderStatus({ status: 'offline' });
+    };
 }
 
 function stopStatusPolling() {
@@ -48,9 +54,13 @@ function renderStatus(data) {
     if (!badge) return;
 
     badge.classList.remove('status-cold', 'status-warm', 'status-recording', 'status-processing', 'status-loading',
-        'status-locked');
+        'status-locked', 'status-offline');
 
     switch (data.status) {
+        case 'offline':
+            badge.textContent = 'OFFLINE';
+            badge.classList.add('status-offline');
+            break;
         case 'warm':
             badge.textContent = 'WARM';
             badge.classList.add('status-warm');

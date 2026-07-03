@@ -432,6 +432,24 @@
         var staticFp = null;          // learned from first poll
         var POLL_MS = 3000;           // check every 3 seconds
         var checking = false;
+        var failCount = 0;            // consecutive poll failures
+
+        // The dashboard must never silently freeze: when the server stops
+        // answering (crash, sleep/wake death), say so on screen.
+        function setServerDown(down) {
+            var el = document.getElementById('server-down-banner');
+            if (down && !el) {
+                el = document.createElement('div');
+                el.id = 'server-down-banner';
+                el.textContent = 'iHIM server unreachable — data on screen is stale. Restart: scripts\\server.ps1 start';
+                el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;' +
+                    'background:#b91c1c;color:#fff;font:600 13px system-ui,sans-serif;' +
+                    'padding:8px 16px;text-align:center;';
+                document.body.appendChild(el);
+            } else if (!down && el) {
+                el.remove();
+            }
+        }
 
         // On page load: detect if server restarted since last visit
         var stored = sessionStorage.getItem('ihim_boot_id');
@@ -449,6 +467,8 @@
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     checking = false;
+                    failCount = 0;
+                    setServerDown(false);
                     // Server restarted (new boot ID)
                     if (data.boot_id && data.boot_id !== bootId) {
                         sessionStorage.setItem('ihim_boot_id', data.boot_id);
@@ -466,7 +486,11 @@
                         }
                     }
                 })
-                .catch(function() { checking = false; });
+                .catch(function() {
+                    checking = false;
+                    failCount++;
+                    if (failCount >= 2) setServerDown(true);
+                });
         }
 
         // Continuous polling — catches changes while actively viewing the page

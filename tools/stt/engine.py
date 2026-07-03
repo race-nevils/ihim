@@ -180,13 +180,14 @@ class STTEngine:
 
     @property
     def status(self) -> str:
-        # Warmup takes priority — don't let stale is_recording override
-        if self._warming_up:
-            return "loading"
+        # Recording-while-warming: an ack'd recording is genuine (the ack
+        # gate guarantees it), so it outranks the warm-up in progress.
         if self._listener and self._listener.is_locked:
             return "locked"
         if self._listener and self._listener.is_recording:
             return "recording"
+        if self._warming_up:
+            return "loading"
         return self._status
 
     @property
@@ -303,9 +304,14 @@ class STTEngine:
         """Called by hotkey listener on chord press.
 
         Returns True only if recording actually started — the listener's
-        recording/lock state machine follows this ack. A cold press warms
-        the model without recording; a post-sleep press recycles the
-        listener and is swallowed; a mic failure aborts. All return False.
+        recording/lock state machine follows this ack. A post-sleep press
+        recycles the listener and is swallowed; a mic failure aborts.
+
+        A cold press records THROUGH the model load: the mic doesn't need
+        Whisper, so recording starts immediately while the model loads on
+        a background thread. The streamer/finalize block on _get_model's
+        single-flight load and catch up — speech from the very first
+        press is kept, no press is ever swallowed waiting for warm.
         """
         # Recycle listener if system slept — pynput hooks go stale
         if _system_slept():
@@ -317,21 +323,18 @@ class STTEngine:
             from api.recorder.transcribe import is_model_loaded
             model_name = self._cfg.get("model", "large-v3-turbo")
 
-            # Cold press — load model only, don't record
-            if not is_model_loaded(model_name):
-                if not self._warming_up:
-                    self._set_status("loading")
-                    logger.info("Cold start — loading model '%s'", model_name)
-                    self._warming_up = True
-                    threading.Thread(
-                        target=self._warm_up_model,
-                        args=(model_name,),
-                        daemon=True,
-                        name="stt-warmup",
-                    ).start()
-                return False
+            # Cold press — kick the model load, then fall through and record
+            if not is_model_loaded(model_name) and not self._warming_up:
+                logger.info("Cold start — loading model '%s' while recording", model_name)
+                self._warming_up = True
+                threading.Thread(
+                    target=self._warm_up_model,
+                    args=(model_name,),
+                    daemon=True,
+                    name="stt-warmup",
+                ).start()
 
-            # Warm press — capture app context BEFORE recording
+            # Capture app context BEFORE recording
             from tools.stt.app_context import get_active_app_context
             self._app_context = get_active_app_context()
             logger.debug("App context at record start: %s", self._app_context)
@@ -367,7 +370,13 @@ class STTEngine:
             from api.recorder.transcribe import _get_model
             _get_model(model_name)
             logger.info("Model '%s' loaded — warm", model_name)
-            self._set_status("warm")
+            listener = self._listener
+            if listener and (listener.is_recording or listener.is_locked):
+                # Recording rode through the load — don't stomp its status;
+                # the pipeline broadcasts warm when it finishes.
+                self._status = "warm"
+            else:
+                self._set_status("warm")
         except Exception as e:
             logger.error("Model warmup failed: %s", e)
             self._set_status("error")

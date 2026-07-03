@@ -9,10 +9,10 @@ keep recording after releasing the chord. Press the stop key to finish
 and trigger the pipeline.
 
 ``on_start`` must return True only if recording actually began.
-``_recording`` follows that ack — a chord press that merely warms the
-model, gets swallowed post-sleep, or errors leaves the listener idle,
-so the lock key can never lock a recording that doesn't exist (the
-"fast lock after cold press" dead-hotkey ghost state).
+``_recording`` follows that ack — a chord press that gets swallowed
+post-sleep or errors on mic start leaves the listener idle, so the
+lock key can never lock a recording that doesn't exist (the "fast
+lock after cold press" dead-hotkey ghost state).
 """
 
 import logging

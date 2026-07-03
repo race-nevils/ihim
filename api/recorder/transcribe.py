@@ -28,6 +28,9 @@ if sys.platform == "win32":
 
 _model_cache: dict = {}
 _model_lock = threading.Lock()
+# Single-flight construction: cache_key → Event set when the in-flight
+# load lands. Concurrent callers wait instead of constructing duplicates.
+_loading_events: dict = {}
 
 # --- Sleep detection (Windows) -------------------------------------------
 # CUDA contexts go stale after system sleep (faster-whisper #829).
@@ -185,20 +188,45 @@ def _get_model(model_size: str = "small"):
                 print(f"[recorder] Model '{model_size}' reloaded on {device}.")
             return cached
 
-    # Slow path: construct new model OUTSIDE _model_lock.
-    # If two threads race here, one model is discarded — harmless for
-    # a single-user app, and far better than holding the lock during a
-    # constructor that can hang on post-sleep CUDA state.
+    # Slow path: construct new model OUTSIDE _model_lock so a hung
+    # constructor (stale CUDA context after sleep) cannot deadlock
+    # unload_model() or other callers. Single-flight: concurrent callers
+    # (stt's warm-up thread vs. a release's finalize while recording
+    # through a cold start) wait for the in-flight load instead of
+    # constructing a duplicate — a second large model doubles VRAM.
+    with _model_lock:
+        event = _loading_events.get(cache_key)
+        leader = event is None
+        if leader:
+            event = threading.Event()
+            _loading_events[cache_key] = event
+
+    if not leader:
+        event.wait(timeout=300)
+        with _model_lock:
+            cached = _model_cache.get(cache_key)
+            if cached is not None:
+                if not cached.model.model_is_loaded:
+                    cached.model.load_model()
+                return cached
+        # Leader failed or timed out — construct independently (old behavior).
+        print(f"[recorder] In-flight load of '{model_size}' did not land, loading own copy...")
+
     from faster_whisper import WhisperModel
 
     print(f"[recorder] Loading faster-whisper '{model_size}' on {device} ({compute_type})...")
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
-
-    with _model_lock:
-        if cache_key not in _model_cache:
-            _model_cache[cache_key] = model
-        else:
-            model = _model_cache[cache_key]
+    try:
+        model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        with _model_lock:
+            if cache_key not in _model_cache:
+                _model_cache[cache_key] = model
+            else:
+                model = _model_cache[cache_key]
+    finally:
+        if leader:
+            with _model_lock:
+                _loading_events.pop(cache_key, None)
+            event.set()
 
     print(f"[recorder] Model '{model_size}' loaded on {device}.")
     return model

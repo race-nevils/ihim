@@ -247,10 +247,14 @@ class STTEngine:
         """
         logger.info("System resumed — resetting state and recycling listener")
         try:
-            from api.recorder.transcribe import _check_system_sleep
+            from api.recorder.transcribe import _check_system_sleep, evict_model_cache
             _check_system_sleep()  # updates CUDA baseline as side effect
-        except Exception:
-            pass
+            # Evict here, on the stable post-wake driver — the suspend-side
+            # flush keeps the objects alive on purpose (destructor mid-suspend
+            # crashed the server 2026-07-02, exception 0xe06d7363)
+            evict_model_cache()
+        except Exception as e:
+            logger.error("Post-wake model-cache eviction failed: %s", e)
         # Consume engine-level sleep baseline so _on_record_start() doesn't
         # also detect sleep and swallow the first keypress
         _system_slept()

@@ -3514,6 +3514,11 @@ button:focus-visible {
     color: #f9e2af;
     animation: stt-pulse 1s ease-in-out infinite;
 }
+.stt-status-badge.status-offline {
+    background: rgba(243, 139, 168, 0.15);
+    color: #f38ba8;
+    border: 1px solid rgba(243, 139, 168, 0.4);
+}
 
 @keyframes stt-pulse {
     0%, 100% { opacity: 1; }

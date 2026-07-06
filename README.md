@@ -35,8 +35,9 @@ tools/stt/               dictation engine (hotkey→capture→transcribe→injec
                            data/ = dictation history + voice-training audio
 handlers/ adapters/ data/  brain ingestion pipeline + JSON-LD source of truth
                            (data/local/brain/ = SSOT; data/brain.db = index)
+orchestrator/              pipeline state (PipelineState/OrchestratorState — handlers/brain.py)
 ui/                        index.html + static/js (components/, widgets) + style.css
-tests/                     pytest; smoke_test*.py live at the repo root
+tests/                     pytest
 ```
 
 ## Widgets
@@ -55,6 +56,4 @@ STT Dictation (history/copy/correct/vocab, SSE status) · Workspaces (live git b
 
 ```powershell
 cd IHIM && python -m pytest                          # route + guard tests
-python smoke_test.py http://127.0.0.1:7778           # every endpoint non-500
-python smoke_test_frontend.py http://127.0.0.1:7778  # shell + every module served
 ```

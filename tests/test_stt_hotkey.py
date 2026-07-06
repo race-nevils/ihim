@@ -121,10 +121,26 @@ class TestLockMode:
         h.press(CTRL_L, CMD)
         h.press(CTRL_R)
         h.release(CTRL_L, CMD, CTRL_R)
+        h.listener._last_toggle_time = time.time() - 1.0  # talked a beat while locked
         h.press(CTRL_R)  # stop key
         assert not h.listener.is_locked
         assert not h.listener.is_recording
         assert h.stops == 1
+
+    def test_phantom_duplicate_lock_key_does_not_stop(self):
+        # THE cold-start bug: lock_key == stop_key, so a duplicate/phantom
+        # action-key press (the pynput hook emits these under the heavy GPU
+        # load of a warm-up) toggled lock -> stop the instant it locked,
+        # ending the dictation. The toggle debounce swallows the duplicate.
+        h = Harness(ack=True)
+        h.press(CTRL_L, CMD)
+        h.listener._last_key_time = time.time() - 5.0  # long warm-up hold
+        h.press(CTRL_R)  # intended lock
+        assert h.listener.is_locked
+        h.press(CTRL_R)  # phantom duplicate arriving milliseconds later
+        assert h.listener.is_locked  # still locked, not stopped
+        assert h.listener.is_recording
+        assert h.stops == 0
 
     def test_lock_after_long_hold_still_works(self):
         # Regression for bug note 2026-05-01: user holds the chord and talks

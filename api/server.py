@@ -25,10 +25,31 @@ router = APIRouter(tags=["server"])
 _SERVER_PS1 = IHIM_DIR / "scripts" / "server.ps1"
 
 
+def _git(*args):
+    try:
+        out = subprocess.run(["git", "-C", str(IHIM_DIR), *args],
+                             capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() if out.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+# Source identity: WHOSE checkout answers on :7777. Computed once at import
+# (health must stay fast); additive fields on /api/health — existing consumers
+# (watchdog, lifecycle script, restart tooling) read only the original keys.
+# (bug note 2026-07-09_port-serves-wrong-branch-not-stale-cache.md)
+SOURCE = {
+    "tree": _git("rev-parse", "--show-toplevel") or str(IHIM_DIR),
+    "branch": _git("branch", "--show-current") or "unknown",
+    "sha": _git("rev-parse", "--short", "HEAD") or "unknown",
+    "dirty": bool(_git("status", "--porcelain", "--", ".")),  # IHIM subtree only
+}
+
+
 @router.get("/api/health")
 async def health():
     """Liveness + vitals. Must stay fast — restart tooling polls it."""
-    result = {"status": "ok", "name": "iHIM", "pid": os.getpid()}
+    result = {"status": "ok", "name": "iHIM", "pid": os.getpid(), **SOURCE}
     up = uptime_seconds()
     if up is not None:
         result["uptime_seconds"] = up

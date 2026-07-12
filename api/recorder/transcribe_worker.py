@@ -15,6 +15,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Launched as a standalone script via create_subprocess_exec, so Python sets
+# sys.path[0] to this file's own directory (api/recorder/) — not the cwd. The
+# server's runtime sys.path.insert doesn't carry across the process boundary
+# and PYTHONPATH is unset, so `import api` fails without this. parents[2] of
+# IHIM/api/recorder/transcribe_worker.py is the IHIM root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 
 def _update_sidecar(sidecar_path: Path, updates: dict) -> dict:
     """Read-modify-write the sidecar JSON atomically."""

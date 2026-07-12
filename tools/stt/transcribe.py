@@ -52,19 +52,25 @@ def _context_tail(prev_text: str) -> str:
 
 
 def transcribe_segments(
-    wav_path: Path, model_size: str = "large-v3-turbo", prev_text: str = ""
+    wav_path: Path, model_size: str = "large-v3-turbo", prev_text: str = "",
+    speaker_label: str = "dictation",
 ) -> list[dict]:
     """Transcribe a WAV, returning Whisper segments with timestamps.
 
     Segment start/end are in the WAV's own timeline — faster-whisper
     restores them through the VAD filter (restore_speech_timestamps).
+
+    This is the tuned dictation path (vocab priming, anti-hallucination
+    thresholds, repetition penalty, fabricated-segment drop). The meeting
+    recorder routes each channel through here too, passing its own
+    speaker_label, so both features share one authoritative tuning.
     """
     from api.recorder.transcribe import transcribe_channel
 
     vocab = _load_vocab()
     segments = transcribe_channel(
         wav_path,
-        speaker_label="dictation",
+        speaker_label=speaker_label,
         model_size=model_size,
         initial_prompt=_context_tail(prev_text) or None,
         hotwords=vocab or None,

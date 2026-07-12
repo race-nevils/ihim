@@ -218,16 +218,23 @@ async def recorder_stop(request: Request):
         "started_at": started_at.isoformat() if started_at else None,
         "ended_at": ended_at.isoformat(),
         "duration_seconds": round(duration, 1),
+        # Transcription runs stt's tuned dictation path (tools/stt/
+        # transcribe.py = source of truth). These mirror the settings it
+        # applies, recorded per-recording for traceability.
         "config": {
             "model_size": model_size,
             "sample_rate": 16000,
             "mic_device": mic_device,
             "sys_device": sys_device,
             "temperature": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            "compression_ratio_threshold": 2.4,
-            "no_speech_threshold": 0.6,
+            "compression_ratio_threshold": 1.8,
+            "no_speech_threshold": 0.3,
             "log_prob_threshold": -1.0,
-            "hallucination_silence_threshold": 2.0,
+            "hallucination_silence_threshold": 1.0,
+            "repetition_penalty": 1.1,
+            "condition_on_previous_text": False,
+            "language": "en",
+            "vocab_hotwords": True,
             "initial_prompt": initial_prompt,
         },
         "speakers": {"mic": "the operator", "system": participant_name or "Other"},

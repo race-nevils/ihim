@@ -119,15 +119,27 @@ def main():
             "transcription_stage": "loading_model",
         })
 
-        from api.recorder.transcribe import transcribe_channel, merge_transcripts, format_transcript
+        # Route each channel through stt's tuned dictation path so the
+        # meeting recorder inherits the exact same settings — vocab priming,
+        # anti-hallucination thresholds, repetition penalty, fabricated-segment
+        # drop, condition_on_previous_text=False. A user initial_prompt (if any)
+        # rides prev_text, the same slot dictation uses for decoder context.
+        from api.recorder.transcribe import merge_transcripts, format_transcript
+        from tools.stt.transcribe import transcribe_segments
 
         # Stage 2: Transcribing mic
         _update_sidecar(sidecar_path, {"transcription_stage": "transcribing_mic"})
-        mic_segments = transcribe_channel(mic_path, mic_label, model_size, initial_prompt=initial_prompt)
+        mic_segments = transcribe_segments(
+            mic_path, model_size=model_size, prev_text=initial_prompt or "",
+            speaker_label=mic_label,
+        )
 
         # Stage 3: Transcribing system audio
         _update_sidecar(sidecar_path, {"transcription_stage": "transcribing_sys"})
-        sys_segments = transcribe_channel(sys_path, sys_label, model_size, initial_prompt=initial_prompt)
+        sys_segments = transcribe_segments(
+            sys_path, model_size=model_size, prev_text=initial_prompt or "",
+            speaker_label=sys_label,
+        )
 
         # Stage 4: Merging
         _update_sidecar(sidecar_path, {"transcription_stage": "merging"})

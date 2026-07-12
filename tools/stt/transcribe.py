@@ -9,6 +9,8 @@ are dropped (Whisper fabricating text on near-zero audio).
 """
 
 import logging
+import re
+import wave
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -22,6 +24,11 @@ _MAX_SPEECH_RATE = 15.0
 
 # How much committed-text tail to feed forward as decoder context.
 _CONTEXT_CHARS = 200
+
+# Prompt-echo drop: fabricated segments that quote the hotwords wrapper
+# need at least this many words to be dropped — short overlaps ("okay",
+# "let me") are legitimate speech.
+_ECHO_MIN_WORDS = 4
 
 
 def _load_vocab() -> str:
@@ -41,6 +48,21 @@ def _load_vocab() -> str:
         + ", ".join(terms)
         + ". Let me walk through it."
     )
+
+
+def _normalize(text: str) -> str:
+    """Lowercase, strip punctuation, collapse whitespace — for echo matching."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", text.lower())).strip()
+
+
+def _wav_duration(wav_path: Path) -> float | None:
+    """Audio duration in seconds, or None for non-WAV/unreadable files."""
+    try:
+        with wave.open(str(wav_path)) as w:
+            rate = w.getframerate()
+            return w.getnframes() / rate if rate else None
+    except Exception:
+        return None
 
 
 def _context_tail(prev_text: str) -> str:
@@ -81,7 +103,40 @@ def transcribe_segments(
         language="en",
         vad_filter=True,
         repetition_penalty=1.1,
+        # hallucination_silence_threshold is INERT without word timestamps
+        # (faster-whisper only runs the silence-skip inside its
+        # word_timestamps branch). Without it, a hallucinated segment in a
+        # silence gap advances seek by the full 30s window — swallowing any
+        # real speech in that window (truncation, 2026-07-12).
+        word_timestamps=True,
     )
+
+    # Per-word arrays served their purpose (activating the hallucination
+    # skip + tight timestamps) — callers only consume segment-level fields.
+    for seg in segments:
+        seg.pop("words", None)
+
+    # Drop prompt echoes: Whisper quotes the hotwords wrapper on silence
+    # ("Let me walk through it."). Match normalized segment text against
+    # the wrapper; 4+ words so real short phrases survive.
+    if vocab:
+        vocab_norm = _normalize(vocab)
+        kept = []
+        for seg in segments:
+            text_norm = _normalize(seg["text"])
+            if len(text_norm.split()) >= _ECHO_MIN_WORDS and text_norm in vocab_norm:
+                logger.info("Dropped hotwords echo: '%s'", seg["text"])
+                continue
+            kept.append(seg)
+        segments = kept
+
+    # Clamp to real audio length — fabricated segments run past EOF.
+    duration = _wav_duration(wav_path)
+    if duration is not None:
+        segments = [s for s in segments if s["start"] < duration]
+        for seg in segments:
+            if seg["end"] > duration:
+                seg["end"] = round(duration, 2)
 
     # Drop trailing segments with impossible speech rate
     while segments:

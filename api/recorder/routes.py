@@ -231,6 +231,7 @@ async def recorder_stop(request: Request):
             "no_speech_threshold": 0.3,
             "log_prob_threshold": -1.0,
             "hallucination_silence_threshold": 1.0,
+            "word_timestamps": True,
             "repetition_penalty": 1.1,
             "condition_on_previous_text": False,
             "language": "en",

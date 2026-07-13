@@ -11,6 +11,7 @@ Exit codes:
 
 import hashlib
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,9 +32,66 @@ def _update_sidecar(sidecar_path: Path, updates: dict) -> dict:
     return data
 
 
-def _write_transcript_md(rec_id, label, started_at, duration, speakers, segments, output_path):
+_ILLEGAL_FS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _clean_name(name: str) -> str:
+    """Filesystem-safe participant name (illegal chars + trailing dots stripped)."""
+    cleaned = _ILLEGAL_FS.sub("", name or "").strip().rstrip(". ")
+    return cleaned or "Meeting"
+
+
+def _repoint_sidecar(recordings_dir: Path, old_name: str, new_name: str) -> None:
+    """Point whichever sibling sidecar named old_name at new_name."""
+    for sc in recordings_dir.glob("recording-*.json"):
+        try:
+            data = json.loads(sc.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if data.get("transcript_md") == old_name:
+            data["transcript_md"] = new_name
+            sc.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            return
+
+
+def _assign_transcript_path(recordings_dir: Path, sidecar: dict, person: str, started_at):
+    """Human-readable transcript filename: '{person} {YYYY-MM-DD}.md'.
+
+    One meeting with a person on a day gets the bare name. A second gets a
+    trailing letter and the first is renamed to ' a', so a busy day reads
+    'Mark 2026-07-13 a.md', 'Mark 2026-07-13 b.md' with no gap. Re-transcription
+    reuses the name already recorded in the sidecar (never mints a new letter).
+    """
+    existing = sidecar.get("transcript_md")
+    if existing and (recordings_dir / existing).exists():
+        return recordings_dir / existing
+
+    date = started_at.strftime("%Y-%m-%d") if started_at else "undated"
+    stem = f"{_clean_name(person)} {date}"
+    plain = recordings_dir / f"{stem}.md"
+    lettered = sorted(recordings_dir.glob(f"{stem} [a-z].md"))
+
+    if not plain.exists() and not lettered:
+        return plain  # only meeting with this person that day
+
+    # Collision — promote the letterless first to ' a', then take the next free.
+    if plain.exists():
+        first = recordings_dir / f"{stem} a.md"
+        if not first.exists():
+            plain.rename(first)
+            _repoint_sidecar(recordings_dir, plain.name, first.name)
+            lettered = sorted(recordings_dir.glob(f"{stem} [a-z].md"))
+
+    used = {p.stem.rsplit(" ", 1)[-1] for p in lettered}
+    for letter in "abcdefghijklmnopqrstuvwxyz":
+        if letter not in used:
+            return recordings_dir / f"{stem} {letter}.md"
+    return recordings_dir / f"{stem} z.md"  # >26 with one person in a day: last wins
+
+
+def _write_transcript_md(label, started_at, duration, speakers, segments, output_path):
     """Write a standalone markdown transcript file."""
-    title = label or f"Meeting {rec_id}"
+    title = label or output_path.stem
     date_str = started_at.strftime("%Y-%m-%d %H:%M UTC") if started_at else "Unknown"
     m, s = divmod(int(duration), 60)
     duration_str = f"{m}m {s}s" if m > 0 else f"{s}s"
@@ -170,8 +228,14 @@ def main():
 
         if merged:
             try:
-                md_path = recordings_dir / f"recording-{recording_id}-transcript.md"
-                _write_transcript_md(recording_id, label, started_at, duration, speakers, merged, md_path)
+                # Name the transcript for a human: the person the operator met with
+                # (system channel) + the date. The WAVs and sidecar keep the
+                # timestamp id — they exist before any transcript does.
+                person = speakers.get("system") or sys_label
+                md_path = _assign_transcript_path(recordings_dir, sidecar, person, started_at)
+                _write_transcript_md(label, started_at, duration, speakers, merged, md_path)
+                sidecar["transcript_md"] = md_path.name
+                sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
             except Exception as e:
                 print(f"[worker] Failed to write transcript markdown: {e}", file=sys.stderr)
 

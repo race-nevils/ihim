@@ -479,12 +479,26 @@ async def delete_recording(recording_id: str, request: Request):
 
     deleted = []
 
-    # Delete WAV files + transcript markdown
-    for suffix in ["-mic.wav", "-sys.wav", "-transcript.md"]:
+    # Read the sidecar for the readable transcript filename before deleting it.
+    try:
+        sc_data = json.loads(await _aread_text(sidecar))
+    except Exception:
+        sc_data = {}
+
+    # Delete WAV files (keyed by recording id — created before any transcript).
+    for suffix in ["-mic.wav", "-sys.wav"]:
         f = RECORDINGS_DIR / f"recording-{recording_id}{suffix}"
         if f.exists():
             f.unlink()
             deleted.append(f.name)
+
+    # Delete the transcript markdown — readable name from the sidecar, with the
+    # legacy id-based name as a fallback for recordings made before the rename.
+    transcript_name = sc_data.get("transcript_md") or f"recording-{recording_id}-transcript.md"
+    tf = RECORDINGS_DIR / Path(transcript_name).name
+    if tf.exists():
+        tf.unlink()
+        deleted.append(tf.name)
 
     # Delete sidecar
     sidecar.unlink()

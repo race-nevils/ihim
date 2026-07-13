@@ -1,63 +1,62 @@
 /**
- * desktop.js — Desktop tile grid: layout, drag-to-rearrange, activation.
+ * <ihim-desktop> — Desktop tile grid Web Component: layout, drag-to-rearrange,
+ * activation. Replaces the old desktop.js manager module.
  *
- * Tiles are a frontend constant — the old /api/actions round-trip (and its
- * POST /api/actions/{id} exec endpoint) is gone. Every tile opens a panel
- * via a static import; drag uses Pointer Events + setPointerCapture with a
- * 5px click/drag threshold.
+ * Tiles are a frontend constant — every tile opens its window via the
+ * IhimPanel element API (open()/toggle()); drag uses Pointer Events +
+ * setPointerCapture with a 5px click/drag threshold.
+ *
+ * Usage (the element IS the grid; role="main" keeps the landmark):
+ *   <ihim-desktop id="actions-grid" class="desktop-grid" role="main"></ihim-desktop>
  */
 
-import { escapeHtml, getIcon, restartServer, showStatus } from './app.js';
-import { toggleSTTWindow } from './stt.js';
-import { toggleRecorderWindow } from './recorder.js';
-import { toggleWorkspacesWindow } from './workspaces.js';
-import { toggleVaultWindow } from './vault.js';
-import { openCalendarWindow } from './calendar.js';
-import { openHealthWindow } from './health-dashboard.js';
-import { stopwatchManager } from './stopwatch.js';
+import { escapeHtml, getIcon, restartServer, showStatus } from '../app.js';
+
+const panel = (id) => document.getElementById(id);
 
 // One entry per desktop tile, in default-layout order.
 export const TILES = [
-    { id: 'stt', name: 'STT Dictation', icon: 'mic', run: toggleSTTWindow },
-    { id: 'workspaces', name: 'Workspaces', icon: 'git-branch', run: toggleWorkspacesWindow },
-    { id: 'meeting_recorder', name: 'Meeting Recorder', icon: 'mic', run: toggleRecorderWindow },
-    { id: 'google_calendar', name: 'Google Calendar', icon: 'calendar', run: openCalendarWindow },
-    { id: 'health', name: 'Health', icon: 'heart-pulse', run: openHealthWindow },
-    { id: 'vault', name: 'Vault', icon: 'archive', run: toggleVaultWindow },
+    { id: 'stt', name: 'STT Dictation', icon: 'mic', run: () => panel('stt-window')?.toggle() },
+    { id: 'workspaces', name: 'Workspaces', icon: 'git-branch', run: () => panel('workspaces-window')?.toggle() },
+    { id: 'meeting_recorder', name: 'Meeting Recorder', icon: 'mic', run: () => panel('recorder-window')?.toggle() },
+    { id: 'google_calendar', name: 'Google Calendar', icon: 'calendar', run: () => panel('calendar-window')?.open() },
+    { id: 'health', name: 'Health', icon: 'heart-pulse', run: () => panel('health-window')?.open() },
+    { id: 'vault', name: 'Vault', icon: 'archive', run: () => panel('vault-window')?.toggle() },
     { id: 'restart_server', name: 'Restart Server', icon: 'restart', run: restartServer },
 ];
 
-export function runTile(id) {
-    const tile = TILES.find(t => t.id === id);
-    if (tile) tile.run();
-    else if (id === 'stopwatch') {
-        stopwatchManager.spawn();
-        showStatus('Stopwatch spawned!', 'success');
+class IhimDesktop extends HTMLElement {
+    icons = {};
+    STORAGE_KEY = 'ihim_desktop_layout';
+    isDragging = false;
+    pendingIcon = null;
+    startPos = { x: 0, y: 0 };
+    offset = { x: 0, y: 0 };
+    abortController = null;
+
+    connectedCallback() {
+        this._restoreLayout();
+        this._render();
     }
-}
 
-export const desktopManager = {
-    icons: {},
-    STORAGE_KEY: 'ihim_desktop_layout',
-    isDragging: false,
-    pendingIcon: null,
-    startPos: { x: 0, y: 0 },
-    offset: { x: 0, y: 0 },
-    abortController: null,
+    disconnectedCallback() {
+        if (this.abortController) { this.abortController.abort(); this.abortController = null; }
+    }
 
-    init() {
-        this.cleanup();
-        this.restoreLayout();
-        this.render();
-    },
+    runTile(id) {
+        const tile = TILES.find(t => t.id === id);
+        if (tile) tile.run();
+        else if (id === 'stopwatch') {
+            document.querySelector('ihim-stopwatch-dock')?.spawn();
+            showStatus('Stopwatch spawned!', 'success');
+        }
+    }
 
-    render() {
+    _render() {
         this.abortController = new AbortController();
         const signal = this.abortController.signal;
 
-        const grid = document.getElementById('actions-grid');
-        grid.innerHTML = '';
-        grid.className = 'desktop-grid';
+        this.innerHTML = '';
 
         const GRID_SIZE = 120;
         const maxCols = Math.max(1, Math.floor((window.innerWidth - 40) / GRID_SIZE));
@@ -87,18 +86,18 @@ export const desktopManager = {
             icon.addEventListener('pointerup', (e) => this._onPointerUp(e, tile.id, icon), { signal });
             icon.addEventListener('pointercancel', (e) => this._onPointerUp(e, tile.id, icon), { signal });
             icon.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); runTile(tile.id); }
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.runTile(tile.id); }
             }, { signal });
             icon.addEventListener('dragstart', (e) => e.preventDefault(), { signal });
 
-            grid.appendChild(icon);
+            this.appendChild(icon);
             if (!saved) this.icons[tile.id] = { x, y };
             col++;
         }
 
         requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
-        this.saveLayout();
-    },
+        this._saveLayout();
+    }
 
     _onPointerDown(e, icon) {
         if (e.button !== 0) return;
@@ -111,7 +110,7 @@ export const desktopManager = {
         this.offset = { x: e.clientX - iconX, y: e.clientY - iconY };
         this.pendingIcon = icon;
         this.isDragging = false;
-    },
+    }
 
     _onPointerMove(e, icon) {
         if (!icon.hasPointerCapture(e.pointerId)) return;
@@ -127,31 +126,29 @@ export const desktopManager = {
             icon.style.left = (e.clientX - this.offset.x) + 'px';
             icon.style.top = (e.clientY - this.offset.y) + 'px';
         }
-    },
+    }
 
     _onPointerUp(e, id, icon) {
         icon.releasePointerCapture(e.pointerId);
         if (this.isDragging && this.pendingIcon) {
             icon.classList.remove('dragging');
             this.icons[id] = { x: parseInt(icon.style.left), y: parseInt(icon.style.top) };
-            this.saveLayout();
+            this._saveLayout();
         } else if (this.pendingIcon) {
-            runTile(id);
+            this.runTile(id);
         }
         this.isDragging = false;
         this.pendingIcon = null;
-    },
+    }
 
-    saveLayout() { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.icons)); },
+    _saveLayout() { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.icons)); }
 
-    restoreLayout() {
+    _restoreLayout() {
         try {
             const stored = localStorage.getItem(this.STORAGE_KEY);
             if (stored) this.icons = JSON.parse(stored);
         } catch (err) { console.error('Failed to restore desktop layout:', err); }
-    },
+    }
+}
 
-    cleanup() {
-        if (this.abortController) { this.abortController.abort(); this.abortController = null; }
-    },
-};
+customElements.define('ihim-desktop', IhimDesktop);

@@ -1,15 +1,44 @@
 /**
- * workspaces.js — Git branch/branch monitor widget.
- * Split out of the old vault-dashboard.js in the 2026-06 refactor.
+ * <ihim-workspaces> — Git branch/branch monitor window.
+ * Extends IhimPanel: IS the draggable window; renders its own chrome +
+ * content, loads data on its panel:open lifecycle.
  */
+import { API, escapeHtml } from '../app.js';
+import { IhimPanel } from './ihim-panel.js';
 
-export const workspacesManager = {
-    async loadWorkspaces() {
-        const body = document.getElementById('workspaces-body');
+class IhimWorkspaces extends IhimPanel {
+    connectedCallback() {
+        this.innerHTML = `
+            <div class="workspaces-header workspaces-drag-handle" data-drag-handle>
+                <span class="workspaces-label"><i data-lucide="git-branch" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Workspaces</span>
+                <span class="workspaces-header-actions">
+                    <button class="workspaces-refresh" id="workspaces-refresh-btn" type="button" aria-label="Refresh workspaces"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i></button>
+                    <button class="workspaces-close" data-close-btn aria-label="Close Workspaces">&times;</button>
+                </span>
+            </div>
+
+            <div class="workspaces-body" id="workspaces-body">
+                <div class="workspaces-loading">Loading workspaces...</div>
+            </div>
+        `;
+
+        this.querySelector('#workspaces-refresh-btn').addEventListener('click', () => this._refresh());
+
+        // Data init on open — covers manual open AND auto-restore on reload.
+        this.addEventListener('panel:open', () => {
+            this._loadWorkspaces();
+            if (window.lucide) lucide.createIcons();
+        });
+
+        super.connectedCallback();
+    }
+
+    async _loadWorkspaces() {
+        const body = this.querySelector('#workspaces-body');
         if (!body) return;
         body.innerHTML = '<div class="workspaces-loading">Loading workspaces...</div>';
         try {
-            const res = await fetch('/api/workspaces');
+            const res = await fetch(`${API}/api/workspaces`);
             const data = await res.json();
             if (!data.success) throw new Error('Failed to load workspaces');
             if (data.workspaces.length === 0) {
@@ -31,7 +60,7 @@ export const workspacesManager = {
 
             html += '<div class="workspaces-list">';
             data.workspaces.forEach(ws => {
-                const statusClass = this.statusClass(ws.status);
+                const statusClass = this._statusClass(ws.status);
                 const statusLabel = ws.status === 'branch-only' ? 'branch only' : ws.status;
 
                 let syncHtml = '';
@@ -52,21 +81,21 @@ export const workspacesManager = {
 
                 const remoteHtml = !ws.has_remote ? '<span class="ws-local-only">local only</span>' : '';
                 const commitHtml = ws.last_commit_message
-                    ? `<div class="workspace-commit">${this.escapeHtml(ws.last_commit_message)}</div>`
+                    ? `<div class="workspace-commit">${escapeHtml(ws.last_commit_message)}</div>`
                     : '';
 
                 html += `<div class="workspace-item ${statusClass}">
                     <div class="workspace-header">
-                        <span class="workspace-name">${this.escapeHtml(ws.name)}</span>
+                        <span class="workspace-name">${escapeHtml(ws.name)}</span>
                         <span class="workspace-header-right">
                             ${syncHtml}${dirtyHtml}${remoteHtml}
                             <span class="workspace-status-badge ${statusClass}">${statusLabel}</span>
                         </span>
                     </div>
                     <div class="workspace-details">
-                        <div class="workspace-branch">Branch: <code>${this.escapeHtml(ws.branch)}</code></div>
+                        <div class="workspace-branch">Branch: <code>${escapeHtml(ws.branch)}</code></div>
                         ${commitHtml}
-                        ${ws.purpose ? `<div class="workspace-purpose">${this.escapeHtml(ws.purpose)}</div>` : ''}
+                        ${ws.purpose ? `<div class="workspace-purpose">${escapeHtml(ws.purpose)}</div>` : ''}
                         ${ws.last_activity_relative ? `<div class="workspace-activity">Last active: ${ws.last_activity_relative}</div>` : ''}
                     </div>
                 </div>`;
@@ -77,9 +106,9 @@ export const workspacesManager = {
             console.error('Failed to load workspaces:', e);
             body.innerHTML = '<div class="workspaces-error">Failed to load workspaces</div>';
         }
-    },
+    }
 
-    statusClass(status) {
+    _statusClass(status) {
         const map = {
             'active': 'status-active',
             'branch-only': 'status-branch-only',
@@ -88,43 +117,21 @@ export const workspacesManager = {
             'diverged': 'status-diverged',
         };
         return map[status] || 'status-closed';
-    },
+    }
 
-    async refresh() {
-        const btn = document.getElementById('workspaces-refresh-btn');
+    async _refresh() {
+        const btn = this.querySelector('#workspaces-refresh-btn');
         if (!btn || btn.classList.contains('is-refreshing')) return;
         btn.classList.add('is-refreshing');
         btn.disabled = true;
         try {
-            await this.loadWorkspaces();
+            await this._loadWorkspaces();
             if (window.lucide) lucide.createIcons();
         } finally {
             btn.classList.remove('is-refreshing');
             btn.disabled = false;
         }
-    },
-
-    escapeHtml(unsafe) {
-        return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
-};
-
-export function toggleWorkspacesWindow() {
-    const win = document.getElementById('workspaces-window');
-    if (!win) return;
-    if (win.hasAttribute('open')) win.close();
-    else win.open();
 }
 
-export function initWorkspacesEvents() {
-    const wsWin = document.getElementById('workspaces-window');
-    if (!wsWin) return;
-    document.getElementById('workspaces-refresh-btn')
-        ?.addEventListener('click', () => workspacesManager.refresh());
-    // Data init on panel:open — covers manual open AND auto-restore on reload.
-    wsWin.addEventListener('panel:open', () => {
-        workspacesManager.loadWorkspaces();
-        if (window.lucide) lucide.createIcons();
-    });
-}
+customElements.define('ihim-workspaces', IhimWorkspaces);

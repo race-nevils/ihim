@@ -1,6 +1,7 @@
 /**
- * app.js — Shared constants, utilities, and the system monitor.
- * Pure exports only — no feature module imports (avoids circular deps).
+ * app.js — Shared constants and utilities.
+ * Pure exports only — no component imports (avoids circular deps).
+ * The CPU/RAM system monitor lives in components/ihim-system-monitor.js.
  */
 
 // API base URL (empty = same origin)
@@ -88,33 +89,4 @@ export async function restartServer() {
             }
         }
     }, 1500);
-}
-
-// =====================
-// System Monitor (CPU/RAM bottom-bar widget)
-// =====================
-
-let systemMonitorInterval = null;
-
-export async function updateSystemMonitor() {
-    try {
-        const res = await fetch(`${API}/api/system/stats`);
-        const data = await res.json();
-        const cpuEl = document.getElementById('cpu-value');
-        const ramEl = document.getElementById('ram-value');
-        if (cpuEl) cpuEl.textContent = data.cpu?.percent ?? '--';
-        if (ramEl) ramEl.textContent = data.memory?.percent ?? '--';
-    } catch (err) { /* silent — bar shows last value */ }
-}
-
-export function startSystemMonitor() {
-    if (systemMonitorInterval) return;
-    systemMonitorInterval = setInterval(updateSystemMonitor, 2000);
-}
-
-export function stopSystemMonitor() {
-    if (systemMonitorInterval) {
-        clearInterval(systemMonitorInterval);
-        systemMonitorInterval = null;
-    }
 }

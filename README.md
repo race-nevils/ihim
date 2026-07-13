@@ -1,6 +1,6 @@
 # iHIM — the operator's Command Center
 
-Local-first personal dashboard: Whisper dictation, git workspace monitor, meeting recorder, Google Calendar, health program, agent node control, and the JSON-LD second-brain data layer. FastAPI backend, vanilla-JS Web-Component frontend, everything served from one process on `127.0.0.1:7777`.
+Local-first personal dashboard: Whisper dictation, git workspace monitor, meeting recorder, Google Calendar, health program, agent node control, and the JSON-LD second-brain data layer. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
 
 Rebuilt from scratch 2026-06-10 (design + audit: `design-notes/ihim/refactor-2026-06/`). Pre-refactor code archived at `archive/ihim-pre-refactor-20260609/`.
 
@@ -36,7 +36,7 @@ tools/stt/               dictation engine (hotkey→capture→transcribe→injec
 handlers/ adapters/ data/  brain ingestion pipeline + JSON-LD source of truth
                            (data/local/brain/ = SSOT; data/brain.db = index)
 orchestrator/              pipeline state (PipelineState/OrchestratorState — handlers/brain.py)
-ui/                        index.html + static/js (components/, widgets) + style.css
+ui/                        index.html + static/js (components/ = all widgets) + style.css
 tests/                     pytest
 ```
 

@@ -2862,18 +2862,28 @@ main {
 }
 
 /* ============================================ */
-/* WEB COMPONENTS (Phase 4)                     */
+/* WEB COMPONENTS                               */
 /* ============================================ */
 
-/* Draggable window component — visibility via [open] attribute */
-/* ihim-panel widgets: no max-width / max-height. Keep min-* to prevent collapse.
-   Stacking order is managed by click-to-focus in ihim-panel.js (pointerdown raises). */
-ihim-panel { position: fixed; z-index: 100; }
-ihim-panel:not([open]) { display: none; }
-ihim-panel[open] { display: flex; flex-direction: column; }
+/* Draggable windows — IhimPanel base + every subclass (one element per window).
+   Visibility via [open] attribute. No max-width / max-height; keep min-* to
+   prevent collapse. Stacking order is managed by click-to-focus in
+   ihim-panel.js (pointerdown raises). A new window element MUST join this list. */
+ihim-panel, ihim-stt, ihim-recorder, ihim-calendar,
+ihim-health, ihim-vault, ihim-workspaces, ihim-agentnode { position: fixed; z-index: 100; }
+ihim-panel:not([open]), ihim-stt:not([open]), ihim-recorder:not([open]), ihim-calendar:not([open]),
+ihim-health:not([open]), ihim-vault:not([open]), ihim-workspaces:not([open]), ihim-agentnode:not([open]) { display: none; }
+ihim-panel[open], ihim-stt[open], ihim-recorder[open], ihim-calendar[open],
+ihim-health[open], ihim-vault[open], ihim-workspaces[open], ihim-agentnode[open] { display: flex; flex-direction: column; }
 
 /* Tab system component — transparent wrapper, invisible to layout + AT */
 ihim-tabs { display: contents; }
+
+/* Desktop grid — the element is the grid (#actions-grid geometry applies) */
+ihim-desktop { display: block; }
+
+/* Stopwatch — dock layout comes from .stopwatch-container; each timer is a block card */
+ihim-stopwatch { display: block; }
 
 /* ============================================ */
 /* ACCESSIBILITY                                */

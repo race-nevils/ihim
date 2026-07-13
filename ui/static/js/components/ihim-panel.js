@@ -1,16 +1,28 @@
 /**
- * <ihim-panel> — Draggable window Web Component
+ * <ihim-panel> — Draggable window Web Component base class.
  * Thin delegation layer over Phase 3 utilities:
  *   - draggable.js: pointer drag, keyboard move, viewport clamping, position persistence
  *   - a11y.js: global Escape-key close via window registry
  *
- * Usage:
- *   <ihim-panel id="my-window" class="my-window" persist-key="myWindowPosition">
- *     <div data-drag-handle class="my-header">Title <button data-close-btn>&times;</button></div>
- *     <div>Content</div>
- *   </ihim-panel>
+ * Dashboard windows subclass IhimPanel (is-a: every widget window IS a
+ * draggable panel). A subclass renders its template synchronously in
+ * connectedCallback, then calls super.connectedCallback() so _setup finds
+ * the [data-drag-handle] / [data-close-btn] hooks:
+ *
+ *   class IhimSTT extends IhimPanel {
+ *       connectedCallback() {
+ *           this.innerHTML = `<div data-drag-handle>... <button data-close-btn>&times;</button></div> ...`;
+ *           this.addEventListener('panel:open', () => ...);
+ *           super.connectedCallback();
+ *       }
+ *   }
+ *
+ * The bare element remains usable for markup-authored windows:
+ *   <ihim-panel id="my-window" persist-key="myWindowPosition">...</ihim-panel>
  *
  * Visibility controlled by [open] attribute (like <dialog>/<details>).
+ * CSS: subclasses must appear in style.css's window selector list
+ * (position: fixed / [open] display rules).
  * Public API: open(), close(), toggle(), minimize()
  * Events: panel:open, panel:close (bubble)
  */
@@ -22,7 +34,7 @@ import { initWindowEscapeClose } from '../a11y.js';
 // Pointerdown anywhere in a panel raises it above its siblings.
 let topZ = 100;
 
-class IhimPanel extends HTMLElement {
+export class IhimPanel extends HTMLElement {
     connectedCallback() {
         // Defer to ensure light-DOM children are parsed
         queueMicrotask(() => this._setup());

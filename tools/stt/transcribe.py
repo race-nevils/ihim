@@ -30,6 +30,49 @@ _CONTEXT_CHARS = 200
 # "let me") are legitimate speech.
 _ECHO_MIN_WORDS = 4
 
+# Segment splitting: VAD speech-padding glues continuous speech into
+# giant segments (a 43s monologue = one timestamp). Word timings let us
+# re-cut them at natural boundaries.
+_SPLIT_GAP = 1.0          # inter-word silence that always starts a new segment
+_SPLIT_AT_SENTENCE = 5.0  # sentence end closes a segment once it's this long
+_SPLIT_HARD = 15.0        # absolute cap — split at the next word boundary
+_SENTENCE_ENDS = (".", "?", "!")
+
+
+def _split_long_segments(segments: list[dict], deloop) -> list[dict]:
+    """Re-cut long segments at pauses / sentence ends using word timings."""
+    out = []
+    for seg in segments:
+        words = seg.get("words")
+        if not words or (seg["end"] - seg["start"]) <= _SPLIT_AT_SENTENCE:
+            out.append(seg)
+            continue
+        pieces = [[words[0]]]
+        for prev, nxt in zip(words, words[1:]):
+            piece = pieces[-1]
+            length = prev["end"] - piece[0]["start"]
+            gap = nxt["start"] - prev["end"]
+            at_sentence = prev["word"].rstrip().endswith(_SENTENCE_ENDS)
+            if gap > _SPLIT_GAP or (at_sentence and length >= _SPLIT_AT_SENTENCE) or length >= _SPLIT_HARD:
+                pieces.append([nxt])
+            else:
+                piece.append(nxt)
+        if len(pieces) == 1:
+            out.append(seg)
+            continue
+        for piece in pieces:
+            text = deloop("".join(w["word"] for w in piece).strip())
+            if not text:
+                continue
+            out.append({
+                "speaker": seg["speaker"],
+                "start": piece[0]["start"],
+                "end": piece[-1]["end"],
+                "text": text,
+                "confidence": seg["confidence"],
+            })
+    return out
+
 
 def _load_vocab() -> str:
     """Load vocabulary terms from vocab.txt as a hotwords string.
@@ -87,7 +130,7 @@ def transcribe_segments(
     recorder routes each channel through here too, passing its own
     speaker_label, so both features share one authoritative tuning.
     """
-    from api.recorder.transcribe import transcribe_channel
+    from api.recorder.transcribe import _deloop_text, transcribe_channel
 
     vocab = _load_vocab()
     segments = transcribe_channel(
@@ -111,8 +154,9 @@ def transcribe_segments(
         word_timestamps=True,
     )
 
-    # Per-word arrays served their purpose (activating the hallucination
-    # skip + tight timestamps) — callers only consume segment-level fields.
+    # Re-cut VAD-glued monologue blobs into pause/sentence-sized segments,
+    # then drop the per-word arrays — callers consume segment level only.
+    segments = _split_long_segments(segments, _deloop_text)
     for seg in segments:
         seg.pop("words", None)
 

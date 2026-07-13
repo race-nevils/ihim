@@ -235,7 +235,7 @@ async def recorder_stop(request: Request):
             "repetition_penalty": 1.1,
             "condition_on_previous_text": False,
             "language": "en",
-            "vocab_hotwords": True,
+            "vocab_hotwords": False,
             "initial_prompt": initial_prompt,
         },
         "speakers": {"mic": "the operator", "system": participant_name or "Other"},

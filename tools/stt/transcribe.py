@@ -118,7 +118,7 @@ def _context_tail(prev_text: str) -> str:
 
 def transcribe_segments(
     wav_path: Path, model_size: str = "large-v3-turbo", prev_text: str = "",
-    speaker_label: str = "dictation",
+    speaker_label: str = "dictation", use_vocab: bool = True,
 ) -> list[dict]:
     """Transcribe a WAV, returning Whisper segments with timestamps.
 
@@ -129,10 +129,16 @@ def transcribe_segments(
     thresholds, repetition penalty, fabricated-segment drop). The meeting
     recorder routes each channel through here too, passing its own
     speaker_label, so both features share one authoritative tuning.
+
+    use_vocab: the hotwords wrapper is safe for short dense dictation but
+    on long-form meeting audio it seeds prompt-echo hallucinations that
+    make whisper SKIP entire 30s windows of real speech (swallowed 0-25s
+    of a real call, 2026-07-12 — riding initial_prompt instead swallows
+    the same window). Meeting channels must pass False.
     """
     from api.recorder.transcribe import _deloop_text, transcribe_channel
 
-    vocab = _load_vocab()
+    vocab = _load_vocab() if use_vocab else ""
     segments = transcribe_channel(
         wav_path,
         speaker_label=speaker_label,

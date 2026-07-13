@@ -544,7 +544,8 @@ class DualStreamCapture:
         manifest = {
             "rec_id": self._checkpoint_dir.name,
             "started_at": self._started_at_iso,
-            "sample_rate": int(self._mic_info["sample_rate"]),
+            "mic_sample_rate": int(self._mic_info["sample_rate"]),
+            "sys_sample_rate": int(self._sys_info["sample_rate"]) if self._sys_info else 16000,
             "mic_chunks": self._mic_chunk_count,
             "sys_chunks": self._sys_chunk_count,
             "mic_device": self._mic_info["name"],
@@ -622,3 +623,54 @@ class DualStreamCapture:
             wf.setsampwidth(2)
             wf.setframerate(native_rate)
             wf.writeframes(pcm.tobytes())
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CRASH RECOVERY
+# ═══════════════════════════════════════════════════════════════════════
+
+def _write_chunks_as_wav(chunk_dir: Path, stream: str, count: int,
+                         sample_rate: int, out_path: Path) -> float:
+    """Assemble raw int16 PCM chunk files into a WAV. Returns duration in seconds."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    total_frames = 0
+    with wave.open(str(out_path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        for i in range(count):
+            chunk_path = chunk_dir / f"{stream}-chunk-{i:04d}.raw"
+            if not chunk_path.exists():
+                continue
+            raw = chunk_path.read_bytes()
+            wf.writeframes(raw)
+            total_frames += len(raw) // 2
+    return total_frames / sample_rate if sample_rate else 0.0
+
+
+def recover_checkpoint(chunk_dir: Path, mic_path: Path, sys_path: Path) -> Optional[dict]:
+    """Assemble an interrupted recording's checkpoint chunks into final WAVs.
+
+    Reads manifest.json in chunk_dir, writes both channel WAVs, and returns
+    the manifest augmented with 'duration_seconds'. Returns None if the
+    directory holds no recoverable audio. Does NOT delete chunk_dir — the
+    caller removes it only after the sidecar is safely written.
+    """
+    manifest_path = chunk_dir / "manifest.json"
+    if not manifest_path.exists():
+        return None
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    mic_chunks = int(manifest.get("mic_chunks", 0))
+    sys_chunks = int(manifest.get("sys_chunks", 0))
+    if mic_chunks == 0 and sys_chunks == 0:
+        return None
+
+    mic_rate = int(manifest.get("mic_sample_rate") or manifest.get("sample_rate") or 16000)
+    sys_rate = int(manifest.get("sys_sample_rate") or 16000)
+
+    mic_dur = _write_chunks_as_wav(chunk_dir, "mic", mic_chunks, mic_rate, mic_path)
+    sys_dur = _write_chunks_as_wav(chunk_dir, "sys", sys_chunks, sys_rate, sys_path)
+
+    manifest["duration_seconds"] = round(max(mic_dur, sys_dur), 1)
+    return manifest

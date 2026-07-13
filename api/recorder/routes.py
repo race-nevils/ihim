@@ -5,15 +5,14 @@ Stop saves audio instantly. Transcription is manual via POST /transcribe/{id}.
 """
 
 import asyncio
-import hashlib
 import json
 import logging
 import re
+import shutil
 import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Request
 from api.errors import problem
@@ -34,6 +33,9 @@ router = APIRouter(prefix="/api/recorder", tags=["recorder"])
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "local"
 RECORDINGS_DIR = DATA_DIR / "recordings"
 BRAIN_DIR = DATA_DIR / "brain" / "Meetings"
+# Streaming capture checkpoints land here during recording; a clean stop
+# removes them, a crash leaves them for the boot sweep to recover.
+INPROGRESS_DIR = RECORDINGS_DIR / ".inprogress"
 
 # ── Async file I/O helpers (prevent event loop starvation) ──
 
@@ -130,6 +132,7 @@ async def recorder_start(body: StartRequest, request: Request):
         capture = DualStreamCapture(
             mic_device_index=body.mic_device_index,
             sys_device_index=body.sys_device_index,
+            checkpoint_dir=INPROGRESS_DIR / rec_id,
         )
         capture.start()
 
@@ -183,22 +186,28 @@ async def recorder_stop(request: Request):
     model_size = _state.model_size
 
     # ── Block 1: Stop capture + save WAV files (fatal if fails) ──
-    try:
-        with _capture_lock:
-            _capture.stop()
-            local_capture = _capture
-            _capture = None
-        _state.stop_recording()
+    # stop() joins capture threads (up to 10s) and save() concatenates +
+    # writes potentially GBs of WAV — both run in the thread pool so a
+    # long recording can't stall every other endpoint on the event loop.
+    with _capture_lock:
+        local_capture = _capture
+        _capture = None
 
+    mic_path = RECORDINGS_DIR / f"recording-{rec_id}-mic.wav"
+    sys_path = RECORDINGS_DIR / f"recording-{rec_id}-sys.wav"
+
+    def _stop_and_save():
+        local_capture.stop()
         RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        mic_path = RECORDINGS_DIR / f"recording-{rec_id}-mic.wav"
-        sys_path = RECORDINGS_DIR / f"recording-{rec_id}-sys.wav"
         local_capture.save(mic_path, sys_path)
+
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _stop_and_save)
+        _state.stop_recording()
         capture_errors = local_capture.errors
     except Exception as e:
         _state.set_error(str(e))
-        with _capture_lock:
-            _capture = None
         logger.error("Audio save failed for %s: %s", rec_id, e)
         return problem(500, f"Audio save failed: {e}", instance=request.url.path)
 
@@ -262,7 +271,14 @@ async def recorder_stop(request: Request):
 
 # Active transcription worker processes {recording_id: asyncio.subprocess.Process}
 _active_workers: dict = {}
-_TRANSCRIPTION_TIMEOUT = 300  # 5 minutes
+# Worker timeout scales with recording length: two channels at up to 2x
+# realtime each, plus a floor covering model cold-load. Real meetings run
+# 1.5-3 hours — a flat cap killed them.
+_TRANSCRIPTION_TIMEOUT_FLOOR = 600  # 10 minutes
+
+
+def _transcription_timeout(duration_seconds: float) -> float:
+    return max(_TRANSCRIPTION_TIMEOUT_FLOOR, duration_seconds * 4)
 
 
 @router.post("/transcribe/{recording_id}")
@@ -338,7 +354,8 @@ async def transcribe_recording(recording_id: str, request: Request):
     await _awrite_text(sidecar_path, json.dumps(sidecar, indent=2))
 
     # Launch worker subprocess — fire and forget with timeout
-    asyncio.create_task(_run_transcription_worker(recording_id, task_path, sidecar_path))
+    timeout = _transcription_timeout(sidecar.get("duration_seconds") or 0)
+    asyncio.create_task(_run_transcription_worker(recording_id, task_path, sidecar_path, timeout))
 
     logger.info("Transcription worker launched for %s", recording_id)
 
@@ -353,7 +370,7 @@ async def transcribe_recording(recording_id: str, request: Request):
     )
 
 
-async def _run_transcription_worker(recording_id: str, task_path: Path, sidecar_path: Path):
+async def _run_transcription_worker(recording_id: str, task_path: Path, sidecar_path: Path, timeout: float):
     """Manage the transcription worker subprocess with timeout."""
     worker_script = Path(__file__).parent / "transcribe_worker.py"
     ihim_dir = Path(__file__).parent.parent.parent  # IHIM root
@@ -369,7 +386,7 @@ async def _run_transcription_worker(recording_id: str, task_path: Path, sidecar_
 
         try:
             stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=_TRANSCRIPTION_TIMEOUT
+                proc.communicate(), timeout=timeout
             )
             if proc.returncode != 0:
                 logger.error(
@@ -381,13 +398,13 @@ async def _run_transcription_worker(recording_id: str, task_path: Path, sidecar_
                 if stdout:
                     logger.info(stdout.decode("utf-8", errors="replace").strip())
         except asyncio.TimeoutError:
-            logger.error("Transcription worker timed out for %s after %ds — killing", recording_id, _TRANSCRIPTION_TIMEOUT)
+            logger.error("Transcription worker timed out for %s after %ds — killing", recording_id, timeout)
             proc.kill()
             await proc.wait()
             try:
                 sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
                 sidecar["status"] = "transcription_failed"
-                sidecar["transcription_error"] = f"Timed out after {_TRANSCRIPTION_TIMEOUT}s"
+                sidecar["transcription_error"] = f"Timed out after {round(timeout)}s"
                 sidecar["transcription_stage"] = None
                 sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
             except Exception:
@@ -406,30 +423,44 @@ async def _run_transcription_worker(recording_id: str, task_path: Path, sidecar_
         _active_workers.pop(recording_id, None)
 
 
+# Sidecars grow to hundreds of KB (they embed the full transcript); the
+# list endpoint only needs five summary fields, so cache them by mtime.
+_summary_cache: dict = {}  # path str → (mtime, RecordingSummary)
+
+
+def _scan_recording_summaries() -> list:
+    """Parse sidecar JSONs into summaries, reusing cached entries by mtime."""
+    summaries = []
+    for f in sorted(RECORDINGS_DIR.glob("recording-*.json"), reverse=True):
+        try:
+            mtime = f.stat().st_mtime
+            cached = _summary_cache.get(str(f))
+            if cached and cached[0] == mtime:
+                summaries.append(cached[1])
+                continue
+            data = json.loads(f.read_text(encoding="utf-8"))
+            summary = RecordingSummary(
+                recording_id=data["recording_id"],
+                label=data.get("label"),
+                started_at=data["started_at"],
+                duration_seconds=data.get("duration_seconds"),
+                status=data.get("status", "unknown"),
+            )
+            _summary_cache[str(f)] = (mtime, summary)
+            summaries.append(summary)
+        except Exception:
+            continue
+    return summaries
+
+
 @router.get("/recordings", response_model=RecordingsListResponse)
 async def list_recordings():
     """List all past recordings (scans sidecar JSONs)."""
     if not RECORDINGS_DIR.exists():
         return RecordingsListResponse(recordings=[])
 
-    recordings = []
     loop = asyncio.get_event_loop()
-    sidecar_files = await loop.run_in_executor(
-        None, lambda: sorted(RECORDINGS_DIR.glob("recording-*.json"), reverse=True)
-    )
-    for f in sidecar_files:
-        try:
-            data = json.loads(await _aread_text(f))
-            recordings.append(RecordingSummary(
-                recording_id=data["recording_id"],
-                label=data.get("label"),
-                started_at=data["started_at"],
-                duration_seconds=data.get("duration_seconds"),
-                status=data.get("status", "unknown"),
-            ))
-        except Exception:
-            continue
-
+    recordings = await loop.run_in_executor(None, _scan_recording_summaries)
     return RecordingsListResponse(recordings=recordings)
 
 
@@ -535,107 +566,142 @@ async def recorder_reset(request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# TRANSCRIPT MARKDOWN
+# BOOT SWEEP — crash recovery, runs once at import
 # ═══════════════════════════════════════════════════════════════════════
 
-def _format_timestamp(seconds: float) -> str:
-    """Format seconds as M:SS (e.g., 65.3 → '1:05')."""
-    m, s = divmod(int(seconds), 60)
-    return f"{m}:{s:02d}"
+def _reset_stuck_transcriptions() -> None:
+    """Return orphaned 'transcribing' sidecars to 'pending_transcription'.
+
+    The worker is fire-and-forget; a server restart mid-job (the
+    port-ensure hook restarts on any code edit) strands the sidecar at
+    'transcribing', which /transcribe then 409s forever. If a worker
+    somehow survived the restart, its final sidecar write simply wins.
+    """
+    if not RECORDINGS_DIR.exists():
+        return
+    for f in RECORDINGS_DIR.glob("recording-*.json"):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            if data.get("status") != "transcribing":
+                continue
+            data["status"] = "pending_transcription"
+            data["transcription_stage"] = None
+            f.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            logger.warning(
+                "Boot sweep: %s was stuck at 'transcribing' — reset to pending", f.name
+            )
+        except Exception:
+            continue
 
 
-def _format_duration(seconds: float) -> str:
-    """Format duration as human-readable (e.g., '2m 15s')."""
-    m, s = divmod(int(seconds), 60)
-    if m > 0:
-        return f"{m}m {s}s"
-    return f"{s}s"
+def _recover_interrupted_recordings() -> None:
+    """Assemble crash-orphaned capture checkpoints into pending recordings.
+
+    A recording that died mid-capture (crash, BSOD, forced restart) leaves
+    chunk files under .inprogress/<rec_id>/. Rebuild the channel WAVs from
+    them and write a pending_transcription sidecar, enriched from
+    .recorder-state.json when it matches. A clean stop never gets here —
+    save() removes its checkpoint directory.
+    """
+    if not INPROGRESS_DIR.exists():
+        return
+
+    import time
+    from api.recorder.capture import recover_checkpoint
+
+    state_file = RECORDINGS_DIR / ".recorder-state.json"
+    state: dict = {}
+    if state_file.exists():
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        except Exception:
+            state = {}
+    state_consumed = False
+
+    for chunk_dir in sorted(p for p in INPROGRESS_DIR.iterdir() if p.is_dir()):
+        rec_id = chunk_dir.name
+        try:
+            # A manifest touched in the last 2 minutes may belong to a live
+            # recording in another instance (chunks flush every ~30s) — leave it.
+            manifest_path = chunk_dir / "manifest.json"
+            if manifest_path.exists() and (time.time() - manifest_path.stat().st_mtime) < 120:
+                continue
+
+            sidecar_path = RECORDINGS_DIR / f"recording-{rec_id}.json"
+            if sidecar_path.exists():
+                # A clean stop already produced this recording — leftovers only.
+                shutil.rmtree(chunk_dir, ignore_errors=True)
+                continue
+
+            mic_path = RECORDINGS_DIR / f"recording-{rec_id}-mic.wav"
+            sys_path = RECORDINGS_DIR / f"recording-{rec_id}-sys.wav"
+            manifest = recover_checkpoint(chunk_dir, mic_path, sys_path)
+            if manifest is None:
+                shutil.rmtree(chunk_dir, ignore_errors=True)
+                continue
+
+            matches = state.get("recording_id") == rec_id
+            if matches:
+                state_consumed = True
+            started_at = manifest.get("started_at")
+            if not started_at:
+                try:
+                    started_at = datetime.strptime(rec_id, "%Y%m%d-%H%M%S").replace(
+                        tzinfo=timezone.utc
+                    ).isoformat()
+                except ValueError:
+                    started_at = None
+            duration = manifest.get("duration_seconds", 0)
+
+            sidecar = {
+                "recording_id": rec_id,
+                "label": state.get("label") if matches else None,
+                "started_at": started_at,
+                "ended_at": None,
+                "duration_seconds": duration,
+                "config": {
+                    "model_size": (state.get("model_size") if matches else None) or "large-v3",
+                    "mic_device": manifest.get("mic_device"),
+                    "sys_device": manifest.get("sys_device"),
+                    "initial_prompt": None,
+                },
+                "speakers": {
+                    "mic": "the operator",
+                    "system": (state.get("participant_name") if matches else None) or "Other",
+                },
+                "segments": [],
+                "transcript": "",
+                "wav_mic": mic_path.name,
+                "wav_sys": sys_path.name,
+                "status": "pending_transcription",
+                "recovered": True,
+                "capture_warnings": [
+                    "recovered from crash checkpoints — tail after the last flush is lost"
+                ],
+            }
+            sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+            shutil.rmtree(chunk_dir, ignore_errors=True)
+            logger.warning(
+                "Boot sweep: recovered interrupted recording %s (%.1fs) from checkpoints",
+                rec_id, duration,
+            )
+        except Exception as e:
+            logger.error("Checkpoint recovery failed for %s: %s", rec_id, e)
+
+    if state_consumed:
+        try:
+            state_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+    try:
+        if INPROGRESS_DIR.exists() and not any(INPROGRESS_DIR.iterdir()):
+            INPROGRESS_DIR.rmdir()
+    except Exception:
+        pass
 
 
-def _write_transcript_md(
-    rec_id: str,
-    label: Optional[str],
-    started_at: Optional[datetime],
-    duration: float,
-    speakers: dict,
-    segments: list,
-    output_path: Path,
-) -> None:
-    """Write a standalone markdown transcript file."""
-    title = label or f"Meeting {rec_id}"
-    date_str = started_at.strftime("%Y-%m-%d %H:%M UTC") if started_at else "Unknown"
-    duration_str = _format_duration(duration)
-
-    # Collect unique participant names from speakers dict
-    participants = sorted(set(speakers.values()))
-
-    lines = [
-        f"# {title}",
-        "",
-        f"**Date:** {date_str}",
-        f"**Duration:** {duration_str}",
-        f"**Participants:** {', '.join(participants)}",
-        "",
-        "---",
-        "",
-    ]
-
-    for seg in segments:
-        speaker = seg.get("speaker", "Unknown") if isinstance(seg, dict) else getattr(seg, "speaker", "Unknown")
-        start = seg.get("start", 0) if isinstance(seg, dict) else getattr(seg, "start", 0)
-        text = seg.get("text", "") if isinstance(seg, dict) else getattr(seg, "text", "")
-        lines.append(f"**{speaker}** [{_format_timestamp(start)}]")
-        lines.append(text.strip())
-        lines.append("")
-
-    output_path.write_text("\n".join(lines), encoding="utf-8")
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# BRAIN ENTRY CREATION
-# ═══════════════════════════════════════════════════════════════════════
-
-def _create_brain_entry(
-    recording_id: str,
-    label: Optional[str],
-    started_at: Optional[datetime],
-    duration: float,
-    transcript: str,
-) -> None:
-    """Create a JSON-LD brain entry for the recording."""
-    BRAIN_DIR.mkdir(parents=True, exist_ok=True)
-
-    name = label or f"Meeting {recording_id}"
-    now = datetime.now(timezone.utc).isoformat()
-    duration_min = round(duration / 60, 1)
-
-    # Truncate transcript for brain entry text (keep it searchable but bounded)
-    text = transcript[:5000] if len(transcript) > 5000 else transcript
-
-    # Integrity hash of full transcript
-    sha256 = hashlib.sha256(transcript.encode("utf-8")).hexdigest()
-
-    entry = {
-        "@context": {
-            "@vocab": "https://schema.org/",
-            "dc": "http://purl.org/dc/terms/",
-            "as": "https://www.w3.org/ns/activitystreams#",
-            "ihim": "https://ihim.local/schema#",
-        },
-        "@type": "CreativeWork",
-        "@id": f"ihim:brain/meeting-{recording_id}",
-        "identifier": f"meeting-{recording_id}",
-        "name": name,
-        "text": text,
-        "abstract": f"Meeting recording ({duration_min} min). Transcript with speaker attribution.",
-        "dateCreated": now,
-        "dateModified": now,
-        "ihim:category": "Meetings",
-        "ihim:confidence": 1.0,
-        "ihim:classifier": "meeting-recorder",
-        "ihim:sha256": sha256,
-        "dc:source": f"recording-{recording_id}",
-    }
-
-    path = BRAIN_DIR / f"meeting-{recording_id}.jsonld"
-    path.write_text(json.dumps(entry, indent=2), encoding="utf-8")
+try:
+    _reset_stuck_transcriptions()
+    _recover_interrupted_recordings()
+except Exception as _e:
+    logger.error("Recorder boot sweep failed: %s", _e)

@@ -1,6 +1,6 @@
 # iHIM — the operator's Command Center
 
-Local-first personal dashboard: Whisper dictation, git workspace monitor, meeting recorder, Google Calendar, health program, agent node control, and the JSON-LD second-brain data layer. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
+Local-first personal dashboard: Whisper dictation, meeting recorder, Google Calendar, health program, agent node control, and the JSON-LD second-brain data layer. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
 
 Rebuilt from scratch 2026-06-10 (design + audit: `design-notes/ihim/refactor-2026-06/`). Pre-refactor code archived at `archive/ihim-pre-refactor-20260609/`.
 
@@ -30,7 +30,7 @@ api/
   main.py                  app factory — explicit router registration
   runtime.py middleware.py errors.py responses.py site.py server.py
   stt/ recorder/         dictation + meeting recorder (shared whisper core)
-  workspaces/ calendar/ health/ agentnode/ vault/ brain/ graph/ preferences.py
+  calendar/ health/ agentnode/ vault/ brain/ graph/ preferences.py
 tools/stt/               dictation engine (hotkey→capture→transcribe→inject)
                            data/ = dictation history + voice-training audio
 handlers/ adapters/ data/  brain ingestion pipeline + JSON-LD source of truth
@@ -42,7 +42,7 @@ tests/                     pytest
 
 ## Widgets
 
-STT Dictation (history/copy/correct/vocab, SSE status) · Workspaces (live git branch state) · Meeting Recorder · Google Calendar · Health · Vault (brain tasks/projects/docs) · agent node (status/tasks/power) · Stopwatch (client-side) · CPU/RAM bar.
+STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder · Google Calendar · Health · Vault (brain tasks/projects/docs) · agent node (status/tasks/power) · Stopwatch (client-side) · CPU/RAM bar.
 
 ## Architecture notes
 

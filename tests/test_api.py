@@ -8,8 +8,6 @@ READ_ENDPOINTS = [
     "/api/boot-id",
     "/api/system/stats",
     "/api/server/status",
-    "/api/workspaces",
-    "/api/workspaces/status",
     "/api/brain/stats",
     "/api/brain/entries?limit=2",
     "/api/graph/stats",

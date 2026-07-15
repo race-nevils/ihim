@@ -38,7 +38,6 @@ from api.middleware import register_middleware
 from api.site import router as site_router
 from api.server import router as server_router
 from api.preferences import router as preferences_router
-from api.workspaces.routes import router as workspaces_router
 from api.calendar.routes import router as calendar_router
 from api.health.routes import router as health_router
 from api.agentnode.routes import router as agentnode_router
@@ -170,7 +169,7 @@ def create_app() -> FastAPI:
     register_middleware(app)
 
     routers = [
-        site_router, server_router, preferences_router, workspaces_router,
+        site_router, server_router, preferences_router,
         calendar_router, health_router, agentnode_router, brain_router,
         graph_router, vault_router,
     ]

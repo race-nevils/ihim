@@ -17,7 +17,6 @@ const panel = (id) => document.getElementById(id);
 // One entry per desktop tile, in default-layout order.
 export const TILES = [
     { id: 'stt', name: 'STT Dictation', icon: 'mic', run: () => panel('stt-window')?.toggle() },
-    { id: 'workspaces', name: 'Workspaces', icon: 'git-branch', run: () => panel('workspaces-window')?.toggle() },
     { id: 'meeting_recorder', name: 'Meeting Recorder', icon: 'mic', run: () => panel('recorder-window')?.toggle() },
     { id: 'google_calendar', name: 'Google Calendar', icon: 'calendar', run: () => panel('calendar-window')?.open() },
     { id: 'health', name: 'Health', icon: 'heart-pulse', run: () => panel('health-window')?.open() },

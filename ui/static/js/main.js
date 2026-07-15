@@ -17,7 +17,6 @@ import './components/ihim-recorder.js';
 import './components/ihim-calendar.js';
 import './components/ihim-health.js';
 import './components/ihim-vault.js';
-import './components/ihim-workspaces.js';
 import './components/ihim-agentnode.js';
 
 // Standalone components

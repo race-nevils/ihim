@@ -12,6 +12,7 @@ during recording, so release latency stays flat at any dictation length.
 
 import ctypes
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,7 @@ from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
 logger = logging.getLogger(__name__)
 
 TRAINING_DIR = Path(__file__).parent / "data" / "voice-training"
+RECOVERED_DIR = Path(__file__).parent / "data" / "recovered"
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +61,29 @@ def _system_slept(threshold_s: float = 30.0) -> bool:
     _sleep_mono = mono_now
     _sleep_unbiased = unbiased_now
     return (mono_gap - unbiased_gap) > threshold_s
+
+
+def _salvage_audio(blocks: list, rate: int, dictation_id: str) -> Optional[Path]:
+    """Write a frozen recording to recovered/ — dictated audio is never lost.
+
+    Called when the pipeline fails or blows its deadline: the transcript is
+    gone but the audio survives on disk for offline transcription. (Before
+    this existed, a wedged transcription orphaned the audio in %TEMP% —
+    recoverable only by luck; 2026-07-16, 2026-07-11.)
+    """
+    try:
+        if not blocks or not rate:
+            return None
+        RECOVERED_DIR.mkdir(parents=True, exist_ok=True)
+        duration_s = sum(len(b) for b in blocks) / rate
+        stamp = time.strftime("%Y-%m-%d_%H%M%S")
+        out = RECOVERED_DIR / f"{stamp}_{dictation_id}_{int(round(duration_s))}s.wav"
+        write_wav(blocks, rate, path=out)
+        logger.error("Audio salvaged: %s (%.1fs)", out, duration_s)
+        return out
+    except Exception:
+        logger.error("Audio salvage FAILED for %s", dictation_id, exc_info=True)
+        return None
 
 
 def _maybe_retain_audio(
@@ -247,6 +272,23 @@ class STTEngine:
         stale, triggers recycle, returns without recording).
         """
         logger.info("System resumed — resetting state and recycling listener")
+        # A process that used CUDA carries undefined GPU-library state across
+        # sleep (cuBLAS/CT2 bound to the reset primary context) — the next
+        # encode() can hang forever, unloggable and uncatchable (2026-07-16:
+        # 8 minutes of dictation stuck at PROCESSING). In-process recovery is
+        # choreography against UB; process death is the only clean slate.
+        try:
+            from api.recorder.transcribe import cuda_was_used
+            if cuda_was_used():
+                logger.warning(
+                    "CUDA was used in this process — restarting server for a "
+                    "clean GPU context (in-process post-sleep recovery is UB)"
+                )
+                self._set_status("cold")
+                self._restart_server_detached("post-sleep CUDA hygiene")
+                return
+        except Exception as e:
+            logger.error("Post-wake CUDA-use check failed: %s", e)
         try:
             from api.recorder.transcribe import _check_system_sleep, evict_model_cache
             _check_system_sleep()  # updates CUDA baseline as side effect
@@ -283,6 +325,38 @@ class STTEngine:
             play_locked(self._cfg)
         except Exception:
             pass
+
+    def _restart_server_detached(self, reason: str) -> None:
+        """Spawn scripts/server.ps1 restart, detached — survives this process.
+
+        Same invocation as /api/server/restart. The engine only runs in the
+        live instance (test ports set IHIM_STT_AUTOSTART=0), so the port
+        default matches the live server.
+        """
+        server_ps1 = Path(__file__).parents[2] / "scripts" / "server.ps1"
+        if sys.platform != "win32" or not server_ps1.exists():
+            logger.error("Cannot self-restart (%s): server.ps1 unavailable", reason)
+            return
+        port = os.environ.get("IHIM_PORT", "7777")
+        flags = (
+            subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NEW_PROCESS_GROUP
+            | subprocess.CREATE_NO_WINDOW
+        )
+        try:
+            subprocess.Popen(
+                [
+                    "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                    "-File", str(server_ps1), "restart",
+                    "-Port", port, "-DelaySeconds", "2",
+                ],
+                creationflags=flags,
+                close_fds=True,
+                cwd=str(server_ps1.parents[1]),
+            )
+            logger.warning("Detached server restart spawned (%s)", reason)
+        except Exception as e:
+            logger.error("Failed to spawn detached restart (%s): %s", reason, e)
 
     def _recycle_listener(self) -> None:
         """Stop and restart the hotkey listener to clear stale OS hooks.
@@ -402,6 +476,8 @@ class STTEngine:
         start_time = time.time()
         dictation_id = uuid.uuid4().hex[:8]
         wav_path: Optional[Path] = None
+        blocks: list = []
+        rate = 0
 
         try:
             model_name = self._cfg.get("model", "large-v3-turbo")
@@ -411,15 +487,48 @@ class STTEngine:
             duration_s = sum(len(b) for b in blocks) / rate if rate else 0.0
 
             # 2. Transcribe: banked chunks + one bounded final window.
-            streamer, self._streamer = self._streamer, None
-            if streamer is not None:
-                raw_text = streamer.finalize(blocks, rate)
-            else:
-                # Chunked transcriber never started — single full pass.
-                from tools.stt.transcribe import transcribe
-                wav_path = write_wav(blocks, rate)
-                raw_text = transcribe(wav_path, model_size=model_name)
-                logger.info("FULL PASS: chunked transcriber unavailable")
+            # Deadline watchdog: a wedged GPU hangs encode() forever with no
+            # exception (post-sleep CUDA UB, 2026-07-16 — stuck at PROCESSING
+            # with 8 minutes of speech). A hung thread can't be killed, so on
+            # deadline: salvage the audio, surface the error, restart the
+            # server — process death is the only reliable unwedge.
+            transcribed = threading.Event()
+
+            def _on_deadline() -> None:
+                if transcribed.is_set():
+                    return
+                logger.error(
+                    "Transcription blew its %.0fs deadline (%.1fs audio) — "
+                    "salvaging audio and restarting the server",
+                    deadline_s, duration_s,
+                )
+                _salvage_audio(blocks, rate, dictation_id)
+                self._set_status("error")
+                try:
+                    from tools.stt.sounds import play_error
+                    play_error(self._cfg)
+                except Exception:
+                    pass
+                self._restart_server_detached("transcription deadline blown — GPU wedged")
+
+            deadline_s = max(90.0, duration_s * 0.5)
+            watchdog = threading.Timer(deadline_s, _on_deadline)
+            watchdog.daemon = True
+            watchdog.start()
+
+            try:
+                streamer, self._streamer = self._streamer, None
+                if streamer is not None:
+                    raw_text = streamer.finalize(blocks, rate)
+                else:
+                    # Chunked transcriber never started — single full pass.
+                    from tools.stt.transcribe import transcribe
+                    wav_path = write_wav(blocks, rate)
+                    raw_text = transcribe(wav_path, model_size=model_name)
+                    logger.info("FULL PASS: chunked transcriber unavailable")
+            finally:
+                transcribed.set()
+                watchdog.cancel()
 
             if not raw_text.strip():
                 logger.info("Empty transcript, skipping")
@@ -472,6 +581,7 @@ class STTEngine:
 
         except Exception as e:
             logger.error("Dictation pipeline failed: %s", e, exc_info=True)
+            _salvage_audio(blocks, rate, dictation_id)
             self._set_status("error")
             try:
                 from tools.stt.sounds import play_error

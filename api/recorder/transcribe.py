@@ -31,6 +31,12 @@ _model_lock = threading.Lock()
 # Single-flight construction: cache_key → Event set when the in-flight
 # load lands. Concurrent callers wait instead of constructing duplicates.
 _loading_events: dict = {}
+# Sticky: this process initialized CUDA at least once. Never cleared —
+# in-process resets (primary-ctx reset, cache eviction) leave cuBLAS/CT2
+# library state referencing destroyed contexts, which is undefined
+# behavior after sleep (encode() hung forever, 2026-07-16). Only process
+# death cleans it; the resume path reads this to decide a self-restart.
+_cuda_used = False
 
 # --- Sleep detection (Windows) -------------------------------------------
 # CUDA contexts go stale after system sleep (faster-whisper #829).
@@ -171,6 +177,10 @@ def _get_model(model_size: str = "small"):
     device, compute_type = _pick_device(model_size)
     cache_key = (model_size, device, compute_type)
 
+    if device == "cuda":
+        global _cuda_used
+        _cuda_used = True
+
     # Flush stale CUDA context after system sleep (faster-whisper #829).
     # System-level detection works even after idle-unload evicts the cache.
     if _check_system_sleep():
@@ -265,6 +275,17 @@ def _deloop_text(text: str) -> str:
             words = result
 
     return " ".join(words)
+
+
+def cuda_was_used() -> bool:
+    """True if this process ever initialized CUDA (sticky, never cleared).
+
+    After a sleep/wake cycle, a process that used CUDA carries undefined
+    library state (cuBLAS handles and CT2 runtime bound to a reset primary
+    context) — the next encode() can hang forever with no exception to
+    catch. The only reliable recovery is a process restart.
+    """
+    return _cuda_used
 
 
 def is_model_loaded(model_size: str = "small") -> bool:

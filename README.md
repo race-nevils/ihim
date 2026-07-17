@@ -1,6 +1,6 @@
 # iHIM — the operator's Command Center
 
-Local-first personal dashboard: Whisper dictation, meeting recorder, health program, agent node control, and the JSON-LD second-brain data layer. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
+Local-first personal dashboard: Whisper dictation, meeting recorder, health program, and the JSON-LD second-brain data layer. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
 
 Rebuilt from scratch 2026-06-10 (design + audit: `design-notes/ihim/refactor-2026-06/`). Pre-refactor code archived at `archive/ihim-pre-refactor-20260609/`.
 
@@ -30,7 +30,7 @@ api/
   main.py                  app factory — explicit router registration
   runtime.py middleware.py errors.py responses.py site.py server.py
   stt/ recorder/         dictation + meeting recorder (shared whisper core)
-  health/ agentnode/ vault/ brain/ graph/ preferences.py
+  health/ vault/ brain/ graph/ preferences.py
 tools/stt/               dictation engine (hotkey→capture→transcribe→inject)
                            data/ = dictation history + voice-training audio
 handlers/ adapters/ data/  brain ingestion pipeline + JSON-LD source of truth
@@ -42,9 +42,11 @@ tests/                     pytest
 
 ## Widgets
 
-STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder · Health · Vault (brain tasks/projects/docs) · agent node (status/tasks/power) · Stopwatch (client-side) · CPU/RAM bar.
+STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder · Health · Vault (brain tasks/projects/docs) · Stopwatch (client-side) · CPU/RAM bar.
 
 *Google Calendar deleted 2026-07-17: widget, `api/calendar/`, brain auto-push, and the rebuild GCal executor. Brain-internal event detection (notes → `event_date` in brain.db) remains.*
+
+*agent node deleted 2026-07-17: bar chip, window, and `api/agentnode/` proxy. The agent node itself and its blueprint (`agent-node-blueprint/`) are untouched — this removed only the in-app control surface.*
 
 ## Architecture notes
 
@@ -52,7 +54,7 @@ STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder · He
 - Errors are RFC 9457 `application/problem+json`; success uses `{"success": true}` envelopes.
 - CSP/security headers on every response (report-only CSP while UI stabilizes).
 - Frontend cache busting: per-boot `BOOT_ID` importmap + 3s `/api/boot-id` polling → edits to ui/ hot-reload the page without a server restart.
-- Brain data contracts (Unison sync, /rebuild, agent node brain API) documented in `harness/rules/ihim.md`.
+- Brain data contracts (Unison sync, /rebuild) documented in `harness/rules/ihim.md`.
 
 ## Test gates
 

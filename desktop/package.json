@@ -1,0 +1,18 @@
+{
+  "name": "ihim-desktop",
+  "productName": "iHIM",
+  "version": "0.1.0",
+  "description": "Thin desktop shell for the iHIM server (:7777) — attach-or-spawn, tray, lifecycle ownership",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "postinstall": "node scripts/brand-electron.js",
+    "brand": "node scripts/brand-electron.js",
+    "make-shortcut": "electron make-shortcut.js"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0",
+    "rcedit": "^5.0.2"
+  }
+}

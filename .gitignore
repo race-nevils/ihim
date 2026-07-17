@@ -36,3 +36,6 @@ htmlcov/
 
 # Runtime state
 data/server.pid
+
+# Desktop shell (Electron dev deps)
+desktop/node_modules/

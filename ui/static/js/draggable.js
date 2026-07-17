@@ -4,6 +4,8 @@
  * Includes viewport clamping, keyboard movement, and resize re-clamping.
  */
 
+import { persist } from './ui-state.js';
+
 const allDraggables = new Set();
 
 // Unified drag handler for all windows
@@ -68,7 +70,7 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
                 handle.releasePointerCapture(e.pointerId);
             }
             if (isDragging && storageKey) {
-                localStorage.setItem(storageKey, JSON.stringify({
+                persist(storageKey, JSON.stringify({
                     x: parseInt(el.style.left), y: parseInt(el.style.top)
                 }));
             }
@@ -111,7 +113,7 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
         el.style.top = y + 'px';
 
         if (storageKey) {
-            localStorage.setItem(storageKey, JSON.stringify({ x, y }));
+            persist(storageKey, JSON.stringify({ x, y }));
         }
     });
 }

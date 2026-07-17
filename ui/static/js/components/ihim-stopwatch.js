@@ -10,6 +10,8 @@
  *     Events (bubble): stopwatch:change (any state mutation), stopwatch:remove
  */
 
+import { persist } from '../ui-state.js';
+
 function formatTime(ms) {
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
@@ -251,7 +253,7 @@ class IhimStopwatchDock extends HTMLElement {
             nextId: this.nextId,
             stopwatches: this._watches(excludeEl).map(el => el.snapshot),
         };
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(state));
+        persist(this.STORAGE_KEY, JSON.stringify(state));
     }
 
     _restoreState() {

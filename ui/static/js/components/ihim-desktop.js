@@ -11,6 +11,7 @@
  */
 
 import { escapeHtml, getIcon, restartServer, showStatus } from '../app.js';
+import { persist } from '../ui-state.js';
 
 const panel = (id) => document.getElementById(id);
 
@@ -139,7 +140,7 @@ class IhimDesktop extends HTMLElement {
         this.pendingIcon = null;
     }
 
-    _saveLayout() { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.icons)); }
+    _saveLayout() { persist(this.STORAGE_KEY, JSON.stringify(this.icons)); }
 
     _restoreLayout() {
         try {

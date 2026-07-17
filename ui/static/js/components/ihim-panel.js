@@ -29,6 +29,7 @@
 
 import { makeDraggable } from '../draggable.js';
 import { initWindowEscapeClose } from '../a11y.js';
+import { persist, unpersist } from '../ui-state.js';
 
 // Click-to-focus: monotonic counter shared across all ihim-panels.
 // Pointerdown anywhere in a panel raises it above its siblings.
@@ -97,7 +98,7 @@ export class IhimPanel extends HTMLElement {
                 const h = Math.round(entry.contentRect.height);
                 if (w === 0 || h === 0) continue;
                 const c = clamp(w, h);
-                localStorage.setItem(sizeKey, JSON.stringify(c));
+                persist(sizeKey, JSON.stringify(c));
             }
         });
         observer.observe(this);
@@ -133,14 +134,14 @@ export class IhimPanel extends HTMLElement {
         }
 
         this.classList.remove('minimized');
-        if (persistKey) localStorage.setItem(`${persistKey}-open`, '1');
+        if (persistKey) persist(`${persistKey}-open`, '1');
         this.dispatchEvent(new CustomEvent('panel:open', { bubbles: true }));
     }
 
     close() {
         const persistKey = this.getAttribute('persist-key');
         this.removeAttribute('open');
-        if (persistKey) localStorage.removeItem(`${persistKey}-open`);
+        if (persistKey) unpersist(`${persistKey}-open`);
         this.dispatchEvent(new CustomEvent('panel:close', { bubbles: true }));
     }
 

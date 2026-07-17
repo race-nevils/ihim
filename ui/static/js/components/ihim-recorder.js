@@ -436,7 +436,10 @@ class IhimRecorder extends IhimPanel {
                 return `<div class="recorder-list-item" data-recording-id="${escapeHtml(r.recording_id)}">
                     <div class="recorder-list-item-main">
                         <span class="recorder-list-item-label">${label}</span>
-                        <span class="recorder-list-item-duration">${duration}</span>
+                        <span class="recorder-list-item-actions">
+                            <button class="recorder-list-rename-btn" title="Rename" aria-label="Rename recording">&#9998;</button>
+                            <span class="recorder-list-item-duration">${duration}</span>
+                        </span>
                     </div>
                     <div class="recorder-list-item-meta">${dateStr} at ${timeStr}</div>
                 </div>`;
@@ -620,6 +623,53 @@ class IhimRecorder extends IhimPanel {
     }
 
     // =====================
+    // Rename recording
+    // =====================
+
+    _startInlineRename(item) {
+        const labelEl = item.querySelector('.recorder-list-item-label');
+        if (!labelEl || item.querySelector('.recorder-rename-input')) return;
+        const id = item.dataset.recordingId;
+        const current = labelEl.textContent === 'Untitled' ? '' : labelEl.textContent;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'recorder-rename-input';
+        input.maxLength = 120;
+        input.value = current;
+        input.placeholder = 'Untitled';
+        labelEl.replaceWith(input);
+        input.focus();
+        input.select();
+
+        let done = false;
+        const finish = async (save) => {
+            if (done) return;
+            done = true;
+            const value = input.value.trim();
+            if (save && value !== current) {
+                try {
+                    const res = await fetch(`${API}/api/recorder/recordings/${encodeURIComponent(id)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ label: value || null })
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    labelEl.textContent = value || 'Untitled';
+                } catch (e) {
+                    console.warn('Rename failed:', e);
+                }
+            }
+            input.replaceWith(labelEl);
+        };
+        input.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') finish(true);
+            else if (ev.key === 'Escape') finish(false);
+        });
+        input.addEventListener('blur', () => finish(true));
+    }
+
+    // =====================
     // Delete recording
     // =====================
 
@@ -702,6 +752,15 @@ class IhimRecorder extends IhimPanel {
             if (e.target.closest('#recorder-delete-btn') && this._selectedRecordingId) {
                 this._deleteRecording(this._selectedRecordingId); return;
             }
+            // Rename button — inline edit, never opens the transcript
+            const renameBtn = e.target.closest('.recorder-list-rename-btn');
+            if (renameBtn) {
+                const item = renameBtn.closest('.recorder-list-item');
+                if (item) this._startInlineRename(item);
+                return;
+            }
+            // Clicks inside an active rename input stay in the input
+            if (e.target.closest('.recorder-rename-input')) return;
             // Recording list item click
             const listItem = e.target.closest('.recorder-list-item');
             if (listItem) {

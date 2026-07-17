@@ -1,6 +1,6 @@
 """FastAPI router for the meeting recorder.
 
-Endpoints: start, stop, transcribe, status, devices, list, view, delete, reset.
+Endpoints: start, stop, transcribe, status, devices, list, view, rename, delete, reset.
 Stop saves audio instantly. Transcription is manual via POST /transcribe/{id}.
 """
 
@@ -20,8 +20,8 @@ from api.errors import problem
 from api.recorder.models import (
     StartRequest, StartResponse, StatusResponse, DevicesResponse, DeviceInfo,
     StopResponse, TranscribeResponse, RecordingSummary, RecordingDetail, SegmentOut,
-    RecordingsListResponse, DeleteResponse, ResetResponse,
-    RecorderStatus,
+    RecordingsListResponse, DeleteResponse, ResetResponse, RenameRequest,
+    RenameResponse, RecorderStatus,
 )
 from api.recorder.state import RecorderState
 
@@ -495,6 +495,55 @@ async def get_recording(recording_id: str, request: Request):
     except Exception as e:
         logger.error("Failed to read recording %s: %s", recording_id, e)
         return problem(500, f"Failed to read recording: {e}", instance=request.url.path)
+
+
+@router.patch("/recordings/{recording_id}", response_model=RenameResponse)
+async def rename_recording(recording_id: str, body: RenameRequest, request: Request):
+    """Rename a recording's label. Also updates the brain entry name and
+    the transcript markdown's title heading when they exist."""
+    err = _validate_recording_id(recording_id, request)
+    if err:
+        return err
+
+    sidecar_path = RECORDINGS_DIR / f"recording-{recording_id}.json"
+    if not sidecar_path.exists():
+        return problem(404, f"Recording '{recording_id}' not found", instance=request.url.path)
+
+    label = (body.label or "").strip() or None
+
+    try:
+        sidecar = json.loads(await _aread_text(sidecar_path))
+        sidecar["label"] = label
+        await _awrite_text(sidecar_path, json.dumps(sidecar, indent=2))
+    except Exception as e:
+        return problem(500, f"Failed to update sidecar: {e}", instance=request.url.path)
+
+    # Brain entry name (best-effort — may not exist pre-transcription)
+    brain_file = BRAIN_DIR / f"meeting-{recording_id}.jsonld"
+    if brain_file.exists():
+        try:
+            entry = json.loads(await _aread_text(brain_file))
+            entry["name"] = label or f"Meeting {recording_id}"
+            entry["dateModified"] = datetime.now(timezone.utc).isoformat()
+            await _awrite_text(brain_file, json.dumps(entry, indent=2))
+        except Exception as e:
+            logger.warning("Rename: brain entry update failed for %s: %s", recording_id, e)
+
+    # Transcript markdown title heading (best-effort)
+    transcript_name = sidecar.get("transcript_md")
+    if transcript_name:
+        md_path = RECORDINGS_DIR / Path(transcript_name).name
+        if md_path.exists():
+            try:
+                lines = (await _aread_text(md_path)).splitlines()
+                if lines and lines[0].startswith("# "):
+                    lines[0] = f"# {label or md_path.stem}"
+                    await _awrite_text(md_path, "\n".join(lines))
+            except Exception as e:
+                logger.warning("Rename: transcript md update failed for %s: %s", recording_id, e)
+
+    logger.info("Renamed recording %s → %r", recording_id, label)
+    return RenameResponse(recording_id=recording_id, label=label)
 
 
 @router.delete("/recordings/{recording_id}", response_model=DeleteResponse)

@@ -32,6 +32,10 @@ class StartRequest(BaseModel):
     sys_device_index: Optional[int] = Field(None, description="WASAPI loopback device index (None = auto-detect)")
 
 
+class RenameRequest(BaseModel):
+    label: Optional[str] = Field(None, max_length=120, description="New label (empty/None clears back to Untitled)")
+
+
 # ── Responses ─────────────────────────────────────────────────────────
 
 class StatusResponse(BaseModel):
@@ -121,6 +125,12 @@ class RecordingsListResponse(BaseModel):
 class DeleteResponse(BaseModel):
     success: bool = True
     deleted: list[str] = []
+
+
+class RenameResponse(BaseModel):
+    success: bool = True
+    recording_id: str
+    label: Optional[str] = None
 
 
 class ResetResponse(BaseModel):

@@ -42,7 +42,7 @@ tests/                     pytest
 
 ## Widgets
 
-STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder · Health · Vault (brain tasks/projects/docs) · Stopwatch (client-side) · CPU/RAM bar.
+STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder · Health · Vault (brain tasks/projects/docs) · Stopwatch (client-side) · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, state persists across reloads).
 
 *Google Calendar deleted 2026-07-17: widget, `api/calendar/`, brain auto-push, and the rebuild GCal executor. Brain-internal event detection (notes → `event_date` in brain.db) remains.*
 

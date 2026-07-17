@@ -888,6 +888,47 @@ main {
     flex: 1;
 }
 
+/* Taskbar — one chip per open window (ihim-taskbar renders the chips) */
+.taskbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.taskbar-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    background: transparent;
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all var(--duration-fast) ease;
+}
+
+.taskbar-chip:hover {
+    background: var(--accent-red-15);
+    box-shadow: var(--glow-red-subtle);
+}
+
+.taskbar-chip svg {
+    width: 12px;
+    height: 12px;
+    color: var(--accent-red);
+}
+
+.taskbar-chip.minimized {
+    opacity: 0.45;
+    border-style: dashed;
+}
+
 
 /* Responsive */
 @media (max-width: 600px) {
@@ -2221,6 +2262,9 @@ ihim-panel:not([open]), ihim-stt:not([open]), ihim-recorder:not([open]),
 ihim-health:not([open]), ihim-vault:not([open]) { display: none; }
 ihim-panel[open], ihim-stt[open], ihim-recorder[open],
 ihim-health[open], ihim-vault[open] { display: flex; flex-direction: column; }
+/* Minimized: still "running" ([open] kept, taskbar chip shown) but hidden */
+ihim-panel[open].minimized, ihim-stt[open].minimized, ihim-recorder[open].minimized,
+ihim-health[open].minimized, ihim-vault[open].minimized { display: none; }
 
 /* Tab system component — transparent wrapper, invisible to layout + AT */
 ihim-tabs { display: contents; }

@@ -29,6 +29,7 @@ await Promise.all([
     import('./components/ihim-desktop.js'),
     import('./components/ihim-stopwatch.js'),
     import('./components/ihim-system-monitor.js'),
+    import('./components/ihim-taskbar.js'),
 ]);
 
 // Global Escape handler (windows self-register via IhimPanel)

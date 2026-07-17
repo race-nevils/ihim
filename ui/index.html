@@ -38,6 +38,7 @@
 
     <!-- Bottom Status Bar -->
     <nav id="bottom-bar" class="bottom-bar" aria-label="System Status">
+        <ihim-taskbar id="taskbar" class="taskbar"></ihim-taskbar>
         <div class="bar-spacer"></div>
         <ihim-system-monitor id="system-monitor" class="bar-widget"></ihim-system-monitor>
     </nav>
@@ -55,10 +56,14 @@
     </div>
 
     <!-- Widget windows — each element IS its draggable panel (IhimPanel subclass) -->
-    <ihim-health id="health-window" class="health-window" persist-key="healthWindowPosition"></ihim-health>
-    <ihim-vault id="vault-window" class="vault-window" persist-key="vaultWindowPosition"></ihim-vault>
-    <ihim-stt id="stt-window" class="stt-window" persist-key="sttWindowPosition"></ihim-stt>
-    <ihim-recorder id="recorder-window" class="recorder-window" persist-key="recorderWindowPosition"></ihim-recorder>
+    <ihim-health id="health-window" class="health-window" persist-key="healthWindowPosition"
+        taskbar-icon="heart-pulse" taskbar-label="Health"></ihim-health>
+    <ihim-vault id="vault-window" class="vault-window" persist-key="vaultWindowPosition"
+        taskbar-icon="archive" taskbar-label="Vault"></ihim-vault>
+    <ihim-stt id="stt-window" class="stt-window" persist-key="sttWindowPosition"
+        taskbar-icon="mic" taskbar-label="STT"></ihim-stt>
+    <ihim-recorder id="recorder-window" class="recorder-window" persist-key="recorderWindowPosition"
+        taskbar-icon="mic" taskbar-label="Recorder"></ihim-recorder>
 
     <!-- Import Map — cache-busts ALL JS module imports with BOOT_ID -->
     __IMPORT_MAP__

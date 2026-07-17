@@ -22,9 +22,12 @@
  *
  * Visibility controlled by [open] attribute (like <dialog>/<details>).
  * CSS: subclasses must appear in style.css's window selector list
- * (position: fixed / [open] display rules).
- * Public API: open(), close(), toggle(), minimize()
- * Events: panel:open, panel:close (bubble)
+ * (position: fixed / [open] display rules + [open].minimized hide rule).
+ * Minimize keeps [open] set and adds .minimized — the window stays "running"
+ * (taskbar chip, persisted open flag) but is hidden until restore().
+ * Persistence keys: persistKey (position), -size, -open, -min.
+ * Public API: open(), close(), toggle(), minimize(), restore()
+ * Events: panel:open, panel:close, panel:minimize, panel:restore (bubble)
  */
 
 import { makeDraggable } from '../draggable.js';
@@ -69,8 +72,11 @@ export class IhimPanel extends HTMLElement {
 
         // Open-state persistence: re-open panels that were open last session.
         // localStorage[`${persistKey}-open`] = "1" while open, removed on close.
+        // Read the minimized flag BEFORE open() — open() clears it.
         if (persistKey && localStorage.getItem(`${persistKey}-open`) === '1') {
+            const wasMinimized = localStorage.getItem(`${persistKey}-min`) === '1';
             this.open();
+            if (wasMinimized) this.minimize();
         }
     }
 
@@ -134,24 +140,44 @@ export class IhimPanel extends HTMLElement {
         }
 
         this.classList.remove('minimized');
-        if (persistKey) persist(`${persistKey}-open`, '1');
+        if (persistKey) {
+            persist(`${persistKey}-open`, '1');
+            unpersist(`${persistKey}-min`);
+        }
         this.dispatchEvent(new CustomEvent('panel:open', { bubbles: true }));
     }
 
     close() {
         const persistKey = this.getAttribute('persist-key');
         this.removeAttribute('open');
-        if (persistKey) unpersist(`${persistKey}-open`);
+        this.classList.remove('minimized');
+        if (persistKey) {
+            unpersist(`${persistKey}-open`);
+            unpersist(`${persistKey}-min`);
+        }
         this.dispatchEvent(new CustomEvent('panel:close', { bubbles: true }));
     }
 
     toggle() {
-        if (this.hasAttribute('open')) this.close();
+        if (this.classList.contains('minimized')) this.restore();
+        else if (this.hasAttribute('open')) this.close();
         else this.open();
     }
 
     minimize() {
+        const persistKey = this.getAttribute('persist-key');
         this.classList.add('minimized');
+        if (persistKey) persist(`${persistKey}-min`, '1');
+        this.dispatchEvent(new CustomEvent('panel:minimize', { bubbles: true }));
+    }
+
+    restore() {
+        const persistKey = this.getAttribute('persist-key');
+        this.classList.remove('minimized');
+        if (persistKey) unpersist(`${persistKey}-min`);
+        topZ += 1;
+        this.style.zIndex = String(topZ);
+        this.dispatchEvent(new CustomEvent('panel:restore', { bubbles: true }));
     }
 }
 

@@ -14,7 +14,6 @@ import './components/ihim-tabs.js';
 // Widget windows (IhimPanel subclasses)
 import './components/ihim-stt.js';
 import './components/ihim-recorder.js';
-import './components/ihim-calendar.js';
 import './components/ihim-health.js';
 import './components/ihim-vault.js';
 import './components/ihim-agentnode.js';

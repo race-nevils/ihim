@@ -38,7 +38,6 @@ from api.middleware import register_middleware
 from api.site import router as site_router
 from api.server import router as server_router
 from api.preferences import router as preferences_router
-from api.calendar.routes import router as calendar_router
 from api.health.routes import router as health_router
 from api.agentnode.routes import router as agentnode_router
 from api.brain.routes import router as brain_router
@@ -66,14 +65,6 @@ STT_AUTOSTART = os.environ.get("IHIM_STT_AUTOSTART", "1") == "1"
 async def lifespan(app: FastAPI):
     runtime.mark_started()
     _write_pid_file()
-
-    # Calendar token sanity (informational, never fatal)
-    try:
-        from api.calendar.google_auth import get_credentials
-        creds = get_credentials()
-        logger.info("Google Calendar: %s", "token valid" if creds else "no valid token (re-auth needed)")
-    except Exception as e:
-        logger.warning("Google Calendar startup check failed: %s", e)
 
     # Recover recordings orphaned by a crash mid-capture
     if recorder_router is not None:
@@ -170,7 +161,7 @@ def create_app() -> FastAPI:
 
     routers = [
         site_router, server_router, preferences_router,
-        calendar_router, health_router, agentnode_router, brain_router,
+        health_router, agentnode_router, brain_router,
         graph_router, vault_router,
     ]
     if stt_router is not None:

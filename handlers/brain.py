@@ -4,7 +4,6 @@ Thin orchestration layer. All logic delegated to:
 - dedup.py: Find existing entries
 - classify.py: LLM classification
 - storage.py: Triple-write (JSON-LD → SQLite → Obsidian)
-- calendar auto-push: Events with dates go to Google Calendar
 
 All steps traced via Langfuse for observability.
 """
@@ -21,7 +20,6 @@ from handlers.utils import compute_content_hash
 from handlers.dedup import find_existing, is_unchanged
 from handlers.classify import classify_content
 from handlers.storage import store_new, update_existing, log_receipt
-from data.database import update_entry
 from handlers.relations import invalidate_entity_index
 
 logger = logging.getLogger(__name__)
@@ -49,82 +47,6 @@ def _persist_brain_metric(entry: dict):
         _BRAIN_METRICS_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
     except Exception as e:
         logger.debug(f"Brain metrics write failed (non-blocking): {e}")
-
-
-def _push_to_calendar(classification: dict, content: str = "",
-                      existing_gcal_id: str | None = None,
-                      note_id: str | None = None) -> str | None:
-    """Auto-push to Google Calendar if classification contains calendar event(s).
-
-    Handles both single events (dict) and multi-event notes (list).
-    Fails silently - calendar push is best-effort, never blocks the pipeline.
-
-    When note_id is provided, gcal_event_id is persisted to the DB atomically
-    after each successful push — the caller does not need a separate update_entry.
-
-    Returns the GCal event ID of the first successfully pushed event, or None.
-    """
-    calendar_data = classification.get("calendar")
-    if not calendar_data:
-        return None
-
-    # Normalize to list of events
-    if isinstance(calendar_data, list):
-        events = [e for e in calendar_data if isinstance(e, dict) and e.get("is_event")]
-    elif isinstance(calendar_data, dict) and calendar_data.get("is_event"):
-        events = [calendar_data]
-    else:
-        return None
-
-    if not events:
-        return None
-
-    try:
-        from api.calendar.google_auth import get_credentials
-        from api.calendar.sync import pull_events, push_single_event, save_to_cache
-
-        creds = get_credentials()
-        if not creds:
-            logger.info("Calendar event(s) detected but Google Calendar not authenticated, skipping")
-            return None
-
-        pushed = 0
-        first_gcal_id = None
-        for event_data in events:
-            try:
-                event_cls = dict(classification)
-                if len(events) > 1 and event_data.get("title"):
-                    event_cls["title"] = event_data["title"]
-                # Only pass existing_gcal_id for the first event (dedup applies to single-event notes)
-                gcal_id = push_single_event(
-                    event_data, event_cls, content, creds,
-                    existing_gcal_id=existing_gcal_id if pushed == 0 else None
-                )
-                if gcal_id:
-                    if note_id and first_gcal_id is None:
-                        try:
-                            update_entry(note_id, {"gcal_event_id": gcal_id})
-                        except Exception as db_err:
-                            logger.error(f"DB write failed for gcal_event_id={gcal_id} on note={note_id}: {db_err}")
-                    pushed += 1
-                    if first_gcal_id is None:
-                        first_gcal_id = gcal_id
-            except Exception as e:
-                logger.error(f"Calendar push failed for event '{event_data.get('title', '?')}': {e}")
-
-        if pushed:
-            try:
-                events_list = pull_events(creds)
-                save_to_cache(events_list)
-            except Exception as e:
-                logger.warning(f"Post-push cache refresh failed (non-blocking): {e}")
-            logger.info(f"Pushed {pushed}/{len(events)} calendar event(s)")
-
-        return first_gcal_id
-
-    except Exception as e:
-        logger.error(f"Calendar auto-push failed (non-blocking): {e}")
-        return None
 
 
 @observe(name="brain_handler")
@@ -211,13 +133,6 @@ def handle(state: OrchestratorState) -> OrchestratorState:
                 )
                 timing["store"] = round((time.time() - t0) * 1000)
 
-                # Calendar push on update (atomic — DB write inside _push_to_calendar)
-                t0 = time.time()
-                existing_gcal_id = existing.get("gcal_event_id")
-                _push_to_calendar(classification, content,
-                                  existing_gcal_id=existing_gcal_id, note_id=note_id)
-                timing["calendar"] = round((time.time() - t0) * 1000)
-
                 action = "updated_reclassified" if new_category != old_category else "updated"
                 log_receipt(source_file, classification, action, obsidian_path)
                 metric_action = action
@@ -282,11 +197,6 @@ def handle(state: OrchestratorState) -> OrchestratorState:
 
         # Invalidate entity index after new entry stored
         invalidate_entity_index()
-
-        # Auto-push to Google Calendar if event detected (atomic — DB write inside)
-        t0 = time.time()
-        _push_to_calendar(classification, content, note_id=note_id)
-        timing["calendar"] = round((time.time() - t0) * 1000)
 
         action = "misc" if classification.get("confidence", 0) < 0.7 else "classified"
         log_receipt(source_file, classification, action, obsidian_path)

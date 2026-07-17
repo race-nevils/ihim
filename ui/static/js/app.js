@@ -40,7 +40,7 @@ export function formatTimestamp(timestamp) {
 
 // Lucide icon names for desktop tiles
 const LUCIDE_ICONS = {
-    'mic': 'mic', 'git-branch': 'git-branch', 'calendar': 'calendar-days',
+    'mic': 'mic', 'git-branch': 'git-branch',
     'heart-pulse': 'heart-pulse', 'archive': 'archive', 'timer': 'timer',
     'restart': 'refresh-cw', 'default': 'zap',
 };

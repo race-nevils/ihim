@@ -15,8 +15,6 @@ READ_ENDPOINTS = [
     "/api/vault/projects",
     "/api/vault/categories",
     "/api/vault/entries?limit=2",
-    "/api/calendar/status",
-    "/api/calendar/events",
     "/api/preferences",
     "/api/stt/status",
     "/api/stt/history?limit=2",

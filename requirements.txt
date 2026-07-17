@@ -13,11 +13,6 @@ sqlite-vec>=0.1.6
 # Brain pipeline (handlers/, data/)
 dateparser>=1.2.0,<2.0.0
 
-# Google Calendar
-google-api-python-client>=2.0.0,<3.0.0
-google-auth-httplib2>=0.2.0,<1.0.0
-google-auth-oauthlib>=1.0.0,<2.0.0
-
 # STT Dictation (Windows)
 pynput>=1.7.0,<2.0.0
 pywin32>=306                  # win32clipboard/win32gui for paste injection + window context
@@ -35,3 +30,6 @@ numpy>=1.24.0,<3.0.0
 # python-multipart (no form/upload routes), PyYAML (configs/ deleted),
 # langgraph (orchestrator/graph.py deleted), langfuse (tracing is no-op),
 # pystray + pillow (capture widget deleted), cryptography (never imported).
+# Removed 2026-07-17: google-api-python-client + google-auth-* (Google
+# Calendar integration deleted — widget, api/calendar/, auto-push, rebuild
+# executor).

@@ -935,6 +935,11 @@ main {
     border-style: dashed;
 }
 
+/* Mid-drag ghost — the original chip while its drag image follows the cursor */
+.taskbar-chip.dragging {
+    opacity: 0.35;
+}
+
 /* Recorder live — red outline while a recording is running */
 .taskbar-chip.recording {
     border-color: var(--accent-red);

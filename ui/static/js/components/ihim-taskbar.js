@@ -11,24 +11,33 @@
  * so open/minimize persistence lives where it already does: IhimPanel's
  * -open / -min keys through ui-state.js.
  *
+ * The ONE thing the taskbar persists itself is chip order: chips are
+ * drag-to-reorder (native HTML5 DnD), saved as an id array under
+ * ihim_taskbar_order via ui-state.js so every client shares the layout.
+ *
  * Usage: <ihim-taskbar id="taskbar" class="taskbar"></ihim-taskbar>
  */
 
 import { escapeHtml, getIcon } from '../app.js';
+import { persist } from '../ui-state.js';
 
 const PANEL_EVENTS = ['panel:open', 'panel:close', 'panel:minimize', 'panel:restore', 'panel:state'];
+const ORDER_KEY = 'ihim_taskbar_order';
 
 class IhimTaskbar extends HTMLElement {
     connectedCallback() {
         this.setAttribute('role', 'toolbar');
         this.setAttribute('aria-label', 'Open windows');
 
-        this._onPanelEvent = () => this._render();
+        // Mid-drag re-renders would yank the dragged chip out from under the
+        // cursor; dragend re-renders to catch anything skipped.
+        this._onPanelEvent = () => { if (!this._dragging) this._render(); };
         for (const ev of PANEL_EVENTS) {
             document.addEventListener(ev, this._onPanelEvent);
         }
 
         // Chip clicks are delegated — chips are re-rendered wholesale.
+        // (A completed drag suppresses the click natively.)
         this.addEventListener('click', (e) => {
             const chip = e.target.closest('.taskbar-chip');
             if (!chip) return;
@@ -36,6 +45,53 @@ class IhimTaskbar extends HTMLElement {
             if (!win) return;
             if (win.classList.contains('minimized')) win.restore();
             else win.minimize();
+        });
+
+        // Drag-to-reorder: chips move live in the DOM while dragging; the
+        // resulting order is persisted on dragend.
+        this.addEventListener('dragstart', (e) => {
+            const chip = e.target.closest('.taskbar-chip');
+            if (!chip) return;
+            this._dragging = chip;
+            chip.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', chip.dataset.target);
+        });
+
+        this.addEventListener('dragover', (e) => {
+            if (!this._dragging) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const over = e.target.closest('.taskbar-chip');
+            if (!over) {
+                // Empty strip past the chips — dragging to the end
+                const last = this.querySelector('.taskbar-chip:last-child');
+                if (last && last !== this._dragging &&
+                    e.clientX > last.getBoundingClientRect().right) {
+                    this.appendChild(this._dragging);
+                }
+                return;
+            }
+            if (over === this._dragging) return;
+            const rect = over.getBoundingClientRect();
+            const before = e.clientX < rect.left + rect.width / 2;
+            this.insertBefore(this._dragging, before ? over : over.nextSibling);
+        });
+
+        this.addEventListener('drop', (e) => {
+            if (this._dragging) e.preventDefault();
+        });
+
+        this.addEventListener('dragend', () => {
+            if (!this._dragging) return;
+            this._dragging.classList.remove('dragging');
+            this._dragging = null;
+            const visible = [...this.querySelectorAll('.taskbar-chip')]
+                .map(c => c.dataset.target);
+            // Closed windows keep their saved slots relative to each other
+            const rest = this._order().filter(id => !visible.includes(id));
+            persist(ORDER_KEY, JSON.stringify([...visible, ...rest]));
+            this._render();
         });
 
         // Panels restore their persisted open state in deferred microtasks;
@@ -50,8 +106,19 @@ class IhimTaskbar extends HTMLElement {
         }
     }
 
+    _order() {
+        try { return JSON.parse(localStorage.getItem(ORDER_KEY)) || []; }
+        catch { return []; }
+    }
+
     _render() {
-        const windows = [...document.querySelectorAll('[taskbar-label][open]')];
+        const order = this._order();
+        const rank = (el) => {
+            const i = order.indexOf(el.id);
+            return i === -1 ? order.length : i;  // unknown ids after known, DOM order (stable sort)
+        };
+        const windows = [...document.querySelectorAll('[taskbar-label][open]')]
+            .sort((a, b) => rank(a) - rank(b));
         this.innerHTML = windows.map(win => {
             const label = win.getAttribute('taskbar-label');
             const minimized = win.classList.contains('minimized');
@@ -59,6 +126,7 @@ class IhimTaskbar extends HTMLElement {
             const recording = win.hasAttribute('recording');
             return `
                 <button type="button"
+                        draggable="true"
                         class="taskbar-chip${minimized ? ' minimized' : ''}${recording ? ' recording' : ''}"
                         data-target="${escapeHtml(win.id)}"
                         aria-pressed="${minimized ? 'false' : 'true'}"

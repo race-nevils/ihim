@@ -15,6 +15,18 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+# Transcript filenames and headers show the operator's local time; the sidecar's
+# stored ISO timestamps stay UTC (iHIM standard).
+CENTRAL_TZ = ZoneInfo("America/Chicago")
+
+
+def _to_central(dt):
+    """UTC-aware (or naive-local) datetime → Central time. None passes through."""
+    if dt is None:
+        return None
+    return dt.astimezone(CENTRAL_TZ)
 
 # Launched as a standalone script via create_subprocess_exec, so Python sets
 # sys.path[0] to this file's own directory (api/recorder/) — not the cwd. The
@@ -66,7 +78,8 @@ def _assign_transcript_path(recordings_dir: Path, sidecar: dict, person: str, st
     if existing and (recordings_dir / existing).exists():
         return recordings_dir / existing
 
-    date = started_at.strftime("%Y-%m-%d") if started_at else "undated"
+    local = _to_central(started_at)
+    date = local.strftime("%Y-%m-%d") if local else "undated"
     stem = f"{_clean_name(person)} {date}"
     plain = recordings_dir / f"{stem}.md"
     lettered = sorted(recordings_dir.glob(f"{stem} [a-z].md"))
@@ -92,7 +105,8 @@ def _assign_transcript_path(recordings_dir: Path, sidecar: dict, person: str, st
 def _write_transcript_md(label, started_at, duration, speakers, segments, output_path):
     """Write a standalone markdown transcript file."""
     title = label or output_path.stem
-    date_str = started_at.strftime("%Y-%m-%d %H:%M UTC") if started_at else "Unknown"
+    local = _to_central(started_at)
+    date_str = local.strftime("%Y-%m-%d %H:%M %Z") if local else "Unknown"
     m, s = divmod(int(duration), 60)
     duration_str = f"{m}m {s}s" if m > 0 else f"{s}s"
     participants = sorted(set(speakers.values()))

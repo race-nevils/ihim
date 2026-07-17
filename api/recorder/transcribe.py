@@ -374,6 +374,32 @@ def unload_model(model_size: str = "small") -> bool:
     return unloaded
 
 
+def unload_all_models() -> list:
+    """Unload every cached model's weights to hand the full GPU to another process.
+
+    Called before launching a transcription worker subprocess: the worker's
+    VRAM probe (nvidia-smi in _pick_device) must see a free GPU or it
+    downgrades compute type — a warm stt dictation model pushed a 34-min
+    meeting to quantized ~3x-realtime on the 6GB 2060 (2026-07-16). Same
+    weights-only unload as the idle path: objects stay cached, next
+    in-process use reloads transparently via load_model().
+    """
+    unloaded = []
+    with _model_lock:
+        for key, cached in _model_cache.items():
+            try:
+                if cached.model.model_is_loaded:
+                    cached.model.unload_model()
+                    unloaded.append(str(key))
+            except Exception as e:
+                print(f"[recorder] Unload of {key} failed: {e}")
+    if unloaded:
+        _vram_cache["value"] = None
+        _vram_cache["expires"] = 0
+        print(f"[recorder] Unloaded {len(unloaded)} model(s) to free VRAM: {', '.join(unloaded)}")
+    return unloaded
+
+
 def transcribe_channel(
     wav_path: Path,
     speaker_label: str,

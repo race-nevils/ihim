@@ -13,6 +13,12 @@ import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+# Recording IDs and transcript filenames are named in the operator's local time
+# (stored ISO timestamps stay UTC per the iHIM standard). A late-evening
+# recording was landing on "tomorrow's" date under UTC naming.
+CENTRAL_TZ = ZoneInfo("America/Chicago")
 
 from fastapi import APIRouter, Request
 from api.errors import problem
@@ -69,8 +75,8 @@ RECORDING_ID_RE = re.compile(r'^\d{8}-\d{6}$')
 
 
 def _recording_id() -> str:
-    """Generate a recording ID from current timestamp."""
-    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    """Generate a recording ID from the current Central-time timestamp."""
+    return datetime.now(CENTRAL_TZ).strftime("%Y%m%d-%H%M%S")
 
 
 def _validate_recording_id(recording_id: str, request: Request):
@@ -352,6 +358,25 @@ async def transcribe_recording(recording_id: str, request: Request):
     sidecar["status"] = "transcribing"
     sidecar["transcription_stage"] = "queued"
     await _awrite_text(sidecar_path, json.dumps(sidecar, indent=2))
+
+    # Hand the worker a free GPU: unload this process's warm Whisper models
+    # (stt's dictation model) so the worker's VRAM probe doesn't downgrade
+    # compute type. Skipped only while stt is actively mid-job — unloading
+    # under a running encode is unsafe; the worker then just runs slower.
+    try:
+        from tools.stt import engine as _stt_engine
+        stt_busy = (
+            _stt_engine._engine is not None
+            and _stt_engine._engine.status() in ("recording", "processing", "loading")
+        )
+        if stt_busy:
+            logger.info("STT busy — leaving its model loaded; worker may downgrade compute type")
+        else:
+            from api.recorder.transcribe import unload_all_models
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, unload_all_models)
+    except Exception as e:
+        logger.warning("Pre-worker model unload skipped: %s", e)
 
     # Launch worker subprocess — fire and forget with timeout
     timeout = _transcription_timeout(sidecar.get("duration_seconds") or 0)
@@ -695,9 +720,10 @@ def _recover_interrupted_recordings() -> None:
             started_at = manifest.get("started_at")
             if not started_at:
                 try:
+                    # IDs are minted in Central time; store the ISO stamp as UTC.
                     started_at = datetime.strptime(rec_id, "%Y%m%d-%H%M%S").replace(
-                        tzinfo=timezone.utc
-                    ).isoformat()
+                        tzinfo=CENTRAL_TZ
+                    ).astimezone(timezone.utc).isoformat()
                 except ValueError:
                     started_at = None
             duration = manifest.get("duration_seconds", 0)

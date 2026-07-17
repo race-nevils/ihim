@@ -240,6 +240,12 @@ body::after {
     top: 116px;
 }
 
+/* The HUD frame hugs the viewport (fixed, inset 0) — in-shell its top edge
+   must start below the strip or the top corners clip under it */
+[data-shell] .hud-corners {
+    top: 36px;
+}
+
 .hud-corners {
     position: fixed;
     inset: 0;

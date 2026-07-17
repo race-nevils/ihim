@@ -76,9 +76,15 @@ function createWindow() {
     ...loadBounds(),
     icon: ICON,
     autoHideMenuBar: true,
-    // Standard frame (unlike EdgeFlow's hidden titleBarStyle): the iHIM UI is
-    // a desktop of draggable panels with no header strip to serve as a drag
-    // region, so a frameless window would be unmovable.
+    // Hidden title bar + a UI-drawn strip: the page
+    // renders its own 36px top bar styled exactly like the bottom status bar
+    // (shell-only — the browser never shows it; see [data-shell] in
+    // style.css), with the native min/max/close overlaid in the same gray.
+    // No icon, no caption text. Recoloring the NATIVE framed caption via DWM
+    // was tried first and abandoned — Chromium re-asserts its own frame
+    // color on activation/minimize, so the paint didn't survive.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#0e0d0d', symbolColor: '#cdd6f4', height: 36 },
     backgroundColor: '#11111b',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

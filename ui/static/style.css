@@ -204,6 +204,42 @@ body::after {
 /* ============================================ */
 /* HUD CORNER DECORATIONS                       */
 /* ============================================ */
+/* Desktop-shell title bar — rendered ONLY in the Electron app ([data-shell]
+   is stamped by index.html when the shell preload is present). Mirrors the
+   bottom status bar; -webkit-app-region makes the strip the window drag
+   region (inert in a browser, which never shows it anyway). Draggable
+   regions are geometric, not z-ordered: fixed overlays that can sit inside
+   the strip opt out via no-drag (see the WEB COMPONENTS section). */
+.top-bar {
+    display: none;
+}
+
+[data-shell] .top-bar {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    background: linear-gradient(180deg,
+            rgba(17, 17, 17, 0.95) 0%,
+            rgba(10, 10, 10, 0.98) 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-dim);
+    z-index: 200;
+    -webkit-app-region: drag;
+}
+
+/* Content starts below the shell strip instead of under it */
+[data-shell] .container {
+    padding-top: calc(var(--space-6) + 36px);
+}
+
+[data-shell] .stopwatch-container {
+    top: 116px;
+}
+
 .hud-corners {
     position: fixed;
     inset: 0;
@@ -2178,7 +2214,9 @@ main {
    prevent collapse. Stacking order is managed by click-to-focus in
    ihim-panel.js (pointerdown raises). A new window element MUST join this list. */
 ihim-panel, ihim-stt, ihim-recorder,
-ihim-health, ihim-vault, ihim-agentnode { position: fixed; z-index: 100; }
+ihim-health, ihim-vault, ihim-agentnode { position: fixed; z-index: 100; -webkit-app-region: no-drag; }
+/* Fixed overlays that can reach the shell's top-bar drag strip opt out too */
+.stopwatch-container, ihim-stopwatch, .bottom-bar { -webkit-app-region: no-drag; }
 ihim-panel:not([open]), ihim-stt:not([open]), ihim-recorder:not([open]),
 ihim-health:not([open]), ihim-vault:not([open]), ihim-agentnode:not([open]) { display: none; }
 ihim-panel[open], ihim-stt[open], ihim-recorder[open],

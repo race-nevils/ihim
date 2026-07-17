@@ -14,9 +14,13 @@
            background: #1e1e2e; color: #cdd6f4; font: inherit; cursor: pointer; }
   button:hover { background: #313244; }
   .hint { color: #585b70; font-size: 13px; margin-top: 10px; }
+  /* Frameless window: same gray strip as the app UI's top bar */
+  .titlebar { position: fixed; top: 0; left: 0; right: 0; height: 36px;
+              background: #0e0d0d; -webkit-app-region: drag; }
 </style>
 </head>
 <body>
+<div class="titlebar"></div>
 <div class="card">
   <div><span class="dot"></span>Backend is not answering</div>
   <button id="restart">Restart Backend</button>

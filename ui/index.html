@@ -15,6 +15,16 @@
 <body>
     <a href="#actions-grid" class="skip-link">Skip to content</a>
 
+    <!-- Desktop-shell title bar: visible ONLY inside the Electron app
+         ([data-shell] on <html>, stamped below). Styled like the bottom
+         status bar; the whole strip is the window drag region, with the
+         native min/max/close overlaid top-right by the shell. -->
+    <div class="top-bar" aria-hidden="true"></div>
+    <script>
+        // The shell's preload exposes ihimShell; a plain browser never has it.
+        if (window.ihimShell) document.documentElement.setAttribute('data-shell', '1');
+    </script>
+
     <!-- HUD Corner Decorations -->
     <div class="hud-corners">
         <div class="hud-corner hud-corner-tl"></div>

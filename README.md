@@ -30,7 +30,7 @@ api/
   main.py                  app factory — explicit router registration
   runtime.py middleware.py errors.py responses.py site.py server.py
   stt/ recorder/         dictation + meeting recorder (shared whisper core)
-  health/ vault/ brain/ graph/ preferences.py
+  health/ brain/ graph/ preferences.py todos.py
 tools/stt/               dictation engine (hotkey→capture→transcribe→inject)
                            data/ = dictation history + voice-training audio
 handlers/ adapters/ data/  brain ingestion pipeline + JSON-LD source of truth
@@ -42,7 +42,9 @@ tests/                     pytest
 
 ## Widgets
 
-STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder · Health · Vault (brain tasks/projects/docs) · Stopwatch (client-side) · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, state persists across reloads).
+STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder (taskbar chip shows a red outline while recording) · Health · To-Do (quick-capture list grouped by category — `data/local/todos.json`) · Stopwatch (client-side) · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, state persists across reloads).
+
+*Vault deleted 2026-07-17: widget, `api/vault/`, and the task_status query layer — replaced by the To-Do widget. Brain entries remain queryable via `api/brain/`.*
 
 *Google Calendar deleted 2026-07-17: widget, `api/calendar/`, brain auto-push, and the rebuild GCal executor. Brain-internal event detection (notes → `event_date` in brain.db) remains.*
 

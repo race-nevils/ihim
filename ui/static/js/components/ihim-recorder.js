@@ -41,7 +41,6 @@ class IhimRecorder extends IhimPanel {
         this.innerHTML = `
             <div class="recorder-header recorder-drag-handle" data-drag-handle>
                 <span class="recorder-label"><i data-lucide="mic" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Meeting Recorder</span>
-                <span class="recorder-status-badge" id="recorder-status-badge" aria-live="polite" role="status">IDLE</span>
                 <button class="recorder-close" data-close-btn aria-label="Close Meeting Recorder">&times;</button>
             </div>
 
@@ -323,18 +322,21 @@ class IhimRecorder extends IhimPanel {
     }
 
     _renderStatus(data) {
-        const badge = this._el('recorder-status-badge');
         const startBtn = this._el('recorder-start-btn');
         const stopBtn = this._el('recorder-stop-btn');
         const resetBtn = this._el('recorder-reset-btn');
         const liveStatus = this._el('recorder-live-status');
 
-        // Badge
-        badge.classList.remove('status-idle', 'status-recording', 'status-transcribing', 'status-error');
+        // Recording indicator lives on the taskbar chip (red outline), driven
+        // by this attribute; panel:state tells the taskbar to re-render.
+        const isRecording = data.status === 'recording';
+        if (isRecording !== this.hasAttribute('recording')) {
+            this.toggleAttribute('recording', isRecording);
+            this.dispatchEvent(new CustomEvent('panel:state', { bubbles: true }));
+        }
+
         switch (data.status) {
             case 'recording':
-                badge.textContent = 'REC';
-                badge.classList.add('status-recording');
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
                 stopBtn.textContent = 'Stop';
@@ -346,8 +348,6 @@ class IhimRecorder extends IhimPanel {
                 }
                 break;
             case 'transcribing':
-                badge.textContent = 'PROCESSING';
-                badge.classList.add('status-transcribing');
                 startBtn.disabled = true;
                 stopBtn.disabled = true;
                 stopBtn.textContent = 'Transcribing...';
@@ -356,8 +356,6 @@ class IhimRecorder extends IhimPanel {
                 this._clearElapsedTimer();
                 break;
             case 'error':
-                badge.textContent = 'ERROR';
-                badge.classList.add('status-error');
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 stopBtn.textContent = 'Stop';
@@ -367,8 +365,6 @@ class IhimRecorder extends IhimPanel {
                 if (data.error) this._showError(data.error);
                 break;
             default: // idle
-                badge.textContent = 'IDLE';
-                badge.classList.add('status-idle');
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 stopBtn.textContent = 'Stop';

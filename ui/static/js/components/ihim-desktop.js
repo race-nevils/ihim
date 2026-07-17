@@ -20,7 +20,7 @@ export const TILES = [
     { id: 'stt', name: 'STT Dictation', icon: 'mic', run: () => panel('stt-window')?.toggle() },
     { id: 'meeting_recorder', name: 'Meeting Recorder', icon: 'mic', run: () => panel('recorder-window')?.toggle() },
     { id: 'health', name: 'Health', icon: 'heart-pulse', run: () => panel('health-window')?.open() },
-    { id: 'vault', name: 'Vault', icon: 'archive', run: () => panel('vault-window')?.toggle() },
+    { id: 'todo', name: 'To-Do', icon: 'list-todo', run: () => panel('todo-window')?.toggle() },
     { id: 'restart_server', name: 'Restart Server', icon: 'restart', run: restartServer },
 ];
 

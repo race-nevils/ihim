@@ -41,7 +41,7 @@ from api.preferences import router as preferences_router
 from api.health.routes import router as health_router
 from api.brain.routes import router as brain_router
 from api.graph.routes import router as graph_router
-from api.vault.routes import router as vault_router
+from api.todos import router as todos_router
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +161,7 @@ def create_app() -> FastAPI:
     routers = [
         site_router, server_router, preferences_router,
         health_router, brain_router,
-        graph_router, vault_router,
+        graph_router, todos_router,
     ]
     if stt_router is not None:
         routers.append(stt_router)

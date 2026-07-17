@@ -23,7 +23,7 @@ await Promise.all([
     import('./components/ihim-stt.js'),
     import('./components/ihim-recorder.js'),
     import('./components/ihim-health.js'),
-    import('./components/ihim-vault.js'),
+    import('./components/ihim-todo.js'),
 
     // Standalone components
     import('./components/ihim-desktop.js'),

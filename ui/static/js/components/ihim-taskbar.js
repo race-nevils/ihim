@@ -6,8 +6,9 @@
  *   <ihim-health ... taskbar-icon="heart-pulse" taskbar-label="Health"></ihim-health>
  *
  * State is fully derived — the taskbar owns nothing. It re-renders from the
- * DOM ([taskbar-label][open] + .minimized) on every panel:* event, so
- * open/minimize persistence lives where it already does: IhimPanel's
+ * DOM ([taskbar-label][open] + .minimized + [recording]) on every panel:*
+ * event (panels dispatch panel:state on live-state changes like recording),
+ * so open/minimize persistence lives where it already does: IhimPanel's
  * -open / -min keys through ui-state.js.
  *
  * Usage: <ihim-taskbar id="taskbar" class="taskbar"></ihim-taskbar>
@@ -15,7 +16,7 @@
 
 import { escapeHtml, getIcon } from '../app.js';
 
-const PANEL_EVENTS = ['panel:open', 'panel:close', 'panel:minimize', 'panel:restore'];
+const PANEL_EVENTS = ['panel:open', 'panel:close', 'panel:minimize', 'panel:restore', 'panel:state'];
 
 class IhimTaskbar extends HTMLElement {
     connectedCallback() {
@@ -54,9 +55,11 @@ class IhimTaskbar extends HTMLElement {
         this.innerHTML = windows.map(win => {
             const label = win.getAttribute('taskbar-label');
             const minimized = win.classList.contains('minimized');
+            // e.g. the recorder while capturing — red outline on the chip
+            const recording = win.hasAttribute('recording');
             return `
                 <button type="button"
-                        class="taskbar-chip${minimized ? ' minimized' : ''}"
+                        class="taskbar-chip${minimized ? ' minimized' : ''}${recording ? ' recording' : ''}"
                         data-target="${escapeHtml(win.id)}"
                         aria-pressed="${minimized ? 'false' : 'true'}"
                         title="${escapeHtml(label)} — ${minimized ? 'restore' : 'minimize'}">

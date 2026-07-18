@@ -205,11 +205,17 @@ body::after {
 /* HUD CORNER DECORATIONS                       */
 /* ============================================ */
 /* Desktop-shell title bar — rendered ONLY in the Electron app ([data-shell]
-   is stamped by index.html when the shell preload is present). Mirrors the
-   bottom status bar; -webkit-app-region makes the strip the window drag
-   region (inert in a browser, which never shows it anyway). Draggable
-   regions are geometric, not z-ordered: fixed overlays that can sit inside
-   the strip opt out via no-drag (see the WEB COMPONENTS section). */
+   is stamped by index.html when the shell preload is present).
+   -webkit-app-region makes the strip the window drag region (inert in a
+   browser, which never shows it anyway). Draggable regions are geometric,
+   not z-ordered: fixed overlays that can sit inside the strip opt out via
+   no-drag (see the WEB COMPONENTS section).
+   The native min/max/close cluster (titleBarOverlay, desktop/main.js) is a
+   flat rectangle the OS paints on top of this strip — the strip MUST be the
+   same flat opaque color (no gradient/translucency) or the overlay reads as
+   its own box, and the divider MUST sit below the 36px band (an in-band
+   border-bottom lands at row 35 under border-box, where the overlay covers
+   it and clips the line short at the buttons). */
 .top-bar {
     display: none;
 }
@@ -221,14 +227,19 @@ body::after {
     left: 0;
     right: 0;
     height: 36px;
-    background: linear-gradient(180deg,
-            rgba(17, 17, 17, 0.95) 0%,
-            rgba(10, 10, 10, 0.98) 100%);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border-dim);
+    background: #0e0d0d; /* = titleBarOverlay color in desktop/main.js */
     z-index: 200;
     -webkit-app-region: drag;
+}
+
+[data-shell] .top-bar::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--border-dim);
 }
 
 /* Content starts below the shell strip instead of under it */

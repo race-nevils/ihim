@@ -77,9 +77,11 @@ function createWindow() {
     icon: ICON,
     autoHideMenuBar: true,
     // Hidden title bar + a UI-drawn strip: the page
-    // renders its own 36px top bar styled exactly like the bottom status bar
-    // (shell-only — the browser never shows it; see [data-shell] in
-    // style.css), with the native min/max/close overlaid in the same gray.
+    // renders its own 36px top bar (shell-only — the browser never shows it;
+    // see [data-shell] in style.css) as the SAME flat opaque color as this
+    // overlay, so the native min/max/close cluster sits seamlessly on the
+    // bar — the overlay is an OS-painted flat rectangle, so any gradient or
+    // translucency in the page strip makes it read as a separate box.
     // No icon, no caption text. Recoloring the NATIVE framed caption via DWM
     // was tried first and abandoned — Chromium re-asserts its own frame
     // color on activation/minimize, so the paint didn't survive.

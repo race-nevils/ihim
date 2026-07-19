@@ -527,7 +527,12 @@ class STTEngine:
                     "salvaging audio and restarting the server",
                     deadline_s, duration_s,
                 )
-                _salvage_audio(blocks, rate, dictation_id)
+                if _salvage_audio(blocks, rate, dictation_id) is not None:
+                    # Salvage holds the audio now — drop the WAL, else the
+                    # post-restart boot sweep promotes a duplicate WAV. The
+                    # hung pipeline thread never reaches its finally, so
+                    # this is the WAL's only exit on the deadline path.
+                    self._mic.discard_inflight()
                 self._set_status("error")
                 try:
                     from tools.stt.sounds import play_error
@@ -556,7 +561,17 @@ class STTEngine:
                 watchdog.cancel()
 
             if not raw_text.strip():
-                logger.info("Empty transcript, skipping")
+                if duration_s >= 10.0:
+                    # Whisper yielding nothing on this much audio is a
+                    # misfire, not silence — persist the audio before the
+                    # finally drops the WAL (voice audio is never lost).
+                    logger.warning(
+                        "Empty transcript on %.1fs of audio — salvaging",
+                        duration_s,
+                    )
+                    keep_wal = _salvage_audio(blocks, rate, dictation_id) is None
+                else:
+                    logger.info("Empty transcript, skipping")
                 return
 
             # 3. Deterministic cleanup (no LLM, no VRAM) — context-aware

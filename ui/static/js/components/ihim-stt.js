@@ -14,11 +14,7 @@ class IhimSTT extends IhimPanel {
 
     connectedCallback() {
         this.innerHTML = `
-            <div class="stt-header" data-drag-handle>
-                <span class="stt-label"><i data-lucide="mic" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>STT Dictation</span>
-                <span class="stt-status-badge" id="stt-status-badge" aria-live="polite" role="status">IDLE</span>
-                <button class="stt-close" data-close-btn aria-label="Close STT Dictation">&times;</button>
-            </div>
+            <span class="stt-status-badge" id="stt-status-badge" data-titlebar-slot aria-live="polite" role="status">IDLE</span>
 
             <ihim-tabs>
             <!-- Tabs -->

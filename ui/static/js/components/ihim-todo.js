@@ -16,10 +16,6 @@ class IhimTodo extends IhimPanel {
 
     connectedCallback() {
         this.innerHTML = `
-            <div class="todo-header todo-drag-handle" data-drag-handle>
-                <span class="todo-label"><i data-lucide="list-todo" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>To-Do</span>
-                <button class="todo-close" data-close-btn aria-label="Close To-Do">&times;</button>
-            </div>
             <div class="todo-new-category-row">
                 <input type="text" id="todo-new-category" placeholder="New category (e.g. desktop app, Tomorrow)" maxlength="80" />
                 <button class="todo-add-btn" id="todo-add-category-btn" aria-label="Add category">+</button>

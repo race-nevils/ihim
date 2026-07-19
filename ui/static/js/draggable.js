@@ -25,6 +25,9 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
     handle.addEventListener('pointerdown', (e) => {
         if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
         if (e.button !== 0) return;
+        // Maximized geometry is CSS-owned; a drag here would corrupt the
+        // inline styles the restore falls back to
+        if (el.hasAttribute('maximized')) return;
         e.preventDefault();
 
         handle.setPointerCapture(e.pointerId);
@@ -87,6 +90,7 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
     // Keyboard movement: Ctrl+Arrow keys (20px per press)
     handle.addEventListener('keydown', (e) => {
         if (!e.ctrlKey) return;
+        if (el.hasAttribute('maximized')) return;
         const STEP = 20;
         let x = parseInt(el.style.left) || 0;
         let y = parseInt(el.style.top) || 0;
@@ -122,6 +126,7 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
 window.addEventListener('resize', () => {
     for (const el of allDraggables) {
         if (el.style.display === 'none') continue;
+        if (el.hasAttribute('maximized')) continue;
         const x = parseInt(el.style.left);
         const y = parseInt(el.style.top);
         if (isNaN(x) || isNaN(y)) continue;

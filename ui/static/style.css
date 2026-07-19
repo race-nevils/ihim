@@ -1609,48 +1609,6 @@ header .subtitle {
     resize: both;
 }
 
-.health-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-2);
-    cursor: move;
-    user-select: none;
-    padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--glass-border);
-}
-
-.health-label {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-}
-
-.health-close {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 1.5rem;
-    cursor: pointer;
-    padding: 0;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    transition: all 0.2s;
-}
-
-.health-close:hover {
-    background: rgba(220, 38, 38, 0.15);
-    color: #dc2626;
-}
-
 .health-tabs {
     display: flex;
     gap: 8px;
@@ -1949,40 +1907,6 @@ header .subtitle {
     resize: both;
 }
 
-.todo-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--border-dim);
-    cursor: move;
-    user-select: none;
-}
-
-.todo-label {
-    flex: 1;
-    font-weight: 600;
-    font-size: 1rem;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    white-space: nowrap;
-}
-
-.todo-close {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 1.4rem;
-    line-height: 1;
-    cursor: pointer;
-    padding: 0 4px;
-}
-
-.todo-close:hover {
-    color: var(--accent-red);
-}
-
 .todo-new-category-row {
     display: flex;
     gap: var(--space-2);
@@ -2193,6 +2117,75 @@ ihim-health[open], ihim-todo[open] { display: flex; flex-direction: column; }
 ihim-panel[open].minimized, ihim-stt[open].minimized, ihim-recorder[open].minimized,
 ihim-health[open].minimized, ihim-todo[open].minimized { display: none; }
 
+/* Maximized fills the desktop above the bottom bar. Percentages/vh resolve
+   against the viewport on a fixed-position element, so a viewport resize
+   tracks free — and the !important lets the attribute win over the inline
+   drag/resize geometry, which stays untouched underneath for restore. */
+ihim-panel[maximized], ihim-stt[maximized], ihim-recorder[maximized],
+ihim-health[maximized], ihim-todo[maximized] {
+    left: 0 !important;
+    top: 0 !important;
+    width: 100vw !important;
+    height: calc(100vh - 36px) !important;
+    border-radius: 0 !important;
+    resize: none;
+}
+/* In the desktop app the 36px shell title strip owns the top edge too */
+[data-shell] ihim-panel[maximized], [data-shell] ihim-stt[maximized],
+[data-shell] ihim-recorder[maximized], [data-shell] ihim-health[maximized],
+[data-shell] ihim-todo[maximized] {
+    top: 36px !important;
+    height: calc(100vh - 72px) !important;
+}
+
+/* Standard window titlebar: one bare strip, controls only (− □ ✕) — no icon, no title
+   text, no border or fill of its own (seamless with the window surface).
+   Injected by IhimPanel; subclasses never author their own header. Window
+   identity lives on the taskbar chip + control aria-labels. A subclass
+   element marked [data-titlebar-slot] rides the strip's left side. */
+.window-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    height: 32px;
+    padding: 0 0 0 4px;   /* controls run flush to the strip's right edge */
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+}
+/* Buttons mirror the native Windows caption cluster in the shell's title
+   strip: wide flat rectangles, 1px-stroke SVG glyphs, no radius */
+.window-controls {
+    display: flex;
+    gap: 0;
+    margin-left: auto;
+    align-self: stretch;
+}
+.window-btn {
+    width: 40px;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    color: var(--text-secondary);
+    padding: 0;
+    cursor: pointer;
+}
+.window-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+.window-btn.close:hover {
+    background: #dc2626;
+    color: #fff;
+}
+/* STT's window has no body padding — give its strip the same left inset */
+ihim-stt .window-titlebar { padding: 0 0 0 10px; }
+
 /* Tab system component — transparent wrapper, invisible to layout + AT */
 ihim-tabs { display: contents; }
 
@@ -2333,43 +2326,6 @@ button:focus-visible {
     resize: both;
 }
 
-.recorder-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: var(--space-2);
-    padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--glass-border);
-    cursor: move;
-    user-select: none;
-}
-
-.recorder-label {
-    font-weight: 600;
-    font-size: 1rem;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    white-space: nowrap;
-}
-
-.recorder-close {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 1.4rem;
-    cursor: pointer;
-    padding: 0 4px;
-    line-height: 1;
-    border-radius: 4px;
-    transition: color 0.2s, background 0.2s;
-    margin-left: auto;
-}
-.recorder-close:hover {
-    color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.08);
-}
 
 /* Tabs */
 .recorder-tabs {
@@ -2492,10 +2448,6 @@ button:focus-visible {
 /* Focus-visible — keyboard-only focus rings */
 .recorder-tab-btn:focus-visible,
 .recorder-btn:focus-visible,
-.recorder-close:focus-visible {
-    outline: 2px solid var(--color-primary, rgba(220, 20, 60, 0.7));
-    outline-offset: 2px;
-}
 
 /* Scrollbar styling — match chat window pattern */
 .recorder-tab-content,
@@ -2790,26 +2742,6 @@ button:focus-visible {
     color-scheme: dark;
 }
 
-.stt-header {
-    display: flex;
-    align-items: center;
-    padding: 10px 14px;
-    background: rgba(30, 30, 46, 0.98);
-    border-bottom: 1px solid rgba(108, 112, 134, 0.2);
-    cursor: grab;
-    gap: 8px;
-    user-select: none;
-}
-
-.stt-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: #cdd6f4;
-    flex: 1;
-    display: flex;
-    align-items: center;
-}
-
 .stt-status-badge {
     font-size: 10px;
     font-weight: 700;
@@ -2855,21 +2787,6 @@ button:focus-visible {
 @keyframes stt-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
-}
-
-.stt-close {
-    background: none;
-    border: none;
-    color: #a6adc8;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-    line-height: 1;
-}
-.stt-close:hover {
-    background: rgba(243, 139, 168, 0.2);
-    color: #f38ba8;
 }
 
 /* Tabs */

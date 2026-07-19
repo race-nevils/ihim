@@ -14,11 +14,6 @@ class IhimHealth extends IhimPanel {
 
     connectedCallback() {
         this.innerHTML = `
-            <div class="health-header health-drag-handle" data-drag-handle>
-                <span class="health-label"><i data-lucide="heart-pulse" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Health Dashboard</span>
-                <button class="health-close" data-close-btn aria-label="Close Health Dashboard">&times;</button>
-            </div>
-
             <ihim-tabs>
             <!-- Tabs -->
             <div class="health-tabs" id="health-tablist" role="tablist" aria-label="Health Dashboard">

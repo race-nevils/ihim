@@ -39,11 +39,6 @@ class IhimRecorder extends IhimPanel {
 
     connectedCallback() {
         this.innerHTML = `
-            <div class="recorder-header recorder-drag-handle" data-drag-handle>
-                <span class="recorder-label"><i data-lucide="mic" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px;"></i>Meeting Recorder</span>
-                <button class="recorder-close" data-close-btn aria-label="Close Meeting Recorder">&times;</button>
-            </div>
-
             <ihim-tabs>
             <!-- Tabs -->
             <div class="recorder-tabs" id="recorder-tablist" role="tablist" aria-label="Meeting Recorder">

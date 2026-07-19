@@ -73,6 +73,35 @@ function Get-HealthStatus {
     } catch { return $null }
 }
 
+# A restart must never kill a live dictation: the recording buffer lives in
+# RAM and an external kill takes it with the process (lost ~6 min of speech
+# 2026-07-18 when the port hook restarted mid-dictation). Restart defers
+# while stt is recording / locked / processing; an unreachable endpoint or
+# a non-busy status proceeds immediately. Explicit 'stop' obeys at once.
+function Get-STTStatus {
+    try {
+        $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/api/stt/status" -UseBasicParsing -TimeoutSec 3
+        return ($resp.Content | ConvertFrom-Json).status
+    } catch { return $null }
+}
+
+function Wait-DictationIdle {
+    $busy = @('recording', 'locked', 'processing')
+    $status = Get-STTStatus
+    if ($null -eq $status -or $busy -notcontains $status) { return }
+    Write-Log "Dictation in progress ($status) -- deferring restart until idle (max 30 min)."
+    $deadline = (Get-Date).AddMinutes(30)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 2
+        $status = Get-STTStatus
+        if ($null -eq $status -or $busy -notcontains $status) {
+            Write-Log 'Dictation finished -- proceeding with restart.'
+            return
+        }
+    }
+    Write-Log 'WARNING: dictation still busy after 30 min -- restarting anyway.'
+}
+
 function Invoke-Stop {
     $procIds = Get-ListenerPids
     if ($procIds.Count -eq 0) {
@@ -173,6 +202,7 @@ switch ($Action) {
     'stop'    { if (-not (Invoke-Stop)) { exit 1 } }
     'start'   { if (-not (Invoke-Start)) { exit 1 } }
     'restart' {
+        Wait-DictationIdle
         if (-not (Invoke-Stop)) { exit 1 }
         if (-not (Invoke-Start)) { exit 1 }
     }

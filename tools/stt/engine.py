@@ -22,14 +22,37 @@ import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
-from tools.stt.audio import MicCapture, write_wav
+from tools.stt.audio import (
+    RECOVERED_DIR, MicCapture, sweep_inflight, write_wav,
+)
 from tools.stt.config import load_config
 from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
 
 logger = logging.getLogger(__name__)
 
 TRAINING_DIR = Path(__file__).parent / "data" / "voice-training"
-RECOVERED_DIR = Path(__file__).parent / "data" / "recovered"
+
+
+def _sweep_inflight_walls() -> None:
+    """Boot sweep: promote WALs orphaned by a mid-recording process death.
+
+    A WAL younger than the age gate might belong to a recording live in
+    ANOTHER instance (test port engine created while the live port
+    records) — skipped, re-checked until none remain. A live recording's
+    WAL keeps its mtime fresh and its own pipeline discards it, so the
+    re-check loop always terminates.
+    """
+    try:
+        promoted, skipped = sweep_inflight()
+        if promoted:
+            logger.warning("Boot sweep recovered %d in-flight recording(s) "
+                           "into %s", promoted, RECOVERED_DIR)
+        if skipped:
+            timer = threading.Timer(120.0, _sweep_inflight_walls)
+            timer.daemon = True
+            timer.start()
+    except Exception:
+        logger.error("Inflight boot sweep failed", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +174,7 @@ class STTEngine:
         self._idle_timer: Optional[threading.Timer] = None
         self._streamer = None
         self._warming_up = False
+        _sweep_inflight_walls()
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
         """Register a callback fired on every status transition.
@@ -478,6 +502,7 @@ class STTEngine:
         wav_path: Optional[Path] = None
         blocks: list = []
         rate = 0
+        keep_wal = False  # leave the inflight WAL on disk for the boot sweep
 
         try:
             model_name = self._cfg.get("model", "large-v3-turbo")
@@ -581,7 +606,7 @@ class STTEngine:
 
         except Exception as e:
             logger.error("Dictation pipeline failed: %s", e, exc_info=True)
-            _salvage_audio(blocks, rate, dictation_id)
+            keep_wal = _salvage_audio(blocks, rate, dictation_id) is None
             self._set_status("error")
             try:
                 from tools.stt.sounds import play_error
@@ -597,6 +622,13 @@ class STTEngine:
                     wav_path.unlink()
             except Exception:
                 pass
+            # Audio is now persisted (retained FLAC / salvage WAV) or the
+            # dictation completed — drop the crash WAL. If even salvage
+            # failed, keep it: the next boot sweep promotes it.
+            if keep_wal:
+                logger.error("Salvage failed — inflight WAL kept for boot sweep")
+            else:
+                self._mic.discard_inflight()
             self._set_status("warm")
             self._reset_idle_timer()
 

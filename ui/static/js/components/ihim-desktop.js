@@ -6,6 +6,12 @@
  * IhimPanel element API (open()/toggle()); drag uses Pointer Events +
  * setPointerCapture with a 5px click/drag threshold.
  *
+ * Positions are PROPORTIONAL: stored as fractions
+ * of the desktop area's usable travel (area minus one icon), re-applied on
+ * every window resize — resize/maximize keeps the layout's ratios, an
+ * edge-flush icon stays flush, and nothing ever leaves the surface. Pixels
+ * exist only transiently during a drag.
+ *
  * Usage (the element IS the grid; role="main" keeps the landmark):
  *   <ihim-desktop id="actions-grid" class="desktop-grid" role="main"></ihim-desktop>
  */
@@ -14,6 +20,10 @@ import { escapeHtml, getIcon, restartServer, showStatus } from '../app.js';
 import { persist } from '../ui-state.js';
 
 const panel = (id) => document.getElementById(id);
+
+// Must match .desktop-icon width/height in style.css
+const ICON_SIZE = 100;
+const clamp01 = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
 // One entry per desktop tile, in default-layout order.
 export const TILES = [
@@ -51,6 +61,27 @@ class IhimDesktop extends HTMLElement {
         }
     }
 
+    // Usable travel for an icon's top-left corner. Normalizing fractions by
+    // (area - icon) instead of the raw area means fx/fy = 1 puts the icon
+    // exactly flush with the edge at ANY window size — icons can never land
+    // off-surface, which is what makes "the page never scrolls" hold.
+    _bounds() {
+        return {
+            w: Math.max(1, this.clientWidth - ICON_SIZE),
+            h: Math.max(1, this.clientHeight - ICON_SIZE),
+        };
+    }
+
+    _applyPositions() {
+        const b = this._bounds();
+        for (const el of this.querySelectorAll('.desktop-icon')) {
+            const f = this.icons[el.dataset.actionId];
+            if (!f) continue;
+            el.style.left = Math.round(f.fx * b.w) + 'px';
+            el.style.top = Math.round(f.fy * b.h) + 'px';
+        }
+    }
+
     _render() {
         this.abortController = new AbortController();
         const signal = this.abortController.signal;
@@ -59,6 +90,7 @@ class IhimDesktop extends HTMLElement {
 
         const GRID_SIZE = 120;
         const maxCols = Math.max(1, Math.floor((window.innerWidth - 40) / GRID_SIZE));
+        const b = this._bounds();
         let col = 0;
 
         for (const tile of TILES) {
@@ -69,11 +101,20 @@ class IhimDesktop extends HTMLElement {
             icon.setAttribute('tabindex', '0');
             icon.setAttribute('aria-label', tile.name);
 
-            const saved = this.icons[tile.id];
-            const x = saved ? saved.x : 20 + ((col % maxCols) * GRID_SIZE);
-            const y = saved ? saved.y : 20 + (Math.floor(col / maxCols) * GRID_SIZE);
-            icon.style.left = x + 'px';
-            icon.style.top = y + 'px';
+            let f = this.icons[tile.id];
+            if (f && f.fx === undefined && f.x !== undefined) {
+                // Legacy absolute-px entry from before the proportional
+                // layout — convert once against the current surface
+                f = { fx: clamp01(f.x / b.w), fy: clamp01(f.y / b.h) };
+            }
+            if (!f || f.fx === undefined) {
+                const x = 20 + ((col % maxCols) * GRID_SIZE);
+                const y = 20 + (Math.floor(col / maxCols) * GRID_SIZE);
+                f = { fx: clamp01(x / b.w), fy: clamp01(y / b.h) };
+            }
+            this.icons[tile.id] = f;
+            icon.style.left = Math.round(f.fx * b.w) + 'px';
+            icon.style.top = Math.round(f.fy * b.h) + 'px';
 
             icon.innerHTML = `
                 <div class="desktop-icon-image">${getIcon(tile.icon)}</div>
@@ -90,9 +131,10 @@ class IhimDesktop extends HTMLElement {
             icon.addEventListener('dragstart', (e) => e.preventDefault(), { signal });
 
             this.appendChild(icon);
-            if (!saved) this.icons[tile.id] = { x, y };
             col++;
         }
+
+        window.addEventListener('resize', () => this._applyPositions(), { signal });
 
         requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
         this._saveLayout();
@@ -131,7 +173,13 @@ class IhimDesktop extends HTMLElement {
         icon.releasePointerCapture(e.pointerId);
         if (this.isDragging && this.pendingIcon) {
             icon.classList.remove('dragging');
-            this.icons[id] = { x: parseInt(icon.style.left), y: parseInt(icon.style.top) };
+            const b = this._bounds();
+            const fx = clamp01((parseInt(icon.style.left) || 0) / b.w);
+            const fy = clamp01((parseInt(icon.style.top) || 0) / b.h);
+            this.icons[id] = { fx, fy };
+            // Snap back onto the surface if the drop overshot an edge
+            icon.style.left = Math.round(fx * b.w) + 'px';
+            icon.style.top = Math.round(fy * b.h) + 'px';
             this._saveLayout();
         } else if (this.pendingIcon) {
             this.runTile(id);
@@ -140,7 +188,14 @@ class IhimDesktop extends HTMLElement {
         this.pendingIcon = null;
     }
 
-    _saveLayout() { persist(this.STORAGE_KEY, JSON.stringify(this.icons)); }
+    _saveLayout() {
+        // Persist only live tiles — the store had accumulated years of keys
+        // for deleted tiles (vault, google_calendar, …) in stale px form
+        const live = {};
+        for (const t of TILES) if (this.icons[t.id]) live[t.id] = this.icons[t.id];
+        this.icons = live;
+        persist(this.STORAGE_KEY, JSON.stringify(live));
+    }
 
     _restoreLayout() {
         try {

@@ -137,7 +137,12 @@ body {
     min-height: 100vh;
     padding-bottom: 44px;
     position: relative;
-    overflow-x: hidden;
+    /* Desktop surface, not a document: the page
+       NEVER scrolls. Every interactive layer (desktop grid, windows, bars,
+       stopwatches) is position: fixed; anything in normal flow that would
+       exceed the viewport gets clipped, never a scrollbar. Scrolling lives
+       INSIDE windows (stt history, recorder lists, etc.) only. */
+    overflow: hidden;
 
     /* ARC REACTOR RADIATING ENERGY BACKGROUND */
     background:
@@ -245,6 +250,13 @@ body::after {
 /* Content starts below the shell strip instead of under it */
 [data-shell] .container {
     padding-top: calc(var(--space-6) + 36px);
+}
+
+/* The desktop surface too — a top-flush icon (fy = 0) must sit below the
+   strip, not under it (the strip is z-index 200 and a drag region, so an
+   icon beneath it would be unreachable) */
+[data-shell] .desktop-grid {
+    top: 36px;
 }
 
 [data-shell] .stopwatch-container {
@@ -418,20 +430,10 @@ header .subtitle {
 /* ============================================ */
 /* MAIN CONTENT AREA - ACTIONS GRID            */
 /* ============================================ */
-main {
-    position: relative;
-    min-height: 400px;
-    /* Break out of container to be full width */
-    width: 100vw;
-    margin-left: calc(50% - 50vw);
-    margin-right: calc(50% - 50vw);
-}
-
-#actions-grid {
-    position: relative;
-    width: 100%;
-    min-height: 400px;
-}
+/* The desktop surface's geometry is .desktop-grid (fixed, full viewport) —
+   an old #actions-grid id override used to pin it to a 400px in-flow block
+   under the header, which was the page's scrollbar source (removed
+   2026-07-18, the-page-never-scrolls ruling). */
 
 .category {
     margin-bottom: var(--space-8);
@@ -1374,6 +1376,9 @@ main {
 
     /* Transparent - gradient is on body now */
     background: transparent;
+    /* The surface itself never eats clicks — only its icons do
+       (.desktop-icon restores pointer-events: auto) */
+    pointer-events: none;
 }
 
 .desktop-icon {
@@ -2191,7 +2196,7 @@ ihim-health[open].minimized, ihim-todo[open].minimized { display: none; }
 /* Tab system component — transparent wrapper, invisible to layout + AT */
 ihim-tabs { display: contents; }
 
-/* Desktop grid — the element is the grid (#actions-grid geometry applies) */
+/* Desktop grid — the element is the grid (.desktop-grid fixed geometry applies) */
 ihim-desktop { display: block; }
 
 /* Stopwatch — dock layout comes from .stopwatch-container; each timer is a block card */

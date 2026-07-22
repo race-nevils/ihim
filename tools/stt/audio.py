@@ -209,21 +209,53 @@ class MicCapture:
         self._inflight: Optional[InflightWriter] = None
 
     def start(self) -> None:
-        """Begin mic capture (+ the on-disk inflight WAL)."""
-        from api.recorder.capture import DualStreamCapture
+        """Begin mic capture (+ the on-disk inflight WAL).
+
+        A failure on the first attempt — device resolution ("Error querying
+        device -1") or stream open — gets one retry after a PortAudio
+        refresh: the usual cause is a device snapshot frozen before Windows'
+        audio endpoints were ready (boot race / post-sleep restart before
+        the wireless dongle re-enumerated, 2026-07-22). Retrying at press
+        time is the only timing-proof heal.
+        """
+        from api.recorder.capture import refresh_portaudio
 
         with self._lock:
             if self._capture is not None:
                 logger.warning("MicCapture.start() called while already recording")
                 return
-            self._capture = DualStreamCapture(
-                mic_device_index=self._mic_device_index,
-                sys_device_index=None,  # mic-only
-            )
-            self._capture.start()
+            try:
+                self._capture = self._open_capture()
+            except Exception as e:
+                logger.warning(
+                    "Mic capture failed (%s) — refreshing PortAudio device "
+                    "snapshot and retrying", e,
+                )
+                refresh_portaudio()
+                self._capture = self._open_capture()
             self._inflight = InflightWriter(self.snapshot)
             self._inflight.start()
-            logger.info("Mic capture started")
+            logger.info("Mic capture started (%s)", self._capture.mic_device_name)
+
+    def _open_capture(self):
+        """Construct + start a capture and confirm the mic stream is live.
+
+        Raises on device-resolution failure or a dead mic stream; the
+        failed capture's threads are signalled to stop before raising.
+        """
+        from api.recorder.capture import DualStreamCapture
+
+        capture = DualStreamCapture(
+            mic_device_index=self._mic_device_index,
+            sys_device_index=None,  # mic-only
+        )
+        capture.start()
+        if not capture.wait_mic_ready(timeout=1.5):
+            capture.stop_mic_and_drain(timeout=0.1)
+            raise RuntimeError(
+                "; ".join(capture.errors) or "mic stream failed to start (timeout)"
+            )
+        return capture
 
     def snapshot(self) -> tuple[list, int]:
         """Live (blocks so far, native sample rate). Safe during capture."""

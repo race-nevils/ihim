@@ -47,6 +47,23 @@ def _get_pyaudio():
 
 
 
+def refresh_portaudio() -> None:
+    """Re-initialize PortAudio so its device snapshot matches Windows now.
+
+    The snapshot is frozen at Pa_Initialize for the life of the process: a
+    server that started before the audio endpoints were ready (boot race
+    after a Windows-update reboot, post-sleep self-restart before a wireless
+    headset dongle re-enumerates) sees a device list Windows no longer has —
+    default input resolves to -1 and every capture fails until restart
+    (2026-07-22). Closes any open PortAudio streams, so call it only from a
+    failure path where capture is already broken.
+    """
+    sd = _get_sounddevice()
+    logger.warning("Refreshing PortAudio device snapshot")
+    sd._terminate()
+    sd._initialize()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # DEVICE DISCOVERY
 # ═══════════════════════════════════════════════════════════════════════
@@ -237,6 +254,7 @@ class DualStreamCapture:
     ):
         self._stop_event = threading.Event()
         self._mic_drained = threading.Event()
+        self._mic_ready = threading.Event()
         self._mic_buffers: list = []
         self._sys_buffers: list = []
         self._mic_thread: Optional[threading.Thread] = None
@@ -295,6 +313,7 @@ class DualStreamCapture:
         """Start capturing both streams."""
         self._stop_event.clear()
         self._mic_drained.clear()
+        self._mic_ready.clear()
         self._mic_buffers.clear()
         self._sys_buffers.clear()
         self._mic_error = None
@@ -339,6 +358,17 @@ class DualStreamCapture:
         """
         self._stop_event.set()
         return self._mic_drained.wait(timeout)
+
+    def wait_mic_ready(self, timeout: float = 1.5) -> bool:
+        """True once the mic stream is live and reading; False on open
+        failure or timeout.
+
+        A stale device index can resolve fine but fail at stream open —
+        without this check the capture looks live while recording dead air.
+        """
+        if not self._mic_ready.wait(timeout):
+            return False
+        return self._mic_error is None
 
     def mic_blocks(self) -> list:
         """Snapshot of mic blocks captured so far (safe during capture)."""
@@ -423,6 +453,7 @@ class DualStreamCapture:
                 blocksize=block_size,
             )
             stream.start()
+            self._mic_ready.set()
             try:
                 while not self._stop_event.is_set():
                     data, overflowed = stream.read(block_size)
@@ -448,6 +479,7 @@ class DualStreamCapture:
         except Exception as e:
             self._mic_error = str(e)
             logger.error("mic capture error: %s", e)
+            self._mic_ready.set()
             self._mic_drained.set()
 
     def _capture_system(self) -> None:

@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     "stop_key": "Key.ctrl_r",
     "model": "large-v3-turbo",
     "idle_timeout_s": 600,
+    "mute_on_dictate": True,
     "injection": {
         "method": "auto",
     },

@@ -25,7 +25,7 @@ from typing import Callable, Optional
 from tools.stt.audio import (
     RECOVERED_DIR, MicCapture, sweep_inflight, write_wav,
 )
-from tools.stt.config import load_config
+from tools.stt.config import load_config, save_config
 from tools.stt.hotkey import DEFAULT_HOTKEY, HotkeyListener
 
 logger = logging.getLogger(__name__)
@@ -174,6 +174,7 @@ class STTEngine:
         self._idle_timer: Optional[threading.Timer] = None
         self._streamer = None
         self._warming_up = False
+        self._muted_by_us = False  # only ever unmute audio WE muted
         _sweep_inflight_walls()
 
     def set_state_callback(self, cb: Callable[[str], None]) -> None:
@@ -242,6 +243,37 @@ class STTEngine:
     @property
     def last_result(self) -> Optional[dict]:
         return self._last_result
+
+    @property
+    def mute_on_dictate(self) -> bool:
+        return self._cfg.get("mute_on_dictate", True)
+
+    def set_mute_on_dictate(self, enabled: bool) -> None:
+        """Enable/disable the dictation mute. Persists, applies mid-dictation.
+
+        Toggling while recording takes effect immediately — off during a
+        call unmutes the colleague right away; back on re-mutes the music.
+        """
+        self._cfg["mute_on_dictate"] = enabled
+        save_config(self._cfg)
+        listener = self._listener
+        live = listener is not None and (listener.is_recording or listener.is_locked)
+        self._apply_dictation_mute(enabled and live)
+
+    def _apply_dictation_mute(self, mute: bool) -> None:
+        """Mute for a dictation (if enabled) / undo only a mute we applied.
+
+        The _muted_by_us guard means unmute paths (release, error, toggle-off)
+        never touch a mute the operator set himself outside the dictation flow.
+        """
+        if mute:
+            if not self.mute_on_dictate:
+                return
+            self._muted_by_us = True
+            self._mute_audio(True)
+        elif self._muted_by_us:
+            self._muted_by_us = False
+            self._mute_audio(False)
 
     def _mute_audio(self, mute: bool) -> None:
         """Mute/unmute system audio — own thread to avoid blocking the hotkey listener."""
@@ -443,7 +475,7 @@ class STTEngine:
                 self._idle_timer = None
 
             self._set_status("recording")
-            self._mute_audio(True)
+            self._apply_dictation_mute(True)
             self._mic.start()
 
             # Start the chunked streaming transcriber
@@ -458,7 +490,7 @@ class STTEngine:
 
         except Exception as e:
             logger.error("Failed to start mic capture: %s", e)
-            self._mute_audio(False)
+            self._apply_dictation_mute(False)
             self._set_status("warm")
             return False
 
@@ -485,7 +517,7 @@ class STTEngine:
 
     def _on_record_stop(self) -> None:
         """Called by hotkey listener on release. Runs pipeline in background thread."""
-        self._mute_audio(False)  # unmute on same thread where mute worked
+        self._apply_dictation_mute(False)  # unmute on same thread where mute worked
         if not self._mic.is_recording:
             return
         threading.Thread(

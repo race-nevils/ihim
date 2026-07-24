@@ -11,10 +11,17 @@ import './ihim-tabs.js';
 class IhimSTT extends IhimPanel {
     _statusSource = null;
     _lastDictationId = null;
+    _muteOnDictate = true;
 
     connectedCallback() {
         this.innerHTML = `
-            <span class="stt-status-badge" id="stt-status-badge" data-titlebar-slot aria-live="polite" role="status">IDLE</span>
+            <span class="stt-titlebar-group" data-titlebar-slot>
+                <span class="stt-status-badge" id="stt-status-badge" aria-live="polite" role="status">IDLE</span>
+                <button type="button" class="stt-mute-toggle" id="stt-mute-toggle" aria-pressed="true"
+                    title="Mute system audio while dictating" aria-label="Mute system audio while dictating">
+                    <i data-lucide="volume-x" style="width:14px;height:14px;"></i>
+                </button>
+            </span>
 
             <ihim-tabs>
             <!-- Tabs -->
@@ -121,10 +128,50 @@ class IhimSTT extends IhimPanel {
                 break;
         }
 
+        // Server is authoritative for the mute toggle (any client may flip it)
+        if (typeof data.mute_on_dictate === 'boolean') {
+            this._renderMuteToggle(data.mute_on_dictate);
+        }
+
         // Auto-refresh history when a new dictation arrives
         if (data.last_result_id && data.last_result_id !== this._lastDictationId) {
             this._lastDictationId = data.last_result_id;
             this._loadHistory();
+        }
+    }
+
+    // =====================
+    // Dictation mute toggle
+    // =====================
+
+    _renderMuteToggle(enabled) {
+        this._muteOnDictate = enabled;
+        const btn = this.querySelector('#stt-mute-toggle');
+        if (!btn) return;
+        const label = enabled
+            ? 'Dictation mute on — system audio silenced while dictating'
+            : 'Dictation mute off — system audio stays audible while dictating';
+        btn.setAttribute('aria-pressed', String(enabled));
+        btn.classList.toggle('off', !enabled);
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+        btn.innerHTML = `<i data-lucide="${enabled ? 'volume-x' : 'volume-2'}" style="width:14px;height:14px;"></i>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    async _toggleMute() {
+        const next = !this._muteOnDictate;
+        this._renderMuteToggle(next);  // optimistic — revert on failure
+        try {
+            const res = await fetch(`${API}/api/stt/mute`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: next }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (e) {
+            this._renderMuteToggle(!next);
+            this._showError(`Failed to toggle dictation mute: ${e.message}`);
         }
     }
 
@@ -363,6 +410,9 @@ class IhimSTT extends IhimPanel {
 
         // Event delegation for all clicks within the panel
         this.addEventListener('click', (e) => {
+            // Titlebar mute toggle
+            if (e.target.closest('#stt-mute-toggle')) { this._toggleMute(); return; }
+
             // History actions
             const copyBtn = e.target.closest('.stt-copy-btn');
             if (copyBtn) { this._copyDictation(copyBtn.dataset.id); return; }

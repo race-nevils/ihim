@@ -200,3 +200,56 @@ class TestSingleFlightModelLoad:
         assert len(errors) == 1
         assert len(results) == 1
         assert results[0] is not None
+
+
+class TestDictationMuteToggle:
+    """mute_on_dictate: config-gated mute, live toggle, unmute guard."""
+
+    @pytest.fixture
+    def mute_engine(self, engine, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            engine, "_mute_audio", lambda mute: calls.append(mute)
+        )
+        monkeypatch.setattr("tools.stt.engine.save_config", lambda cfg: None)
+        return engine, calls
+
+    def test_enabled_by_default_mutes_on_apply(self, mute_engine):
+        engine, calls = mute_engine
+        engine._apply_dictation_mute(True)
+        assert calls == [True]
+        engine._apply_dictation_mute(False)
+        assert calls == [True, False]
+
+    def test_disabled_skips_mute(self, mute_engine):
+        engine, calls = mute_engine
+        engine._cfg["mute_on_dictate"] = False
+        engine._apply_dictation_mute(True)
+        engine._apply_dictation_mute(False)
+        assert calls == []
+
+    def test_never_unmutes_what_it_did_not_mute(self, mute_engine):
+        engine, calls = mute_engine
+        engine._apply_dictation_mute(False)
+        assert calls == []
+
+    def test_toggle_off_mid_recording_unmutes_immediately(self, mute_engine):
+        engine, calls = mute_engine
+        engine._listener = FakeListener(recording=True)
+        engine._apply_dictation_mute(True)
+        engine.set_mute_on_dictate(False)
+        assert calls == [True, False]
+        assert engine._cfg["mute_on_dictate"] is False
+
+    def test_toggle_on_mid_recording_mutes_immediately(self, mute_engine):
+        engine, calls = mute_engine
+        engine._cfg["mute_on_dictate"] = False
+        engine._listener = FakeListener(locked=True)
+        engine.set_mute_on_dictate(True)
+        assert calls == [True]
+
+    def test_toggle_while_idle_does_not_touch_audio(self, mute_engine):
+        engine, calls = mute_engine
+        engine.set_mute_on_dictate(False)
+        engine.set_mute_on_dictate(True)
+        assert calls == []

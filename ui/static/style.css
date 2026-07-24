@@ -2742,6 +2742,36 @@ button:focus-visible {
     color-scheme: dark;
 }
 
+.stt-titlebar-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Dictation mute toggle — lit speaker-off = music silenced while dictating,
+   dimmed speaker = audio stays audible (call workflow) */
+.stt-mute-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: rgba(243, 139, 168, 0.2);
+    color: #f38ba8;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.stt-mute-toggle.off {
+    background: transparent;
+    color: #6c7086;
+}
+.stt-mute-toggle:hover {
+    background: rgba(243, 139, 168, 0.35);
+    color: #f38ba8;
+}
+
 .stt-status-badge {
     font-size: 10px;
     font-weight: 700;

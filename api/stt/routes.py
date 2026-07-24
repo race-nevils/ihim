@@ -15,7 +15,7 @@ from api.errors import problem
 
 from api.stt.models import (
     DictationRecord, HistoryResponse, StatsResponse,
-    StatusResponse, CorrectionRequest,
+    StatusResponse, CorrectionRequest, MuteUpdateRequest,
     SuccessResponse, VocabResponse, VocabUpdateRequest,
 )
 
@@ -46,6 +46,7 @@ def _build_status_payload(status: str) -> str:
         "active": engine._listener is not None and engine._listener.is_running,
         "model_loaded": bool(_model_cache),
         "last_result_id": last_id,
+        "mute_on_dictate": engine.mute_on_dictate,
     })
 
 
@@ -223,6 +224,27 @@ async def stt_stop(request: Request):
         return problem(503, f"Failed to stop STT: {e}", instance=request.url.path)
 
 
+@router.put("/mute", response_model=SuccessResponse)
+async def stt_mute(body: MuteUpdateRequest, request: Request):
+    """Enable/disable muting system audio while dictating.
+
+    Applies immediately, even mid-dictation (call vs music workflow),
+    and persists to config. Broadcast keeps every open client in sync.
+    """
+    try:
+        from tools.stt.engine import get_engine
+        engine = get_engine()
+        engine.set_mute_on_dictate(body.enabled)
+        _broadcast_status(engine.status)
+        return SuccessResponse(
+            success=True,
+            message=f"Dictation mute {'enabled' if body.enabled else 'disabled'}",
+        )
+    except Exception as e:
+        logger.error("Failed to set dictation mute: %s", e)
+        return problem(503, f"Failed to set dictation mute: {e}", instance=request.url.path)
+
+
 @router.get("/status/stream")
 async def stt_status_stream():
     """SSE stream — pushes status changes instantly.
@@ -284,6 +306,7 @@ async def stt_status():
         status=engine.status,
         model_loaded=bool(_model_cache),
         last_result_id=last_id,
+        mute_on_dictate=engine.mute_on_dictate,
     )
 
 

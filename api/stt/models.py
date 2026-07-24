@@ -43,6 +43,7 @@ class StatusResponse(BaseModel):
     status: str = Field("idle", description="Engine status: idle | listening | recording | processing")
     model_loaded: bool = Field(False, description="Whether the Whisper model is cached")
     last_result_id: Optional[str] = Field(None, description="ID of the most recent dictation result")
+    mute_on_dictate: bool = Field(True, description="Whether system audio is muted while dictating")
 
 
 # ── Requests ──────────────────────────────────────────────────────────
@@ -58,6 +59,10 @@ class SuccessResponse(BaseModel):
 
 class VocabResponse(BaseModel):
     terms: list[str] = Field(default_factory=list, description="Vocabulary terms for Whisper priming")
+
+
+class MuteUpdateRequest(BaseModel):
+    enabled: bool = Field(..., description="Mute system audio while dictating")
 
 
 class VocabUpdateRequest(BaseModel):

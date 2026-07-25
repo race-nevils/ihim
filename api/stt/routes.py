@@ -245,6 +245,29 @@ async def stt_mute(body: MuteUpdateRequest, request: Request):
         return problem(503, f"Failed to set dictation mute: {e}", instance=request.url.path)
 
 
+@router.post("/unload", response_model=SuccessResponse)
+async def stt_unload(request: Request):
+    """Unload the transcription model on demand to free VRAM.
+
+    Weights-only unload (same as the idle path) — next dictation reloads
+    transparently. Refused with 409 while a dictation is live.
+    """
+    try:
+        from tools.stt.engine import get_engine
+        engine = get_engine()
+        loop = asyncio.get_event_loop()
+        ok = await loop.run_in_executor(None, engine.unload_model_now)
+        if not ok:
+            return problem(
+                409, "Dictation in progress — model is busy",
+                instance=request.url.path,
+            )
+        return SuccessResponse(success=True, message="Transcription model unloaded — VRAM freed")
+    except Exception as e:
+        logger.error("Failed to unload transcription model: %s", e)
+        return problem(503, f"Failed to unload model: {e}", instance=request.url.path)
+
+
 @router.get("/status/stream")
 async def stt_status_stream():
     """SSE stream — pushes status changes instantly.

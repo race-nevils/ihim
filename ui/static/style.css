@@ -2772,6 +2772,31 @@ button:focus-visible {
     color: #f38ba8;
 }
 
+/* Model unload — lit chip = weights resident in VRAM, click to release;
+   dimmed = nothing loaded, button inert */
+.stt-unload-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: rgba(203, 166, 247, 0.2);
+    color: #cba6f7;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.stt-unload-btn.off {
+    background: transparent;
+    color: #6c7086;
+    cursor: default;
+}
+.stt-unload-btn:hover:not(:disabled) {
+    background: rgba(203, 166, 247, 0.35);
+    color: #cba6f7;
+}
+
 .stt-status-badge {
     font-size: 10px;
     font-weight: 700;

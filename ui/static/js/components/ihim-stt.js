@@ -12,6 +12,7 @@ class IhimSTT extends IhimPanel {
     _statusSource = null;
     _lastDictationId = null;
     _muteOnDictate = true;
+    _modelLoaded = false;
 
     connectedCallback() {
         this.innerHTML = `
@@ -20,6 +21,10 @@ class IhimSTT extends IhimPanel {
                 <button type="button" class="stt-mute-toggle" id="stt-mute-toggle" aria-pressed="true"
                     title="Mute system audio while dictating" aria-label="Mute system audio while dictating">
                     <i data-lucide="volume-x" style="width:14px;height:14px;"></i>
+                </button>
+                <button type="button" class="stt-unload-btn off" id="stt-unload-btn"
+                    title="Transcription model not loaded" aria-label="Transcription model not loaded" disabled>
+                    <i data-lucide="memory-stick" style="width:14px;height:14px;"></i>
                 </button>
             </span>
 
@@ -133,6 +138,10 @@ class IhimSTT extends IhimPanel {
             this._renderMuteToggle(data.mute_on_dictate);
         }
 
+        if (typeof data.model_loaded === 'boolean') {
+            this._renderUnloadBtn(data.model_loaded);
+        }
+
         // Auto-refresh history when a new dictation arrives
         if (data.last_result_id && data.last_result_id !== this._lastDictationId) {
             this._lastDictationId = data.last_result_id;
@@ -172,6 +181,37 @@ class IhimSTT extends IhimPanel {
         } catch (e) {
             this._renderMuteToggle(!next);
             this._showError(`Failed to toggle dictation mute: ${e.message}`);
+        }
+    }
+
+    // =====================
+    // Model unload button
+    // =====================
+
+    _renderUnloadBtn(loaded) {
+        this._modelLoaded = loaded;
+        const btn = this.querySelector('#stt-unload-btn');
+        if (!btn) return;
+        const label = loaded
+            ? 'Unload transcription model — free VRAM'
+            : 'Transcription model not loaded';
+        btn.disabled = !loaded;
+        btn.classList.toggle('off', !loaded);
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+    }
+
+    async _unloadModel() {
+        if (!this._modelLoaded) return;
+        try {
+            const res = await fetch(`${API}/api/stt/unload`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${res.status}`);
+            }
+            // Status stream pushes cold + model_loaded=false; nothing to do here
+        } catch (e) {
+            this._showError(`Failed to unload model: ${e.message}`);
         }
     }
 
@@ -412,6 +452,7 @@ class IhimSTT extends IhimPanel {
         this.addEventListener('click', (e) => {
             // Titlebar mute toggle
             if (e.target.closest('#stt-mute-toggle')) { this._toggleMute(); return; }
+            if (e.target.closest('#stt-unload-btn')) { this._unloadModel(); return; }
 
             // History actions
             const copyBtn = e.target.closest('.stt-copy-btn');

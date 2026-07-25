@@ -361,6 +361,24 @@ class STTEngine:
         self._recycle_listener()
         self._set_status("cold")
 
+    def unload_model_now(self) -> bool:
+        """On-demand VRAM release (titlebar button).
+
+        Refuses while a dictation is live or the model is mid-load —
+        unloading under an active pipeline would stall the transcription
+        on a reload. Same weights-only unload as the idle path: objects
+        stay cached, the next press reloads transparently.
+        """
+        if self.status in ("recording", "locked", "processing", "loading"):
+            return False
+        if self._idle_timer is not None:
+            self._idle_timer.cancel()
+            self._idle_timer = None
+        from api.recorder.transcribe import unload_all_models
+        unload_all_models()
+        self._set_status("cold")
+        return True
+
     def _on_idle_timeout(self) -> None:
         """Unload the Whisper model to free VRAM after inactivity."""
         logger.info("Idle timeout reached — unloading Whisper model to free VRAM")

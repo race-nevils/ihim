@@ -202,6 +202,44 @@ class TestSingleFlightModelLoad:
         assert results[0] is not None
 
 
+class TestUnloadModelNow:
+    """unload_model_now: on-demand VRAM release, refused while busy."""
+
+    def test_idle_unloads_and_goes_cold(self, engine, monkeypatch):
+        calls = []
+        monkeypatch.setattr(transcribe, "unload_all_models", lambda: calls.append(True) or ["m"])
+        engine._status = "warm"
+        engine._reset_idle_timer()
+
+        assert engine.unload_model_now() is True
+        assert calls == [True]
+        assert engine.status == "cold"
+        assert engine._idle_timer is None
+
+    @pytest.mark.parametrize("state", ["recording", "locked"])
+    def test_refused_while_dictating(self, engine, monkeypatch, state):
+        calls = []
+        monkeypatch.setattr(transcribe, "unload_all_models", lambda: calls.append(True))
+        engine._listener = FakeListener(
+            recording=(state == "recording"), locked=(state == "locked")
+        )
+
+        assert engine.unload_model_now() is False
+        assert calls == []
+
+    def test_refused_while_processing_or_loading(self, engine, monkeypatch):
+        calls = []
+        monkeypatch.setattr(transcribe, "unload_all_models", lambda: calls.append(True))
+
+        engine._status = "processing"
+        assert engine.unload_model_now() is False
+
+        engine._status = "warm"
+        engine._warming_up = True
+        assert engine.unload_model_now() is False
+        assert calls == []
+
+
 class TestDictationMuteToggle:
     """mute_on_dictate: config-gated mute, live toggle, unmute guard."""
 

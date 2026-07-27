@@ -1620,9 +1620,13 @@ ihim-options {
 
 .yt-ts { color: var(--text-tertiary); }
 
+/* Own scroll region, capped at exactly 5 rows — the transcript pane (.yt-log) scrolls independently above.
+   Fixed row height makes the 5-row cap exact. */
 .yt-history {
-    max-height: 30%;
+    --yt-row-h: 26px;
+    max-height: calc(5 * var(--yt-row-h) + 4 * 2px);
     overflow-y: auto;
+    flex: none;
     margin-top: var(--space-2);
     display: flex;
     flex-direction: column;
@@ -1635,6 +1639,8 @@ ihim-options {
     gap: var(--space-2);
     font-size: 0.78rem;
     padding: 2px var(--space-1);
+    height: var(--yt-row-h);
+    flex: none;
     border-radius: var(--radius-sm);
 }
 

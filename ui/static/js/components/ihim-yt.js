@@ -193,10 +193,13 @@ class IhimYt extends IhimPanel {
             const dur = j.duration_seconds ? fmtTs(j.duration_seconds) : '';
             const noSpeech = j.status === 'complete' && j.segments_count === 0
                 ? 'no speech' : '';
+            // Completed rows carry no status dot —
+            // done is the normal state; dots mark everything else.
             return `
             <div class="yt-history-row" data-job-id="${escapeHtml(j.job_id)}">
-                <span class="yt-status-chip ${escapeHtml(j.status)}"
-                      title="${escapeHtml(j.status === 'failed' ? (j.error || 'failed') : j.status)}"></span>
+                ${j.status !== 'complete' ? `
+                    <span class="yt-status-chip ${escapeHtml(j.status)}"
+                          title="${escapeHtml(j.status === 'failed' ? (j.error || 'failed') : j.status)}"></span>` : ''}
                 <span class="yt-history-title" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
                 <span class="yt-history-meta">${escapeHtml([date, dur, noSpeech].filter(Boolean).join(' · '))}</span>
                 ${j.status === 'queued' ? `
@@ -206,9 +209,9 @@ class IhimYt extends IhimPanel {
                     <button type="button" class="yt-row-btn" data-act="view"
                             aria-label="View transcript of ${escapeHtml(name)}">View</button>
                     <button type="button" class="yt-row-btn" data-act="copy"
-                            aria-label="Copy transcript of ${escapeHtml(name)}">Copy</button>` : ''}
+                            aria-label="Copy file path of ${escapeHtml(name)}">Copy</button>` : ''}
                 <button type="button" class="yt-row-btn yt-row-delete" data-act="delete"
-                        aria-label="Delete job ${escapeHtml(name)}">&times;</button>
+                        aria-label="Delete ${escapeHtml(name)} and its transcript file">&times;</button>
             </div>`;
         }).join('');
     }
@@ -252,9 +255,11 @@ class IhimYt extends IhimPanel {
     }
 
     async _copyJob(jobId, btn) {
+        // Copies the transcript's absolute file path — pasteable straight
+        // into an agent harness session.
         try {
             const data = await this._fetchText(jobId);
-            await navigator.clipboard.writeText(data.text);
+            await navigator.clipboard.writeText(data.txt_path);
             const old = btn.textContent;
             btn.textContent = '✓';
             setTimeout(() => { btn.textContent = old; }, 1200);
@@ -295,6 +300,14 @@ class IhimYt extends IhimPanel {
                         { method: 'POST' }).catch(() => {});
                     this._load();
                 } else if (act === 'delete') {
+                    // Real delete-off-disk (record + transcript .txt), so it
+                    // confirms first.
+                    const job = this._jobs.find(j => j.job_id === jobId);
+                    const name = job?.title || job?.url || jobId;
+                    const what = job?.txt_file
+                        ? 'and its transcript file will be deleted from disk'
+                        : 'will be removed';
+                    if (!confirm(`"${name}" ${what}. Continue?`)) return;
                     await fetch(`${API}/api/yt/jobs/${jobId}`,
                         { method: 'DELETE' }).catch(() => {});
                     if (this._logJobId === jobId) this._clearLog();

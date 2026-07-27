@@ -118,7 +118,42 @@ def test_text_serves_only_output_dir_basenames(client, yt_dirs):
     yt_routes._write_sidecar("20260101-000000", sidecar)
     resp = client.get("/api/yt/jobs/20260101-000000/text")
     assert resp.status_code == 200
-    assert resp.json()["text"] == "hello transcript"
+    body = resp.json()
+    assert body["text"] == "hello transcript"
+    # The widget's Copy button hands txt_path to the clipboard — it must be
+    # the absolute on-disk location of the transcript.
+    import os
+    assert os.path.isabs(body["txt_path"])
+    assert body["txt_path"].endswith("Video-abc123.txt")
+
+
+def test_delete_removes_transcript_txt(client, yt_dirs):
+    """× is a real delete: the job's .txt leaves disk with the record."""
+    data_dir, out_dir = yt_dirs
+    txt = out_dir / "Video-del1.txt"
+    txt.write_text("bye", encoding="utf-8")
+    yt_routes._write_sidecar("20260103-000000", {
+        "job_id": "20260103-000000", "url": "https://youtu.be/del1",
+        "status": "complete", "txt_file": "Video-del1.txt",
+    })
+    resp = client.delete("/api/yt/jobs/20260103-000000")
+    assert resp.status_code == 200
+    assert "Video-del1.txt" in resp.json()["deleted"]
+    assert not txt.exists()
+
+
+def test_delete_txt_traversal_guard(client, yt_dirs, tmp_path):
+    """A hostile txt_file collapses to its basename — files outside
+    OUTPUT_DIR are never deleted."""
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep me", encoding="utf-8")
+    yt_routes._write_sidecar("20260104-000000", {
+        "job_id": "20260104-000000", "url": "https://youtu.be/x",
+        "status": "complete", "txt_file": "..\\..\\outside.txt",
+    })
+    resp = client.delete("/api/yt/jobs/20260104-000000")
+    assert resp.status_code == 200
+    assert outside.exists()
 
 
 def test_boot_sweep_fails_orphaned_active_jobs(yt_dirs):

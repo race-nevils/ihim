@@ -329,8 +329,10 @@ async def cancel_job(job_id: str, request: Request):
 
 @router.delete("/jobs/{job_id}", response_model=DeleteResponse)
 async def delete_job(job_id: str, request: Request):
-    """Remove a job's record + segment stream. The output .txt in
-    yt-transcriptions/ is the durable artifact and is left alone."""
+    """Remove a job's record, segment stream, AND its transcript .txt in
+    yt-transcriptions/. Note a `duplicate`
+    job shares its txt_file with the original job — deleting either record
+    removes the one shared file."""
     if not JOB_ID_RE.match(job_id):
         return problem(400, "Invalid job ID", instance=request.url.path)
     if job_id in _active_workers:
@@ -339,9 +341,19 @@ async def delete_job(job_id: str, request: Request):
     if _read_sidecar(job_id) is None:
         return problem(404, f"Job '{job_id}' not found", instance=request.url.path)
 
+    sidecar = _read_sidecar(job_id) or {}
+    targets = [_sidecar_path(job_id), _segments_path(job_id),
+               *DATA_DIR.glob(f"job-{job_id}.audio.*")]
+    txt_file = sidecar.get("txt_file")
+    if txt_file:
+        # Strictly by basename from the one output dir (traversal guard,
+        # same rule as job_text).
+        txt_path = OUTPUT_DIR / Path(txt_file).name
+        if txt_path.suffix == ".txt":
+            targets.append(txt_path)
+
     deleted = []
-    for p in (_sidecar_path(job_id), _segments_path(job_id),
-              *DATA_DIR.glob(f"job-{job_id}.audio.*")):
+    for p in targets:
         try:
             if p.exists():
                 p.unlink()
@@ -370,7 +382,8 @@ async def job_text(job_id: str, request: Request):
     loop = asyncio.get_event_loop()
     text = await loop.run_in_executor(
         None, lambda: path.read_text(encoding="utf-8"))
-    return TextResponse(job_id=job_id, txt_file=path.name, text=text)
+    return TextResponse(job_id=job_id, txt_file=path.name,
+                        txt_path=str(path.resolve()), text=text)
 
 
 @router.get("/jobs/{job_id}/stream")

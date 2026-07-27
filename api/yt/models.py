@@ -59,4 +59,7 @@ class DeleteResponse(BaseModel):
 class TextResponse(BaseModel):
     job_id: str
     txt_file: str
+    # Absolute path on this machine — the widget's Copy button hands it to
+    # the clipboard so it can be pasted straight into an agent harness session.
+    txt_path: str
     text: str

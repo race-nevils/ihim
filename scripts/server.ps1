@@ -150,6 +150,10 @@ function Invoke-Start {
         }
         Write-Log "Port $Port held but unhealthy -- stopping first."
         if (-not (Invoke-Stop)) { return $false }
+        # WASAPI settle: PortAudio init in a fresh boot can hit an access
+        # violation while the just-killed instance's audio teardown is still
+        # in flight (bug note 2026-07-27_portaudiowpatch-access-violation-on-boot).
+        Start-Sleep -Seconds 3
     }
     $py = Get-PythonExe
     $argList = @("`"$(Join-Path $IhimDir 'run.py')`"", '--port', $Port, '--log-level', 'error')
@@ -167,26 +171,49 @@ function Invoke-Start {
             if (Test-Path $base)  { Move-Item $base $prev1 -Force }
         } catch {}
     }
-    Write-Log "Starting: $py run.py --port $Port$(if ($Dev) { ' --dev' }) (console -> $consoleLog)"
-    $proc = Start-Process -FilePath $py -ArgumentList $argList -WorkingDirectory $IhimDir `
-        -WindowStyle Hidden -PassThru -RedirectStandardError $consoleLog `
-        -RedirectStandardOutput ($consoleLog -replace '\.log$', '.out.log')
-    # Health-check loop (up to ~60s -- a cold first boot imports faster-whisper etc.)
-    for ($i = 0; $i -lt 120; $i++) {
-        Start-Sleep -Milliseconds 500
-        if ($proc.HasExited) {
-            Write-Log "ERROR: server process exited code $($proc.ExitCode) during startup. Last stderr:"
-            Get-Content $consoleLog -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Log "  $_" }
-            return $false
+    # Two attempts: the native _portaudiowpatch 0xc0000005 boot crash lands
+    # ~1s AFTER the first healthy probe (3x on 2026-07-27, always right
+    # after a kill-then-start cycle; a second start has always survived).
+    # So: confirm health, wait out the crash window, re-confirm — and on a
+    # confirmed boot crash, retry once instead of reporting a false Healthy.
+    # Bug note: 2026-07-27_portaudiowpatch-access-violation-on-boot.
+    foreach ($attempt in 1, 2) {
+        Write-Log "Starting: $py run.py --port $Port$(if ($Dev) { ' --dev' }) (console -> $consoleLog)$(if ($attempt -gt 1) { " [attempt $attempt]" })"
+        $proc = Start-Process -FilePath $py -ArgumentList $argList -WorkingDirectory $IhimDir `
+            -WindowStyle Hidden -PassThru -RedirectStandardError $consoleLog `
+            -RedirectStandardOutput ($consoleLog -replace '\.log$', '.out.log')
+        # Health-check loop (up to ~60s -- a cold first boot imports faster-whisper etc.)
+        $healthy = $false
+        for ($i = 0; $i -lt 120; $i++) {
+            Start-Sleep -Milliseconds 500
+            if ($proc.HasExited) {
+                Write-Log "ERROR: server process exited code $($proc.ExitCode) during startup. Last stderr:"
+                Get-Content $consoleLog -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Log "  $_" }
+                break
+            }
+            $health = Get-HealthStatus
+            if ($health) { $healthy = $true; break }
         }
+        if (-not $healthy) {
+            if (-not $proc.HasExited) {
+                Write-Log 'ERROR: server did not become healthy within 60s. Last stderr:'
+                Get-Content $consoleLog -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Log "  $_" }
+                return $false
+            }
+            Start-Sleep -Seconds 3   # settle before the retry boots audio again
+            continue
+        }
+        # Crash-window re-check.
+        Start-Sleep -Seconds 3
         $health = Get-HealthStatus
         if ($health) {
-            Write-Log "Healthy. PID $($health.pid), uptime $($health.uptime_seconds)s."
+            Write-Log "Healthy. PID $($health.pid), uptime $($health.uptime_seconds)s (survived crash window)."
             return $true
         }
+        Write-Log "ERROR: server died within the post-healthy crash window (attempt $attempt) -- the PortAudio boot crash. Check Application event log Id 1000."
+        Start-Sleep -Seconds 3
     }
-    Write-Log 'ERROR: server did not become healthy within 60s. Last stderr:'
-    Get-Content $consoleLog -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Log "  $_" }
+    Write-Log 'ERROR: both start attempts died in the crash window. Giving up.'
     return $false
 }
 
@@ -216,6 +243,8 @@ switch ($Action) {
     'restart' {
         Wait-DictationIdle
         if (-not (Invoke-Stop)) { exit 1 }
+        # WASAPI settle -- see the comment in Invoke-Start.
+        Start-Sleep -Seconds 3
         if (-not (Invoke-Start)) { exit 1 }
     }
 }

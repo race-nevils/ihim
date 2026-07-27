@@ -25,6 +25,18 @@
 #    defenses dead for 11 days (bug note 2026-07-27_detached-process-
 #    restart-spawn-dead-on-arrival-sleep-defenses.md).
 #
+# SILENT VIA WSCRIPT WRAPPER (2026-07-27). Task Scheduler launching
+# powershell.exe (console subsystem) into the interactive session flashes a
+# conhost window before -WindowStyle Hidden can apply -- the recurring
+# terminal flash the operator ordered this same watchdog DELETED for on 2026-07-07
+# (bug note 2026-07-07_windowstyle-hidden-ignored-console-apps-stream-
+# redirection.md addendum, which also names the correct pattern). Both tasks
+# now run wscript.exe (GUI subsystem, no console ever) with a generated .vbs
+# that launches powershell at window style 0 and WAITS (Run arg True) so
+# IgnoreNew dedupe and the execution limits stay meaningful. Wrappers are
+# machine glue, generated into %USERPROFILE%\scripts\ beside
+# brain-sync-native.vbs; re-running the installer regenerates them.
+#
 # ASCII-only on purpose: PS 5.1 misparses UTF-8-no-BOM em-dashes.
 
 param(
@@ -37,11 +49,17 @@ param(
 $ErrorActionPreference = 'Stop'
 $TaskName = 'iHIM Resume Watchdog'
 $RestartTaskName = 'iHIM Restart'
+$WrapperDir = Join-Path $env:USERPROFILE 'scripts'
+$WatchdogVbs = Join-Path $WrapperDir 'ihim-resume-watchdog.vbs'
+$RestartVbs = Join-Path $WrapperDir 'ihim-restart.vbs'
 
 if ($Uninstall) {
     foreach ($t in @($TaskName, $RestartTaskName)) {
         Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
         Write-Host "Removed scheduled task '$t'."
+    }
+    foreach ($w in @($WatchdogVbs, $RestartVbs)) {
+        Remove-Item $w -Force -ErrorAction SilentlyContinue
     }
     return
 }
@@ -73,8 +91,21 @@ $heartbeatTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
     -RepetitionInterval (New-TimeSpan -Hours 1) `
     -RepetitionDuration (New-TimeSpan -Days 3650)
 
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ServerPs1`" start"
+# Silent launchers: window style 0, wait for exit. VBS escapes " by doubling.
+if (-not (Test-Path $WrapperDir)) {
+    New-Item -ItemType Directory -Path $WrapperDir -Force | Out-Null
+}
+foreach ($pair in @(
+    @{ Vbs = $WatchdogVbs; Verb = 'start' },
+    @{ Vbs = $RestartVbs;  Verb = 'restart' }
+)) {
+    $vbs = 'Set WshShell = CreateObject("WScript.Shell")' + "`r`n" +
+        'WshShell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""' +
+        $ServerPs1 + '"" ' + $pair.Verb + '", 0, True' + "`r`n"
+    Set-Content -Path $pair.Vbs -Value $vbs -Encoding ASCII
+}
+
+$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$WatchdogVbs`""
 
 $settings = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew `
@@ -95,8 +126,7 @@ Write-Host "  on resume-from-sleep (+20s) and hourly heartbeat"
 Write-Host "  -> server.ps1 start (idempotent) using $ServerPs1"
 
 # --- "iHIM Restart": demand-only, fired by the server via schtasks /run ---
-$restartAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ServerPs1`" restart"
+$restartAction = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$RestartVbs`""
 
 # 40-minute limit: restart defers behind a live dictation
 # (Wait-DictationIdle, max 30 min) before it may act.

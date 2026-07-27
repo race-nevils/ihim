@@ -80,45 +80,6 @@ def test_brain_entry_missing_is_problem_404(client):
     assert resp.headers["content-type"].startswith("application/problem+json")
 
 
-class TestWorkoutTraversalGuard:
-    """The old implementation allowed ../../ arbitrary file reads.
-
-    HTTP clients (httpx included) normalize `..` path segments away before
-    sending, so the raw-`..` case is unit-tested against the guard function
-    directly rather than over HTTP.
-    """
-
-    def test_guard_function_rejects_traversal(self):
-        from api.health.routes import _safe_workout_path
-        assert _safe_workout_path("..") is None
-        assert _safe_workout_path("../evil.md") is None or \
-            _safe_workout_path("../evil.md").name == "evil.md"
-        assert _safe_workout_path("..\\..\\secret.md") is None or \
-            _safe_workout_path("..\\..\\secret.md").name == "secret.md"
-        assert _safe_workout_path("C:\\Windows\\system.ini") is None
-        assert _safe_workout_path("") is None
-
-    def test_non_md_extension_rejected(self, client):
-        resp = client.get("/api/health/workouts/secrets.txt")
-        assert resp.status_code == 400
-
-    def test_traversal_shaped_md_rejected_or_missing(self, client):
-        # Path(...).name strips directories; '....md' style names must never
-        # escape the workouts dir. 404 (not found inside dir) is acceptable,
-        # 200 with file content from outside the dir is the failure mode.
-        resp = client.get("/api/health/workouts/....md")
-        assert resp.status_code in (400, 404)
-
-    def test_legit_workout_still_served(self, client):
-        listing = client.get("/api/health/workouts")
-        if listing.status_code != 200 or not listing.json().get("workouts"):
-            pytest.skip("no workout files present")
-        name = listing.json()["workouts"][0]
-        resp = client.get(f"/api/health/workouts/{name}")
-        assert resp.status_code == 200
-        assert resp.json()["filename"] == name
-
-
 def test_security_headers_present(client):
     resp = client.get("/api/health")
     assert resp.headers.get("X-Content-Type-Options") == "nosniff"

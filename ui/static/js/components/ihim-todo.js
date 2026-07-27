@@ -17,7 +17,7 @@ class IhimTodo extends IhimPanel {
     connectedCallback() {
         this.innerHTML = `
             <div class="todo-new-category-row">
-                <input type="text" id="todo-new-category" placeholder="New category (e.g. desktop app, Tomorrow)" maxlength="80" />
+                <input type="text" id="todo-new-category" placeholder="Add to to-do list..." maxlength="80" />
                 <button class="todo-add-btn" id="todo-add-category-btn" aria-label="Add category">+</button>
             </div>
             <div class="todo-body" id="todo-body">

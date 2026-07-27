@@ -29,7 +29,6 @@ const clamp01 = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 export const TILES = [
     { id: 'stt', name: 'STT', icon: 'mic', run: () => panel('stt-window')?.toggle() },
     { id: 'meeting_recorder', name: 'Meeting Recorder', icon: 'mic', run: () => panel('recorder-window')?.toggle() },
-    { id: 'health', name: 'Health', icon: 'heart-pulse', run: () => panel('health-window')?.open() },
     { id: 'todo', name: 'To-Do', icon: 'list-todo', run: () => panel('todo-window')?.toggle() },
     { id: 'yt_transcriber', name: 'YT Transcriber', icon: 'play', run: () => panel('yt-window')?.toggle() },
 ];

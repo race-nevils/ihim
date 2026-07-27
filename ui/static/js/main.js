@@ -22,7 +22,6 @@ await Promise.all([
     // Widget windows (IhimPanel subclasses)
     import('./components/ihim-stt.js'),
     import('./components/ihim-recorder.js'),
-    import('./components/ihim-health.js'),
     import('./components/ihim-todo.js'),
     import('./components/ihim-yt.js'),
 

@@ -50,7 +50,6 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
             const dy = Math.abs(e.clientY - startY);
             if ((dx > 5 || dy > 5 || Date.now() - mouseDownTime > 150) && !isDragging) {
                 isDragging = true;
-                el.style.opacity = '0.9';
                 document.body.style.userSelect = 'none';
             }
             if (isDragging) {
@@ -78,7 +77,6 @@ export function makeDraggable(windowId, handleSelector, storageKey) {
                 }));
             }
             isDragging = false;
-            el.style.opacity = '1';
             document.body.style.userSelect = '';
         };
 

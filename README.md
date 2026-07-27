@@ -1,6 +1,6 @@
 # iHIM — the operator's Command Center
 
-Local-first personal dashboard: Whisper dictation, meeting recorder, health program, and the JSON-LD second-brain data layer. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
+Local-first personal dashboard: STT dictation, meeting recorder, to-dos, YT transcription, and the JSON-LD second-brain data layer. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
 
 Rebuilt from scratch 2026-06-10 (design + audit: `design-notes/ihim/refactor-2026-06/`). Pre-refactor code archived at `archive/ihim-pre-refactor-20260609/`.
 
@@ -30,7 +30,7 @@ api/
   main.py                  app factory — explicit router registration
   runtime.py middleware.py errors.py responses.py site.py server.py
   stt/ recorder/         dictation + meeting recorder (shared whisper core)
-  health/ brain/ graph/ preferences.py todos.py
+  brain/ graph/ preferences.py todos.py
 tools/stt/               dictation engine (hotkey→capture→transcribe→inject)
                            data/ = dictation history + voice-training audio
 handlers/ adapters/ data/  brain ingestion pipeline + JSON-LD source of truth
@@ -42,7 +42,7 @@ tests/                     pytest
 
 ## Widgets
 
-STT (speech-to-text dictation — history/copy/correct/vocab, SSE status; engine subsystem stays `stt` in paths/APIs) · Meeting Recorder (taskbar chip shows a red outline while recording) · Health · To-Do (quick-capture list grouped by category — `data/local/todos.json`) · YT Transcriber · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, drag to reorder, state persists across reloads) · top-right ⋮ options menu (screen-level actions: Restart Server). *Stopwatch deleted 2026-07-27.*
+STT (speech-to-text dictation — history/copy/correct/vocab, SSE status; engine subsystem stays `stt` in paths/APIs) · Meeting Recorder (taskbar chip shows a red outline while recording) · To-Do (quick-capture list grouped by category — `data/local/todos.json`) · YT Transcriber · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, drag to reorder, state persists across reloads) · top-right ⋮ options menu (screen-level actions: Restart Server). *Stopwatch and Health both deleted 2026-07-27; Health took `api/health/` with it, orphaned markdown content remains at `data/health/`.*
 
 *Vault deleted 2026-07-17: widget, `api/vault/`, and the task_status query layer — replaced by the To-Do widget. Brain entries remain queryable via `api/brain/`.*
 

@@ -1287,305 +1287,6 @@ ihim-options {
 
 /* Widget resize is now handled via edge detection in JavaScript - no visible handles needed */
 
-/* ===================================================================
-   HEALTH DASHBOARD WINDOW (Draggable)
-   =================================================================== */
-
-.health-window {
-    position: fixed;
-    background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-3);
-    width: 700px;
-    display: flex;
-    flex-direction: column;
-    box-shadow: var(--shadow-lg), 0 2px 6px rgba(220, 38, 38, 0.15);
-    z-index: 100;
-    min-width: 400px;
-    min-height: 300px;
-    overflow: hidden;
-    resize: both;
-}
-
-.health-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: var(--space-3);
-    border-bottom: 1px solid var(--glass-border);
-    padding-bottom: 8px;
-}
-
-.health-tab-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    padding: 6px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 500;
-    transition: all 0.2s;
-}
-
-.health-tab-btn:hover {
-    background: rgba(220, 38, 38, 0.1);
-    color: #dc2626;
-}
-
-.health-tab-btn.active {
-    background: rgba(220, 38, 38, 0.15);
-    color: #dc2626;
-    font-weight: 600;
-}
-
-.health-tab-content {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 200px;
-}
-
-.health-body {
-    padding: var(--space-2) 0;
-}
-
-.health-loading,
-.health-error {
-    text-align: center;
-    padding: var(--space-4);
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-}
-
-.health-error {
-    color: #dc2626;
-}
-
-.health-section {
-    margin-bottom: var(--space-4);
-    padding: var(--space-3);
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: var(--radius-sm);
-    border-left: 3px solid #dc2626;
-}
-
-.health-section h3,
-.health-section h4 {
-    color: #dc2626;
-    margin-top: 0;
-    margin-bottom: var(--space-2);
-    font-size: 0.95rem;
-    font-weight: 600;
-}
-
-.health-rules-text {
-    color: var(--text-primary);
-    font-size: 0.8rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-}
-
-.health-day-card {
-    margin-bottom: var(--space-2);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-    background: rgba(0, 0, 0, 0.1);
-}
-
-.health-day-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    cursor: pointer;
-    background: rgba(220, 38, 38, 0.08);
-    transition: all 0.2s;
-}
-
-.health-day-header:hover {
-    background: rgba(220, 38, 38, 0.15);
-}
-
-.health-day-name {
-    font-weight: 700;
-    color: #dc2626;
-    font-size: 0.9rem;
-    min-width: 80px;
-}
-
-.health-day-title {
-    flex: 1;
-    color: var(--text-primary);
-    font-size: 0.85rem;
-    font-weight: 500;
-}
-
-.health-expand-icon {
-    color: var(--text-secondary);
-    font-size: 0.75rem;
-    transition: transform 0.2s;
-}
-
-.health-day-content {
-    padding: var(--space-3);
-    border-top: 1px solid var(--glass-border);
-}
-
-.health-subsection {
-    margin-bottom: var(--space-3);
-    padding: var(--space-2);
-    background: rgba(0, 0, 0, 0.15);
-    border-radius: 4px;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    color: var(--text-primary);
-}
-
-.health-subsection strong {
-    color: #fbbf24;
-    display: block;
-    margin-bottom: 6px;
-}
-
-.health-minimum {
-    border-left: 3px solid #10b981;
-}
-
-.health-extras {
-    margin-bottom: var(--space-2);
-    padding: var(--space-2);
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
-}
-
-.health-targets {
-    margin-bottom: var(--space-2);
-    padding: 8px 12px;
-    background: rgba(220, 38, 38, 0.1);
-    border-radius: 4px;
-    font-size: 0.8rem;
-    color: var(--text-primary);
-}
-
-.health-meals {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-}
-
-.health-meal {
-    padding: var(--space-2);
-    background: rgba(0, 0, 0, 0.15);
-    border-radius: 4px;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    color: var(--text-primary);
-}
-
-/* Glossary-specific styles */
-.health-category-card {
-    margin-bottom: var(--space-2);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-    background: rgba(0, 0, 0, 0.1);
-}
-
-.health-category-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    cursor: pointer;
-    background: rgba(139, 92, 246, 0.08);
-    transition: all 0.2s;
-}
-
-.health-category-header:hover {
-    background: rgba(139, 92, 246, 0.15);
-}
-
-.health-category-name {
-    font-weight: 700;
-    color: #a78bfa;
-    font-size: 0.9rem;
-}
-
-.health-category-content {
-    padding: var(--space-2);
-    border-top: 1px solid var(--glass-border);
-}
-
-.health-exercise-card {
-    margin-bottom: var(--space-2);
-    padding: var(--space-2);
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 4px;
-    border-left: 3px solid #8b5cf6;
-}
-
-.health-exercise-name {
-    font-weight: 600;
-    color: var(--accent-gold);
-    margin-bottom: 8px;
-    font-size: 0.85rem;
-}
-
-.health-exercise-field {
-    margin-bottom: 6px;
-    font-size: 0.75rem;
-    line-height: 1.4;
-    color: var(--text-primary);
-}
-
-.health-exercise-field strong {
-    color: #fbbf24;
-    margin-right: 4px;
-}
-
-.health-exercise-errors {
-    color: #fca5a5;
-}
-
-.health-exercise-errors strong {
-    color: #dc2626;
-}
-
-.health-substitutions {
-    margin-top: var(--space-3);
-    padding: var(--space-3);
-    background: rgba(16, 185, 129, 0.08);
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.health-substitutions h3 {
-    color: #34d399;
-}
-
-.health-checklist {
-    margin-top: var(--space-2);
-    padding: var(--space-2);
-    background: rgba(59, 130, 246, 0.08);
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.health-checklist h3 {
-    color: #60a5fa;
-}
-
-.health-meal strong {
-    color: #fbbf24;
-    display: block;
-    margin-bottom: 4px;
-}
-
 /* ============================================ */
 /* TO-DO WINDOW                                 */
 /* ============================================ */
@@ -1772,31 +1473,6 @@ ihim-options {
     outline: none;
     border-top-color: var(--accent-red);
 }
-
-/* ============================================ */
-/* CONTAINER QUERIES                            */
-/* Panels respond to their container, not viewport */
-/* ============================================ */
-
-/* Establish containment on draggable window bodies */
-.health-body {
-    container-type: inline-size;
-}
-
-/* Health dashboard: stack tab content when narrow */
-@container (max-width: 300px) {
-    .health-tabs {
-        flex-wrap: wrap;
-    }
-
-    .health-tab-btn {
-        flex: 1 1 auto;
-        font-size: 0.75rem;
-    }
-}
-
-
-
 
 /* ============================================ */
 /* YT TRANSCRIBER WINDOW                        */
@@ -2001,24 +1677,24 @@ ihim-options {
    prevent collapse. Stacking order is managed by click-to-focus in
    ihim-panel.js (pointerdown raises). A new window element MUST join this list. */
 ihim-panel, ihim-stt, ihim-recorder,
-ihim-health, ihim-todo, ihim-yt { position: fixed; z-index: 100; -webkit-app-region: no-drag; }
+ihim-todo, ihim-yt { position: fixed; z-index: 100; -webkit-app-region: no-drag; }
 /* Fixed overlays that can reach the shell's top-bar drag strip opt out too
    (ihim-options carries no-drag in its own block) */
 .bottom-bar { -webkit-app-region: no-drag; }
 ihim-panel:not([open]), ihim-stt:not([open]), ihim-recorder:not([open]),
-ihim-health:not([open]), ihim-todo:not([open]), ihim-yt:not([open]) { display: none; }
+ihim-todo:not([open]), ihim-yt:not([open]) { display: none; }
 ihim-panel[open], ihim-stt[open], ihim-recorder[open],
-ihim-health[open], ihim-todo[open], ihim-yt[open] { display: flex; flex-direction: column; }
+ihim-todo[open], ihim-yt[open] { display: flex; flex-direction: column; }
 /* Minimized: still "running" ([open] kept, taskbar chip shown) but hidden */
 ihim-panel[open].minimized, ihim-stt[open].minimized, ihim-recorder[open].minimized,
-ihim-health[open].minimized, ihim-todo[open].minimized, ihim-yt[open].minimized { display: none; }
+ihim-todo[open].minimized, ihim-yt[open].minimized { display: none; }
 
 /* Maximized fills the desktop above the bottom bar. Percentages/vh resolve
    against the viewport on a fixed-position element, so a viewport resize
    tracks free — and the !important lets the attribute win over the inline
    drag/resize geometry, which stays untouched underneath for restore. */
 ihim-panel[maximized], ihim-stt[maximized], ihim-recorder[maximized],
-ihim-health[maximized], ihim-todo[maximized], ihim-yt[maximized] {
+ihim-todo[maximized], ihim-yt[maximized] {
     left: 0 !important;
     top: 0 !important;
     width: 100vw !important;
@@ -2028,7 +1704,7 @@ ihim-health[maximized], ihim-todo[maximized], ihim-yt[maximized] {
 }
 /* In the desktop app the 36px shell title strip owns the top edge too */
 [data-shell] ihim-panel[maximized], [data-shell] ihim-stt[maximized],
-[data-shell] ihim-recorder[maximized], [data-shell] ihim-health[maximized],
+[data-shell] ihim-recorder[maximized],
 [data-shell] ihim-todo[maximized], [data-shell] ihim-yt[maximized] {
     top: 36px !important;
     height: calc(100vh - 72px) !important;

@@ -3,7 +3,7 @@
  * One chip per open panel window; click minimizes a visible window and
  * restores a minimized one. Panels opt in declaratively:
  *
- *   <ihim-health ... taskbar-icon="heart-pulse" taskbar-label="Health"></ihim-health>
+ *   <ihim-todo ... taskbar-icon="list-todo" taskbar-label="To-Do"></ihim-todo>
  *
  * State is fully derived — the taskbar owns nothing. It re-renders from the
  * DOM ([taskbar-label][open] + .minimized + [recording]) on every panel:*

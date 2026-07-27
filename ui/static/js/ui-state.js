@@ -2,7 +2,7 @@
  * ui-state.js — server-mirrored UI state.
  *
  * The whole desktop layout (window positions / sizes / open flags, icon
- * layout, stopwatches) lives in localStorage for synchronous reads, and is
+ * layout) lives in localStorage for synchronous reads, and is
  * mirrored to the server preferences store under "ui_state" so every client
  * — browser tabs and the Electron desktop app — shares ONE desktop.
  *

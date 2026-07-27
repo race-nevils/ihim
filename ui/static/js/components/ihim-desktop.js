@@ -16,7 +16,7 @@
  *   <ihim-desktop id="actions-grid" class="desktop-grid" role="main"></ihim-desktop>
  */
 
-import { escapeHtml, getIcon, restartServer, showStatus } from '../app.js';
+import { escapeHtml, getIcon } from '../app.js';
 import { persist } from '../ui-state.js';
 
 const panel = (id) => document.getElementById(id);
@@ -27,12 +27,11 @@ const clamp01 = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
 // One entry per desktop tile, in default-layout order.
 export const TILES = [
-    { id: 'stt', name: 'STT Dictation', icon: 'mic', run: () => panel('stt-window')?.toggle() },
+    { id: 'stt', name: 'STT', icon: 'mic', run: () => panel('stt-window')?.toggle() },
     { id: 'meeting_recorder', name: 'Meeting Recorder', icon: 'mic', run: () => panel('recorder-window')?.toggle() },
     { id: 'health', name: 'Health', icon: 'heart-pulse', run: () => panel('health-window')?.open() },
     { id: 'todo', name: 'To-Do', icon: 'list-todo', run: () => panel('todo-window')?.toggle() },
     { id: 'yt_transcriber', name: 'YT Transcriber', icon: 'play', run: () => panel('yt-window')?.toggle() },
-    { id: 'restart_server', name: 'Restart Server', icon: 'restart', run: restartServer },
 ];
 
 class IhimDesktop extends HTMLElement {
@@ -54,12 +53,7 @@ class IhimDesktop extends HTMLElement {
     }
 
     runTile(id) {
-        const tile = TILES.find(t => t.id === id);
-        if (tile) tile.run();
-        else if (id === 'stopwatch') {
-            document.querySelector('ihim-stopwatch-dock')?.spawn();
-            showStatus('Stopwatch spawned!', 'success');
-        }
+        TILES.find(t => t.id === id)?.run();
     }
 
     // Usable travel for an icon's top-left corner. Normalizing fractions by

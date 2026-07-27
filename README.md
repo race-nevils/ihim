@@ -42,7 +42,7 @@ tests/                     pytest
 
 ## Widgets
 
-STT Dictation (history/copy/correct/vocab, SSE status) · Meeting Recorder (taskbar chip shows a red outline while recording) · Health · To-Do (quick-capture list grouped by category — `data/local/todos.json`) · Stopwatch (client-side) · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, drag to reorder, state persists across reloads).
+STT (speech-to-text dictation — history/copy/correct/vocab, SSE status; engine subsystem stays `stt` in paths/APIs) · Meeting Recorder (taskbar chip shows a red outline while recording) · Health · To-Do (quick-capture list grouped by category — `data/local/todos.json`) · YT Transcriber · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, drag to reorder, state persists across reloads) · top-right ⋮ options menu (screen-level actions: Restart Server). *Stopwatch deleted 2026-07-27.*
 
 *Vault deleted 2026-07-17: widget, `api/vault/`, and the task_status query layer — replaced by the To-Do widget. Brain entries remain queryable via `api/brain/`.*
 

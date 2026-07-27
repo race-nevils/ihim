@@ -1,5 +1,6 @@
 /**
- * <ihim-stt> — STT Dictation window (History, Dictionary tabs).
+ * <ihim-stt> — STT window (speech-to-text dictation — History, Dictionary
+ * tabs; engine subsystem name stays "stt" in paths/APIs).
  * Extends IhimPanel: IS the draggable window; renders its own chrome +
  * content, loads data on its panel:open / panel:close lifecycle.
  * Engine auto-starts on server boot; hotkey-driven workflow (no Start/Stop UI).
@@ -30,7 +31,7 @@ class IhimSTT extends IhimPanel {
 
             <ihim-tabs>
             <!-- Tabs -->
-            <div class="stt-tabs" role="tablist" aria-label="STT Dictation">
+            <div class="stt-tabs" role="tablist" aria-label="STT">
                 <button class="stt-tab-btn active" data-tab="history" role="tab" id="stt-tab-history-btn" aria-selected="true" aria-controls="stt-tab-history" tabindex="0">History</button>
                 <button class="stt-tab-btn" data-tab="dictionary" role="tab" id="stt-tab-dictionary-btn" aria-selected="false" aria-controls="stt-tab-dictionary" tabindex="-1">Dictionary</button>
             </div>

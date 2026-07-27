@@ -41,8 +41,8 @@ export function formatTimestamp(timestamp) {
 // Lucide icon names for desktop tiles
 const LUCIDE_ICONS = {
     'mic': 'mic', 'git-branch': 'git-branch',
-    'heart-pulse': 'heart-pulse', 'list-todo': 'list-todo', 'timer': 'timer',
-    'restart': 'refresh-cw', 'play': 'play', 'default': 'zap',
+    'heart-pulse': 'heart-pulse', 'list-todo': 'list-todo',
+    'play': 'play', 'default': 'zap',
 };
 
 export function getIcon(icon) {

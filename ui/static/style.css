@@ -139,9 +139,9 @@ body {
     position: relative;
     /* Desktop surface, not a document: the page
        NEVER scrolls. Every interactive layer (desktop grid, windows, bars,
-       stopwatches) is position: fixed; anything in normal flow that would
-       exceed the viewport gets clipped, never a scrollbar. Scrolling lives
-       INSIDE windows (stt history, recorder lists, etc.) only. */
+       the options menu) is position: fixed; anything in normal flow that
+       would exceed the viewport gets clipped, never a scrollbar. Scrolling
+       lives INSIDE windows (stt history, recorder lists, etc.) only. */
     overflow: hidden;
 
     /* ARC REACTOR RADIATING ENERGY BACKGROUND */
@@ -259,8 +259,8 @@ body::after {
     top: 36px;
 }
 
-[data-shell] .stopwatch-container {
-    top: 116px;
+[data-shell] ihim-options {
+    top: 62px;
 }
 
 /* The HUD frame hugs the viewport (fixed, inset 0) — in-shell its top edge
@@ -1069,294 +1069,84 @@ header .subtitle {
 }
 
 /* ============================================ */
-/* STOPWATCH WIDGET                             */
+/* OPTIONS MENU (top-right system ⋮)            */
 /* ============================================ */
-.stopwatch-container {
+/* Nests inside the top-right HUD corner bracket (60×60 at 16px inset,
+   pointer-events: none — purely decorative, no collision) */
+ihim-options {
     position: fixed;
-    top: 80px;
-    right: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    z-index: 50;
-    pointer-events: none;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    top: 26px;
+    right: 26px;
+    z-index: 60;
+    display: block;
+    -webkit-app-region: no-drag;
 }
 
-.stopwatch-container.highlight {
-    animation: pulse-highlight 1s ease-out;
-}
-
-@keyframes pulse-highlight {
-    0% {
-        transform: scale(1);
-    }
-
-    25% {
-        transform: scale(1.05);
-    }
-
-    50% {
-        transform: scale(1);
-    }
-
-    75% {
-        transform: scale(1.03);
-    }
-
-    100% {
-        transform: scale(1);
-    }
-}
-
-.stopwatch-spawn-btn {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: linear-gradient(135deg,
-            var(--accent-red-30) 0%,
-            var(--accent-red-15) 100%);
-    border: 2px solid var(--accent-red-30);
-    color: var(--accent-red);
-    font-size: 1.5rem;
-    font-weight: 300;
-    cursor: pointer;
+.options-btn {
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    transition: all var(--duration-normal) var(--ease-out-expo);
-    box-shadow: var(--glow-red-subtle);
-    pointer-events: auto;
-    align-self: flex-end;
+    background: linear-gradient(145deg,
+            rgba(17, 17, 17, 0.9) 0%,
+            rgba(10, 10, 10, 0.95) 100%);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
 }
 
-.stopwatch-icon,
-.stopwatch-plus {
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    transition: all var(--duration-normal) var(--ease-out-expo);
+.options-btn svg,
+.options-btn i {
+    width: 20px;
+    height: 20px;
 }
 
-.stopwatch-icon {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-}
-
-.stopwatch-plus {
-    opacity: 0;
-    transform: scale(0.5) rotate(-90deg);
-}
-
-.stopwatch-spawn-btn:hover {
-    background: linear-gradient(135deg,
-            var(--accent-red-50) 0%,
-            var(--accent-red-30) 100%);
+.options-btn:hover,
+.options-btn[aria-expanded="true"] {
     border-color: var(--accent-red);
-    transform: scale(1.1);
-    box-shadow: var(--glow-red);
+    color: var(--accent-red);
 }
 
-.stopwatch-spawn-btn:hover .stopwatch-icon {
-    opacity: 0;
-    transform: scale(0.5) rotate(90deg);
-}
-
-.stopwatch-spawn-btn:hover .stopwatch-plus {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-}
-
-.stopwatch-spawn-btn:active {
-    transform: scale(0.95);
-}
-
-.stopwatch-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-height: calc(100vh - 200px);
-    overflow-y: auto;
-    pointer-events: auto;
-}
-
-.stopwatch-item {
+.options-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
-    padding: var(--space-3);
-    min-width: 180px;
-    animation: stopwatchSlideIn var(--duration-slow) var(--ease-out-expo);
-    position: relative;
-    overflow: hidden;
+    padding: var(--space-2);
 }
 
-.stopwatch-item::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: linear-gradient(90deg,
-            transparent 0%,
-            var(--accent-red-50) 50%,
-            transparent 100%);
-    opacity: 0;
-    transition: opacity var(--duration-fast) ease;
-}
-
-.stopwatch-item.running::before {
-    opacity: 1;
-    animation: stopwatchPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes stopwatchSlideIn {
-    from {
-        opacity: 0;
-        transform: translateX(30px) scale(0.9);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateX(0) scale(1);
-    }
-}
-
-@keyframes stopwatchPulse {
-
-    0%,
-    100% {
-        opacity: 0.5;
-    }
-
-    50% {
-        opacity: 1;
-    }
-}
-
-.stopwatch-header {
+.options-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--space-2);
-}
-
-.stopwatch-label {
-    font-size: 0.7rem;
-    color: var(--text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-}
-
-.stopwatch-close {
+    gap: var(--space-2);
+    width: 100%;
     background: none;
     border: none;
-    color: var(--text-muted);
-    font-size: 1rem;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: var(--radius-sm);
-    transition: all var(--duration-fast) ease;
-    line-height: 1;
-}
-
-.stopwatch-close:hover {
-    color: var(--status-error);
-    background: rgba(239, 68, 68, 0.15);
-}
-
-.stopwatch-display {
-    font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
-    font-size: 1.8rem;
-    font-weight: 300;
-    color: var(--text-primary);
-    text-align: center;
-    letter-spacing: 0.05em;
-    padding: var(--space-2) 0;
-    text-shadow: 0 1px 3px rgba(100, 10, 10, 0.5);
-    /* Hard shadow, not glow */
-}
-
-.stopwatch-item.running .stopwatch-display {
-    color: var(--accent-red);
-    text-shadow: 0 2px 4px rgba(139, 0, 0, 0.6);
-    /* Hard shadow, not glow */
-}
-
-.stopwatch-controls {
-    display: flex;
-    gap: var(--space-2);
-    justify-content: center;
-}
-
-.stopwatch-btn {
-    flex: 1;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-normal);
     border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3);
-    color: var(--text-tertiary);
-    font-size: 0.75rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all var(--duration-fast) ease;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.stopwatch-btn:hover {
-    background: var(--bg-elevated);
-    border-color: var(--accent-red-30);
     color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
 }
 
-.stopwatch-btn.start {
-    background: rgba(34, 197, 94, 0.15);
-    border-color: rgba(34, 197, 94, 0.3);
-    color: var(--status-success);
+.options-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
 }
 
-.stopwatch-btn.start:hover {
-    background: rgba(34, 197, 94, 0.25);
-    border-color: var(--status-success);
-}
-
-.stopwatch-btn.stop {
-    background: rgba(245, 158, 11, 0.15);
-    border-color: rgba(245, 158, 11, 0.3);
-    color: var(--status-warning);
-}
-
-.stopwatch-btn.stop:hover {
-    background: rgba(245, 158, 11, 0.25);
-    border-color: var(--status-warning);
-}
-
-.stopwatch-btn.reset {
-    background: rgba(239, 68, 68, 0.1);
-    border-color: rgba(239, 68, 68, 0.2);
-    color: var(--text-muted);
-}
-
-.stopwatch-btn.reset:hover {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: rgba(239, 68, 68, 0.4);
-    color: var(--status-error);
-}
-
-.stopwatch-item.removing {
-    animation: stopwatchSlideOut var(--duration-normal) var(--ease-out-expo) forwards;
-}
-
-@keyframes stopwatchSlideOut {
-    to {
-        opacity: 0;
-        transform: translateX(30px) scale(0.9);
-    }
+.options-item svg,
+.options-item i {
+    width: 16px;
+    height: 16px;
+    color: var(--color-danger);
 }
 
 
@@ -1399,14 +1189,6 @@ header .subtitle {
     transition: transform var(--duration-fast) var(--ease-out-expo);
 }
 
-.desktop-icon:hover {
-    transform: translateY(-4px) scale(1.02);
-}
-
-.desktop-icon:active {
-    transform: translateY(0) scale(0.98);
-}
-
 .desktop-icon-image {
     width: 64px;
     height: 64px;
@@ -1423,8 +1205,9 @@ header .subtitle {
     transition: all var(--duration-normal) var(--ease-out-expo);
 }
 
+/* Hover = red accent ring on the icon box, no movement */
 .desktop-icon:hover .desktop-icon-image {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    border-color: var(--accent-red);
 }
 
 .desktop-icon-image svg,
@@ -1463,88 +1246,6 @@ header .subtitle {
 .desktop-icon.dragging .desktop-icon-image {
     border-color: var(--accent-red);
     box-shadow: var(--glow-red);
-}
-
-/* ============================================ */
-/* FUNCTIONAL ICON COLORS                       */
-/* ============================================ */
-
-/* Primary productive (red) - main work actions */
-.desktop-icon[data-action-id="claude_workspace"] .desktop-icon-image svg,
-.desktop-icon[data-action-id="edgeflow_workspace"] .desktop-icon-image svg {
-    color: var(--color-primary);
-}
-
-.desktop-icon[data-action-id="claude_workspace"]:hover .desktop-icon-image,
-.desktop-icon[data-action-id="edgeflow_workspace"]:hover .desktop-icon-image {
-    border-color: var(--color-primary);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(180, 15, 50, 0.4);
-    /* Hard metallic edge */
-}
-
-/* Iron Man Gold - workspace, Notes, Tasks */
-.desktop-icon[data-action-id="explorer_workspace"] .desktop-icon-image svg,
-.desktop-icon[data-action-id="explorer_workspace"] .desktop-icon-image i,
-.desktop-icon[data-action-id="quick_notes"] .desktop-icon-image svg,
-.desktop-icon[data-action-id="quick_notes"] .desktop-icon-image i,
-.desktop-icon[data-action-id="task_list"] .desktop-icon-image svg,
-.desktop-icon[data-action-id="task_list"] .desktop-icon-image i {
-    color: var(--accent-gold);
-}
-
-.desktop-icon[data-action-id="explorer_workspace"]:hover .desktop-icon-image,
-.desktop-icon[data-action-id="quick_notes"]:hover .desktop-icon-image,
-.desktop-icon[data-action-id="task_list"]:hover .desktop-icon-image {
-    border-color: var(--accent-gold);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(218, 165, 32, 0.4);
-}
-
-/* Gunmetal Gray - Flight Path */
-.desktop-icon[data-action-id="flight_path"] .desktop-icon-image svg,
-.desktop-icon[data-action-id="flight_path"] .desktop-icon-image i {
-    color: var(--color-gunmetal);
-}
-
-.desktop-icon[data-action-id="flight_path"]:hover .desktop-icon-image {
-    border-color: var(--color-gunmetal);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px var(--color-gunmetal-glow);
-}
-
-/* Power tools (purple) - commands */
-.desktop-icon[data-action-id="slash_commands"] .desktop-icon-image svg,
-.desktop-icon[data-action-id="slash_commands"] .desktop-icon-image i {
-    color: var(--color-power);
-}
-
-.desktop-icon[data-action-id="slash_commands"]:hover .desktop-icon-image {
-    border-color: var(--color-power);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(110, 75, 200, 0.4);
-}
-
-/* Team/collaborative (orange) */
-.desktop-icon[data-action-id="software_dev_team"] .desktop-icon-image svg,
-.desktop-icon[data-action-id="agent_team_builder"] .desktop-icon-image svg {
-    color: var(--color-team);
-}
-
-.desktop-icon[data-action-id="software_dev_team"]:hover .desktop-icon-image,
-.desktop-icon[data-action-id="agent_team_builder"]:hover .desktop-icon-image {
-    border-color: var(--color-team);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(200, 130, 10, 0.4);
-    /* Hard metallic edge */
-}
-
-/* Danger/destructive (red) - system actions */
-.desktop-icon[data-action-id="restart_server"] .desktop-icon-image svg,
-.desktop-icon[data-action-id="collapse_team"] .desktop-icon-image svg {
-    color: var(--color-danger);
-}
-
-.desktop-icon[data-action-id="restart_server"]:hover .desktop-icon-image,
-.desktop-icon[data-action-id="collapse_team"]:hover .desktop-icon-image {
-    border-color: var(--color-danger);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(200, 60, 60, 0.4);
-    /* Hard metallic edge */
 }
 
 /* ============================================ */
@@ -2301,8 +2002,9 @@ header .subtitle {
    ihim-panel.js (pointerdown raises). A new window element MUST join this list. */
 ihim-panel, ihim-stt, ihim-recorder,
 ihim-health, ihim-todo, ihim-yt { position: fixed; z-index: 100; -webkit-app-region: no-drag; }
-/* Fixed overlays that can reach the shell's top-bar drag strip opt out too */
-.stopwatch-container, ihim-stopwatch, .bottom-bar { -webkit-app-region: no-drag; }
+/* Fixed overlays that can reach the shell's top-bar drag strip opt out too
+   (ihim-options carries no-drag in its own block) */
+.bottom-bar { -webkit-app-region: no-drag; }
 ihim-panel:not([open]), ihim-stt:not([open]), ihim-recorder:not([open]),
 ihim-health:not([open]), ihim-todo:not([open]), ihim-yt:not([open]) { display: none; }
 ihim-panel[open], ihim-stt[open], ihim-recorder[open],
@@ -2385,9 +2087,6 @@ ihim-tabs { display: contents; }
 
 /* Desktop grid — the element is the grid (.desktop-grid fixed geometry applies) */
 ihim-desktop { display: block; }
-
-/* Stopwatch — dock layout comes from .stopwatch-container; each timer is a block card */
-ihim-stopwatch { display: block; }
 
 /* ============================================ */
 /* ACCESSIBILITY                                */
@@ -2916,7 +2615,7 @@ button:focus-visible {
 
 
 /* ═══════════════════════════════════════════════════════════════════════ */
-/* STT DICTATION WINDOW                                                 */
+/* STT WINDOW (stt engine)                                              */
 /* ═══════════════════════════════════════════════════════════════════════ */
 
 .stt-window {

@@ -1,19 +1,29 @@
-# iHIM resume watchdog installer -- run once per machine (re-run to update).
+# iHIM lifecycle task installer -- run once per machine (re-run to update).
 #
-#   .\install-resume-watchdog.ps1            registers/updates the task
-#   .\install-resume-watchdog.ps1 -Uninstall removes it
+#   .\install-resume-watchdog.ps1            registers/updates BOTH tasks
+#   .\install-resume-watchdog.ps1 -Uninstall removes both
 #
-# Registers a Task Scheduler task that runs "server.ps1 start" (idempotent:
-# healthy server = no-op, dead port = fresh start) whenever the machine
-# resumes from sleep, plus an hourly heartbeat that self-heals any other
-# death cause. (A workstation-unlock trigger was tried and dropped: session
-# state-change triggers require elevation to register; these two do not.)
+# Registers two Task Scheduler tasks:
 #
-# Why: the server process can die during a suspend transition (2026-07-02:
-# CTranslate2 destructor raised a raw C++ exception 0xe06d7363 mid-suspend
-# and killed PID 20088). The AHK launcher only starts the server at LOGIN,
-# so on an always-on machine a sleep-death left port 7777 dead for days.
-# This watchdog turns any sleep-death into a ~20-second self-heal.
+# 1. "iHIM Resume Watchdog" -- runs "server.ps1 start" (idempotent: healthy
+#    server = no-op, dead port = fresh start) on resume-from-sleep plus an
+#    hourly heartbeat that self-heals any other death cause. (A
+#    workstation-unlock trigger was tried and dropped: session state-change
+#    triggers require elevation to register; these two do not.)
+#    Why: the server process can die during a suspend transition (2026-07-02:
+#    CTranslate2 destructor raised a raw C++ exception 0xe06d7363 mid-suspend
+#    and killed PID 20088). The AHK launcher only starts the server at LOGIN,
+#    so on an always-on machine a sleep-death left port 7777 dead for days.
+#
+# 2. "iHIM Restart" -- NO triggers; fired on demand (schtasks /run) by the
+#    server itself: the post-sleep CUDA-hygiene restart, the transcription
+#    deadline watchdog, and /api/server/restart. The task runs
+#    "server.ps1 restart" under the Task Scheduler service -- OUTSIDE the
+#    server's kill tree. A child helper cannot do this job: server.ps1's
+#    taskkill /T reaps its own helper (tree-kill-self), and DETACHED_PROCESS
+#    powershell exits 0 without executing anything, which left both sleep
+#    defenses dead for 11 days (bug note 2026-07-27_detached-process-
+#    restart-spawn-dead-on-arrival-sleep-defenses.md).
 #
 # ASCII-only on purpose: PS 5.1 misparses UTF-8-no-BOM em-dashes.
 
@@ -26,10 +36,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $TaskName = 'iHIM Resume Watchdog'
+$RestartTaskName = 'iHIM Restart'
 
 if ($Uninstall) {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    Write-Host "Removed scheduled task '$TaskName'."
+    foreach ($t in @($TaskName, $RestartTaskName)) {
+        Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue
+        Write-Host "Removed scheduled task '$t'."
+    }
     return
 }
 
@@ -80,4 +93,24 @@ Register-ScheduledTask -TaskName $TaskName `
 Write-Host "Registered scheduled task '$TaskName':"
 Write-Host "  on resume-from-sleep (+20s) and hourly heartbeat"
 Write-Host "  -> server.ps1 start (idempotent) using $ServerPs1"
-Write-Host "Verify anytime: Get-ScheduledTask -TaskName '$TaskName'"
+
+# --- "iHIM Restart": demand-only, fired by the server via schtasks /run ---
+$restartAction = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ServerPs1`" restart"
+
+# 40-minute limit: restart defers behind a live dictation
+# (Wait-DictationIdle, max 30 min) before it may act.
+# MultipleInstances IgnoreNew makes stacked triggers (two blown deadlines,
+# resume events 18 then 7) collapse into one restart at the OS.
+$restartSettings = New-ScheduledTaskSettingsSet `
+    -MultipleInstances IgnoreNew `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 40) `
+    -StartWhenAvailable
+
+Register-ScheduledTask -TaskName $RestartTaskName `
+    -Action $restartAction -Settings $restartSettings -Principal $principal -Force | Out-Null
+
+Write-Host "Registered scheduled task '$RestartTaskName':"
+Write-Host "  demand-only (schtasks /run) -> server.ps1 restart using $ServerPs1"
+Write-Host "Verify anytime: Get-ScheduledTask -TaskName 'iHIM *'"

@@ -1,10 +1,12 @@
 """Server health, system stats, and process control.
 
-/api/server/restart delegates to scripts/server.ps1 — the single canonical
-lifecycle tool — spawned detached so it survives this process being stopped.
-No temp scripts, no WMIC, no process-tree guessing: the script resolves the
-listener by port, verifies it is an iHIM python process, and kills the tree
-exactly once (there is no reload watcher to respawn it anymore).
+/api/server/restart fires the 'iHIM Restart' scheduled task, which runs
+scripts/server.ps1 restart — the single canonical lifecycle tool — under the
+Task Scheduler service, outside this process's kill tree. A spawned child
+helper cannot do this job: server.ps1's taskkill /T reaps its own helper
+(tree-kill-self), and DETACHED_PROCESS powershell exits without executing
+(bug note 2026-07-27_detached-process-restart-spawn-dead-on-arrival-
+sleep-defenses.md — this endpoint returned 200 and did nothing for 11 days).
 """
 
 import logging
@@ -21,9 +23,6 @@ from api.runtime import IHIM_DIR, uptime_seconds
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["server"])
-
-_SERVER_PS1 = IHIM_DIR / "scripts" / "server.ps1"
-
 
 def _git(*args):
     try:
@@ -98,30 +97,44 @@ async def server_status(request: Request):
 
 @router.post("/api/server/restart")
 async def restart_server(request: Request):
-    """Restart this instance via the canonical lifecycle script, detached."""
+    """Restart the live instance via the out-of-tree scheduled task."""
     if sys.platform != "win32":
         return problem(501, "Restart is only supported on Windows", instance=request.url.path)
-    if not _SERVER_PS1.exists():
-        return problem(404, f"Lifecycle script not found: {_SERVER_PS1}", instance=request.url.path)
 
     port = request.url.port or 7777
-    try:
-        flags = (
-            subprocess.DETACHED_PROCESS
-            | subprocess.CREATE_NEW_PROCESS_GROUP
-            | subprocess.CREATE_NO_WINDOW
+    if port != 7777:
+        # The task is pinned to the live server. Test instances (7778+) are
+        # started by their own scripts and restarted by hand — a task per
+        # throwaway port is machine state nobody maintains.
+        return problem(
+            501,
+            f"Self-restart serves only the live :7777 instance; restart port "
+            f"{port} via scripts/server.ps1 directly",
+            instance=request.url.path,
         )
-        subprocess.Popen(
-            [
-                "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                "-File", str(_SERVER_PS1), "restart", "-Port", str(port), "-DelaySeconds", "1",
-            ],
-            creationflags=flags,
-            close_fds=True,
-            cwd=str(IHIM_DIR),
+
+    from tools.stt.engine import RESTART_TASK_NAME
+    try:
+        result = subprocess.run(
+            ["schtasks", "/run", "/tn", RESTART_TASK_NAME],
+            capture_output=True, text=True, timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
     except Exception as e:
-        logger.error("Failed to spawn restart script: %s", e)
-        return problem(500, f"Failed to spawn restart script: {e}", instance=request.url.path)
+        logger.error("Restart task trigger failed: %s", e)
+        return problem(500, f"Restart task trigger failed: {e}", instance=request.url.path)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        logger.critical(
+            "Restart task '%s' trigger FAILED rc=%d: %s — run "
+            "IHIM/scripts/install-resume-watchdog.ps1 to register it",
+            RESTART_TASK_NAME, result.returncode, detail,
+        )
+        return problem(
+            500,
+            f"Restart task '{RESTART_TASK_NAME}' not runnable ({detail}); "
+            f"run IHIM/scripts/install-resume-watchdog.ps1",
+            instance=request.url.path,
+        )
 
     return ok(message="Restart initiated", pid=os.getpid(), port=port)

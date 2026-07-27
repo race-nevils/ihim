@@ -32,6 +32,32 @@ logger = logging.getLogger(__name__)
 
 TRAINING_DIR = Path(__file__).parent / "data" / "voice-training"
 
+# The out-of-tree restart lane: a demand-only scheduled task running
+# server.ps1 restart under the Task Scheduler service. Registered once per
+# machine by IHIM/scripts/install-resume-watchdog.ps1.
+RESTART_TASK_NAME = "iHIM Restart"
+
+
+def verify_restart_task() -> bool:
+    """Boot check: the restart task must exist, or the recovery lane is dead.
+
+    A recovery path that has never fired is unverified, not redundant — the
+    07-27 incident ran 11 days with both sleep defenses converging on a spawn
+    that executed nothing. Called at power-event registration so a missing
+    task is loud at every boot, not silent at the next incident.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        result = subprocess.run(
+            ["schtasks", "/query", "/tn", RESTART_TASK_NAME],
+            capture_output=True, text=True, timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
 
 def _sweep_inflight_walls() -> None:
     """Boot sweep: promote WALs orphaned by a mid-recording process death.
@@ -401,36 +427,39 @@ class STTEngine:
             pass
 
     def _restart_server_detached(self, reason: str) -> None:
-        """Spawn scripts/server.ps1 restart, detached — survives this process.
+        """Fire the 'iHIM Restart' scheduled task — the out-of-tree restart lane.
 
-        Same invocation as /api/server/restart. The engine only runs in the
-        live instance (test ports set IHIM_STT_AUTOSTART=0), so the port
-        default matches the live server.
+        Task Scheduler, not a spawned helper: a child process sits inside this
+        process's kill tree and server.ps1's taskkill /T would reap it
+        mid-restart, and DETACHED_PROCESS powershell exits 0 without executing
+        anything — the previous implementation never restarted once
+        (bug note 2026-07-27_detached-process-restart-spawn-dead-on-arrival
+        -sleep-defenses.md). schtasks /run returns in milliseconds; the actual
+        restart runs under the Task Scheduler service, outside any kill tree.
+        The task is fixed to the live :7777 server — the engine only runs in
+        the live instance (test ports set IHIM_STT_AUTOSTART=0).
         """
-        server_ps1 = Path(__file__).parents[2] / "scripts" / "server.ps1"
-        if sys.platform != "win32" or not server_ps1.exists():
-            logger.error("Cannot self-restart (%s): server.ps1 unavailable", reason)
+        if sys.platform != "win32":
+            logger.error("Cannot self-restart (%s): win32 only", reason)
             return
-        port = os.environ.get("IHIM_PORT", "7777")
-        flags = (
-            subprocess.DETACHED_PROCESS
-            | subprocess.CREATE_NEW_PROCESS_GROUP
-            | subprocess.CREATE_NO_WINDOW
-        )
         try:
-            subprocess.Popen(
-                [
-                    "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                    "-File", str(server_ps1), "restart",
-                    "-Port", port, "-DelaySeconds", "2",
-                ],
-                creationflags=flags,
-                close_fds=True,
-                cwd=str(server_ps1.parents[1]),
+            result = subprocess.run(
+                ["schtasks", "/run", "/tn", RESTART_TASK_NAME],
+                capture_output=True, text=True, timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
-            logger.warning("Detached server restart spawned (%s)", reason)
+            if result.returncode == 0:
+                logger.warning("Restart task triggered (%s)", reason)
+            else:
+                logger.critical(
+                    "Restart task '%s' trigger FAILED rc=%d (%s): %s — the "
+                    "self-restart lane is dead; run "
+                    "IHIM/scripts/install-resume-watchdog.ps1 to register it",
+                    RESTART_TASK_NAME, result.returncode, reason,
+                    (result.stderr or result.stdout).strip(),
+                )
         except Exception as e:
-            logger.error("Failed to spawn detached restart (%s): %s", reason, e)
+            logger.critical("Restart task trigger failed (%s): %s", reason, e)
 
     def _recycle_listener(self) -> None:
         """Stop and restart the hotkey listener to clear stale OS hooks.

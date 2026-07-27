@@ -155,6 +155,18 @@ function Invoke-Start {
     $argList = @("`"$(Join-Path $IhimDir 'run.py')`"", '--port', $Port, '--log-level', 'error')
     if ($Dev) { $argList += '--dev' }
     $consoleLog = Join-Path $IhimDir 'data\server-console.log'
+    # Rotate before the redirect overwrites: keep two prior generations so a
+    # recovery restart followed by a manual one cannot destroy the incident
+    # window (the 07-27 diagnosis lost its pre-restart evidence exactly this
+    # way -- Start-Process redirection cannot append).
+    foreach ($base in @($consoleLog, ($consoleLog -replace '\.log$', '.out.log'))) {
+        try {
+            $prev1 = $base -replace '\.log$', '.prev1.log'
+            $prev2 = $base -replace '\.log$', '.prev2.log'
+            if (Test-Path $prev1) { Move-Item $prev1 $prev2 -Force }
+            if (Test-Path $base)  { Move-Item $base $prev1 -Force }
+        } catch {}
+    }
     Write-Log "Starting: $py run.py --port $Port$(if ($Dev) { ' --dev' }) (console -> $consoleLog)"
     $proc = Start-Process -FilePath $py -ArgumentList $argList -WorkingDirectory $IhimDir `
         -WindowStyle Hidden -PassThru -RedirectStandardError $consoleLog `

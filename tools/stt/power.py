@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 PBT_APMSUSPEND = 4
 PBT_APMRESUMESUSPEND = 7
+PBT_APMRESUMEAUTOMATIC = 18
 _DEVICE_NOTIFY_CALLBACK = 2
 
 _handle: Optional[ctypes.c_void_p] = None
@@ -55,11 +56,18 @@ def register(on_suspend: Callable, on_resume: Callable) -> bool:
 
         def _power_callback(context, event_type, setting):
             try:
+                # Every event type gets logged — an unattended (device) wake
+                # delivers only PBT_APMRESUMEAUTOMATIC, and silently dropping
+                # unknown types left the 07-27 incident window blind.
+                logger.info("Power event received: type=%d", event_type)
                 if event_type == PBT_APMSUSPEND:
-                    logger.info("PBT_APMSUSPEND received")
                     on_suspend()
-                elif event_type == PBT_APMRESUMESUSPEND:
-                    logger.info("PBT_APMRESUMESUSPEND received")
+                elif event_type in (PBT_APMRESUMESUSPEND, PBT_APMRESUMEAUTOMATIC):
+                    # Both resume forms fire on_resume. A user-present wake can
+                    # deliver 18 then 7 seconds apart — the double fire is safe:
+                    # the CUDA path's restart task dedupes at the OS
+                    # (MultipleInstances IgnoreNew) and the evict/recycle path
+                    # is idempotent.
                     on_resume()
             except Exception:
                 logger.error("Power callback failed", exc_info=True)

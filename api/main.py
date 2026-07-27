@@ -80,12 +80,19 @@ async def lifespan(app: FastAPI):
     # or contend for VRAM with the live instance.
     if stt_router is not None and STT_AUTOSTART:
         try:
-            from tools.stt.engine import get_engine
+            from tools.stt.engine import get_engine, verify_restart_task
             from tools.stt.power import register as register_power
             engine = get_engine()
             engine.start_listening()
             register_power(on_suspend=engine.on_system_suspend, on_resume=engine.on_system_resume)
-            logger.info("STT: hotkey listener + power events registered")
+            if verify_restart_task():
+                logger.info("STT: hotkey listener + power events registered; restart task verified")
+            else:
+                logger.warning(
+                    "Scheduled task 'iHIM Restart' NOT registered — the "
+                    "post-sleep/watchdog self-restart lane is DEAD; run "
+                    "IHIM/scripts/install-resume-watchdog.ps1"
+                )
         except Exception as e:
             logger.warning("STT autostart failed (non-fatal): %s", e)
     elif stt_router is not None:

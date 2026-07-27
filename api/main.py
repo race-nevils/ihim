@@ -42,6 +42,7 @@ from api.health.routes import router as health_router
 from api.brain.routes import router as brain_router
 from api.graph.routes import router as graph_router
 from api.todos import router as todos_router
+from api.yt.routes import router as yt_router
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,17 @@ async def lifespan(app: FastAPI):
             _active_workers.clear()
         except Exception as e:
             logger.warning("Shutdown: worker cleanup failed: %s", e)
+    try:
+        from api.yt.routes import _active_workers as _yt_workers
+        for job_id, proc in list(_yt_workers.items()):
+            try:
+                proc.kill()
+                logger.info("Shutdown: killed YT worker %s", job_id)
+            except Exception:
+                pass
+        _yt_workers.clear()
+    except Exception as e:
+        logger.warning("Shutdown: YT worker cleanup failed: %s", e)
     _remove_pid_file()
     logger.info("Shutdown complete")
 
@@ -168,7 +180,7 @@ def create_app() -> FastAPI:
     routers = [
         site_router, server_router, preferences_router,
         health_router, brain_router,
-        graph_router, todos_router,
+        graph_router, todos_router, yt_router,
     ]
     if stt_router is not None:
         routers.append(stt_router)

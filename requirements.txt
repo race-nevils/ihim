@@ -19,6 +19,10 @@ pywin32>=306                  # win32clipboard/win32gui for paste injection + wi
 comtypes>=1.4.0,<2.0.0        # COM for audio mute (pycaw dep)
 pycaw>=20230407               # Windows audio endpoint control
 
+# YT transcriber widget (worker downloads native bestaudio; PyAV decodes
+# m4a/webm directly, so no ffmpeg dependency)
+yt-dlp>=2025.1.1
+
 # Audio capture + transcription (dictation + meeting recorder)
 PyAudioWPatch>=0.2.12
 sounddevice>=0.5.0,<1.0.0

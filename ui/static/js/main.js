@@ -24,6 +24,7 @@ await Promise.all([
     import('./components/ihim-recorder.js'),
     import('./components/ihim-health.js'),
     import('./components/ihim-todo.js'),
+    import('./components/ihim-yt.js'),
 
     // Standalone components
     import('./components/ihim-desktop.js'),

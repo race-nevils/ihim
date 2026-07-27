@@ -2098,6 +2098,200 @@ header .subtitle {
 
 
 /* ============================================ */
+/* YT TRANSCRIBER WINDOW                        */
+/* ============================================ */
+
+.yt-window {
+    position: fixed;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    width: 560px;
+    height: 460px;
+    min-width: 380px;
+    min-height: 300px;
+    resize: both;
+    overflow: hidden;
+}
+
+.yt-submit-row {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+}
+
+.yt-submit-row input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 6px 10px;
+}
+
+.yt-submit-row input:focus {
+    outline: none;
+    border-color: var(--accent-red);
+}
+
+#yt-submit-btn,
+.yt-cancel-btn,
+.yt-row-btn {
+    background: transparent;
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-sm);
+    color: var(--accent-red);
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+#yt-submit-btn:hover,
+.yt-cancel-btn:hover,
+.yt-row-btn:hover {
+    background: var(--accent-red-15);
+}
+
+#yt-submit-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* display:flex would defeat the hidden attribute — restate it */
+.yt-status-row[hidden] { display: none; }
+
+.yt-status-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) 0 var(--space-2);
+    font-size: 0.8rem;
+    min-height: 28px;
+}
+
+.yt-status-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 1;
+    min-width: 0;
+}
+
+.yt-status-title {
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.yt-progress {
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+}
+
+.yt-status-chip {
+    display: inline-block;
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    padding: 1px 6px;
+    white-space: nowrap;
+}
+
+.yt-status-chip.transcribing,
+.yt-status-chip.downloading,
+.yt-status-chip.fetching_metadata,
+.yt-status-chip.starting { border-color: var(--accent-red); color: var(--accent-red); }
+.yt-status-chip.paused_for_dictation,
+.yt-status-chip.waiting_for_gpu,
+.yt-status-chip.queued { color: var(--text-tertiary); }
+.yt-status-chip.complete,
+.yt-status-chip.duplicate { border-color: var(--status-ok, #3a6); color: var(--status-ok, #3a6); }
+.yt-status-chip.failed { border-color: var(--status-error); color: var(--status-error); }
+
+/* History rows reuse the chip as a small square status dot */
+.yt-history-row .yt-status-chip {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border-radius: 50%;
+    flex: none;
+}
+
+.yt-log {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2);
+    font-family: var(--font-mono, 'Cascadia Code', Consolas, monospace);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.yt-seg { margin-bottom: 2px; }
+
+.yt-ts { color: var(--text-tertiary); }
+
+.yt-history {
+    max-height: 30%;
+    overflow-y: auto;
+    margin-top: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.yt-history-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.78rem;
+    padding: 2px var(--space-1);
+    border-radius: var(--radius-sm);
+}
+
+.yt-history-row:hover { background: rgba(255, 255, 255, 0.04); }
+
+.yt-history-title {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.yt-history-meta {
+    color: var(--text-tertiary);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.yt-row-btn { padding: 1px 7px; font-size: 0.72rem; }
+
+.yt-row-delete { color: var(--text-tertiary); border-color: transparent; }
+.yt-row-delete:hover { color: var(--status-error); background: transparent; }
+
+.yt-error {
+    color: var(--status-error);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: var(--space-4);
+}
+
+
+/* ============================================ */
 /* WEB COMPONENTS                               */
 /* ============================================ */
 
@@ -2106,23 +2300,23 @@ header .subtitle {
    prevent collapse. Stacking order is managed by click-to-focus in
    ihim-panel.js (pointerdown raises). A new window element MUST join this list. */
 ihim-panel, ihim-stt, ihim-recorder,
-ihim-health, ihim-todo { position: fixed; z-index: 100; -webkit-app-region: no-drag; }
+ihim-health, ihim-todo, ihim-yt { position: fixed; z-index: 100; -webkit-app-region: no-drag; }
 /* Fixed overlays that can reach the shell's top-bar drag strip opt out too */
 .stopwatch-container, ihim-stopwatch, .bottom-bar { -webkit-app-region: no-drag; }
 ihim-panel:not([open]), ihim-stt:not([open]), ihim-recorder:not([open]),
-ihim-health:not([open]), ihim-todo:not([open]) { display: none; }
+ihim-health:not([open]), ihim-todo:not([open]), ihim-yt:not([open]) { display: none; }
 ihim-panel[open], ihim-stt[open], ihim-recorder[open],
-ihim-health[open], ihim-todo[open] { display: flex; flex-direction: column; }
+ihim-health[open], ihim-todo[open], ihim-yt[open] { display: flex; flex-direction: column; }
 /* Minimized: still "running" ([open] kept, taskbar chip shown) but hidden */
 ihim-panel[open].minimized, ihim-stt[open].minimized, ihim-recorder[open].minimized,
-ihim-health[open].minimized, ihim-todo[open].minimized { display: none; }
+ihim-health[open].minimized, ihim-todo[open].minimized, ihim-yt[open].minimized { display: none; }
 
 /* Maximized fills the desktop above the bottom bar. Percentages/vh resolve
    against the viewport on a fixed-position element, so a viewport resize
    tracks free — and the !important lets the attribute win over the inline
    drag/resize geometry, which stays untouched underneath for restore. */
 ihim-panel[maximized], ihim-stt[maximized], ihim-recorder[maximized],
-ihim-health[maximized], ihim-todo[maximized] {
+ihim-health[maximized], ihim-todo[maximized], ihim-yt[maximized] {
     left: 0 !important;
     top: 0 !important;
     width: 100vw !important;
@@ -2133,7 +2327,7 @@ ihim-health[maximized], ihim-todo[maximized] {
 /* In the desktop app the 36px shell title strip owns the top edge too */
 [data-shell] ihim-panel[maximized], [data-shell] ihim-stt[maximized],
 [data-shell] ihim-recorder[maximized], [data-shell] ihim-health[maximized],
-[data-shell] ihim-todo[maximized] {
+[data-shell] ihim-todo[maximized], [data-shell] ihim-yt[maximized] {
     top: 36px !important;
     height: calc(100vh - 72px) !important;
 }

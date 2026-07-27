@@ -365,9 +365,12 @@ async def transcribe_recording(recording_id: str, request: Request):
     # under a running encode is unsafe; the worker then just runs slower.
     try:
         from tools.stt import engine as _stt_engine
+        # engine.status is a @property — calling it raised TypeError into the
+        # except below, silently skipping this unload on every transcription
+        # (found 2026-07-27 while building the YT worker on this pattern).
         stt_busy = (
             _stt_engine._engine is not None
-            and _stt_engine._engine.status() in ("recording", "processing", "loading")
+            and _stt_engine._engine.status in ("recording", "locked", "processing", "loading")
         )
         if stt_busy:
             logger.info("STT busy — leaving its model loaded; worker may downgrade compute type")

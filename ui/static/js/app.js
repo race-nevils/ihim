@@ -42,7 +42,7 @@ export function formatTimestamp(timestamp) {
 const LUCIDE_ICONS = {
     'mic': 'mic', 'git-branch': 'git-branch',
     'heart-pulse': 'heart-pulse', 'list-todo': 'list-todo', 'timer': 'timer',
-    'restart': 'refresh-cw', 'default': 'zap',
+    'restart': 'refresh-cw', 'play': 'play', 'default': 'zap',
 };
 
 export function getIcon(icon) {

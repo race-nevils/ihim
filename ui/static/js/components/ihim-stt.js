@@ -100,6 +100,13 @@ class IhimSTT extends IhimPanel {
         const badge = this.querySelector('#stt-status-badge');
         if (!badge) return;
 
+        // Any status transition invalidates a shown error (e.g. "model is busy"
+        // stops being true once the model unloads or a new dictation starts)
+        if (this._lastStatus !== undefined && data.status !== this._lastStatus) {
+            this._hideError();
+        }
+        this._lastStatus = data.status;
+
         badge.classList.remove('status-cold', 'status-warm', 'status-recording', 'status-processing', 'status-loading',
             'status-locked', 'status-offline');
 
@@ -423,6 +430,11 @@ class IhimSTT extends IhimPanel {
     _showError(msg) {
         const el = this.querySelector('#stt-error');
         if (el) { el.textContent = msg; el.style.display = 'block'; }
+    }
+
+    _hideError() {
+        const el = this.querySelector('#stt-error');
+        if (el) { el.textContent = ''; el.style.display = 'none'; }
     }
 
     // =====================

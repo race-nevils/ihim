@@ -1,6 +1,6 @@
-# iHIM — the operator's Command Center
+# iHIM — Intelligent Heads-Up Interface Module
 
-Local-first personal dashboard: STT dictation, meeting recorder, to-dos, YT transcription, and the JSON-LD second-brain data layer. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
+Local-first personal dashboard: STT dictation (WASAPI audio stack), meeting recorder, to-dos, YT transcription. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
 
 Rebuilt from scratch 2026-06-10 (design + audit: `design-notes/ihim/refactor-2026-06/`). Pre-refactor code archived at `archive/ihim-pre-refactor-20260609/`.
 

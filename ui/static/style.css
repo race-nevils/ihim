@@ -19,7 +19,7 @@
 }
 
 /* ============================================ */
-/* DESIGN TOKENS - Iron Man HUD Theme           */
+/* DESIGN TOKENS - HUD Theme                    */
 /* ============================================ */
 :root {
     color-scheme: dark;
@@ -30,7 +30,7 @@
     --bg-tertiary: #1a1a1a;
     --bg-elevated: #222222;
 
-    /* === Accent Colors - Iron Man Red & Gold === */
+    /* === Accent Colors - Red & Gold === */
     --accent-red: #DC143C;
     --accent-red-50: rgba(220, 20, 60, 0.5);
     --accent-red-30: rgba(220, 20, 60, 0.3);

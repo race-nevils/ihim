@@ -38,8 +38,6 @@ from api.middleware import register_middleware
 from api.site import router as site_router
 from api.server import router as server_router
 from api.preferences import router as preferences_router
-from api.brain.routes import router as brain_router
-from api.graph.routes import router as graph_router
 from api.todos import router as todos_router
 from api.yt.routes import router as yt_router
 
@@ -178,7 +176,7 @@ def create_app() -> FastAPI:
 
     routers = [
         site_router, server_router, preferences_router,
-        brain_router, graph_router, todos_router, yt_router,
+        todos_router, yt_router,
     ]
     if stt_router is not None:
         routers.append(stt_router)

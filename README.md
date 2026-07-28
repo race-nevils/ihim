@@ -30,12 +30,11 @@ api/
   main.py                  app factory — explicit router registration
   runtime.py middleware.py errors.py responses.py site.py server.py
   stt/ recorder/         dictation + meeting recorder (shared whisper core)
-  brain/ graph/ preferences.py todos.py
+  yt/ preferences.py todos.py
 tools/stt/               dictation engine (hotkey→capture→transcribe→inject)
                            data/ = dictation history + voice-training audio
-handlers/ adapters/ data/  brain ingestion pipeline + JSON-LD source of truth
-                           (data/local/brain/ = SSOT; data/brain.db = index)
-orchestrator/              pipeline state (PipelineState/OrchestratorState — handlers/brain.py)
+data/local/                per-widget file stores (todos.json, yt/ job sidecars,
+                           brain/Meetings/ JSON-LD written by the recorder)
 ui/                        index.html + static/js (components/ = all widgets) + style.css
 tests/                     pytest
 ```
@@ -44,9 +43,11 @@ tests/                     pytest
 
 STT (speech-to-text dictation — history/copy/correct/vocab, SSE status; engine subsystem stays `stt` in paths/APIs) · Meeting Recorder (taskbar chip shows a red outline while recording) · To-Do (quick-capture list grouped by category — `data/local/todos.json`) · YT Transcriber · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, drag to reorder, state persists across reloads) · top-right ⋮ options menu (screen-level actions: Restart Server). *Stopwatch and Health both deleted 2026-07-27; Health took `api/health/` with it, orphaned markdown content remains at `data/health/`.*
 
-*Vault deleted 2026-07-17: widget, `api/vault/`, and the task_status query layer — replaced by the To-Do widget. Brain entries remain queryable via `api/brain/`.*
+*Vault deleted 2026-07-17: widget, `api/vault/`, and the task_status query layer — replaced by the To-Do widget.*
 
-*Google Calendar deleted 2026-07-17: widget, `api/calendar/`, brain auto-push, and the rebuild GCal executor. Brain-internal event detection (notes → `event_date` in brain.db) remains.*
+*Google Calendar deleted 2026-07-17: widget, `api/calendar/`, brain auto-push, and the rebuild GCal executor.*
+
+*Brain ingestion pipeline deleted 2026-07-27: `api/brain/`, `api/graph/`, `handlers/`, `adapters/`, `orchestrator/`, and the `data/` code modules (`database.py`, `ingest.py`, `jsonld.py`, `rebuild/`, ...). Verified consumer-free before removal: no widget called `/api/brain` or `/api/graph`, and the meeting recorder writes its JSON-LD self-contained. Data files under `data/` (brain.db, data/local/brain/) left on disk untouched.*
 
 *agent node deleted 2026-07-17: bar chip, window, and `api/agentnode/` proxy. The agent node itself and its blueprint (`agent-node-blueprint/`) are untouched — this removed only the in-app control surface.*
 
@@ -56,7 +57,6 @@ STT (speech-to-text dictation — history/copy/correct/vocab, SSE status; engine
 - Errors are RFC 9457 `application/problem+json`; success uses `{"success": true}` envelopes.
 - CSP/security headers on every response (report-only CSP while UI stabilizes).
 - Frontend cache busting: per-boot `BOOT_ID` importmap + 3s `/api/boot-id` polling → edits to ui/ hot-reload the page without a server restart.
-- Brain data contracts (Unison sync, /rebuild) documented in `harness/rules/ihim.md`.
 
 ## Test gates
 

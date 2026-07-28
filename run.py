@@ -21,7 +21,7 @@ IHIM_DIR = Path(__file__).resolve().parent
 
 # Source dirs for --dev reload, EXCLUDING .venv (7,773 .py files whose
 # antivirus/indexer mtime churn causes false-positive reloads on Windows).
-_SOURCE_DIRS = [d for d in ("api", "adapters", "handlers", "tools", "data") if (IHIM_DIR / d).is_dir()]
+_SOURCE_DIRS = [d for d in ("api", "tools") if (IHIM_DIR / d).is_dir()]
 
 
 def main() -> None:

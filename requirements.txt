@@ -8,12 +8,8 @@ python-dotenv>=1.0.0,<2.0.0
 httpx==0.28.1
 psutil==6.1.0
 pydantic>=2.0.0,<3.0.0
-sqlite-vec>=0.1.6
 
-# Brain pipeline (handlers/, data/)
-dateparser>=1.2.0,<2.0.0
-
-# STT Dictation (Windows)
+# Dictation (Windows)
 pynput>=1.7.0,<2.0.0
 pywin32>=306                  # win32clipboard/win32gui for paste injection + window context
 comtypes>=1.4.0,<2.0.0        # COM for audio mute (pycaw dep)
@@ -29,11 +25,3 @@ sounddevice>=0.5.0,<1.0.0
 faster-whisper>=1.0.0,<2.0.0
 ctranslate2>=4.5.0,<5.0.0     # Requires CUDA 12 + cuDNN 9
 numpy>=1.24.0,<3.0.0
-
-# Removed 2026-06 refactor: websockets (no WebSocket endpoints remain),
-# python-multipart (no form/upload routes), PyYAML (configs/ deleted),
-# langgraph (orchestrator/graph.py deleted), langfuse (tracing is no-op),
-# pystray + pillow (capture widget deleted), cryptography (never imported).
-# Removed 2026-07-17: google-api-python-client + google-auth-* (Google
-# Calendar integration deleted — widget, api/calendar/, auto-push, rebuild
-# executor).

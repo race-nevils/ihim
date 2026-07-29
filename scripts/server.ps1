@@ -42,13 +42,9 @@ function Write-Log([string]$msg) {
 # which makes startup crashes invisible and can break libraries that write
 # to sys.stderr (None under pythonw).
 function Get-PythonExe {
-    foreach ($candidate in @(
-            (Join-Path $IhimDir '.venv\Scripts\python.exe'),
-            'C:\Users\<user>\workspace\IHIM\.venv\Scripts\python.exe'
-        )) {
-        if (Test-Path $candidate) { return $candidate }
-    }
-    throw "No iHIM venv python found (looked in $IhimDir\.venv and main repo .venv)"
+    $candidate = Join-Path $IhimDir '.venv\Scripts\python.exe'
+    if (Test-Path $candidate) { return $candidate }
+    throw "No iHIM venv python found (looked in $IhimDir\.venv)"
 }
 
 function Get-ListenerPids {

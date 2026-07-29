@@ -41,9 +41,8 @@
 
 param(
     [switch]$Uninstall,
-    # The LIVE 7777 server always runs from the MAIN repo, so the watchdog
-    # points there no matter which branch copy of this installer runs.
-    [string]$ServerPs1 = 'C:\Users\<user>\workspace\IHIM\scripts\server.ps1'
+    # Defaults to the server.ps1 sitting beside this installer.
+    [string]$ServerPs1 = (Join-Path $PSScriptRoot 'server.ps1')
 )
 
 $ErrorActionPreference = 'Stop'

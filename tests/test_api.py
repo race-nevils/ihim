@@ -126,3 +126,36 @@ def test_travel_launch(client, monkeypatch):
     else:
         assert resp.status_code == 501
         assert not calls
+
+
+def test_travel_return_launch(client, monkeypatch):
+    """Returning leg: same launch contract as Leaving, its own script."""
+    import subprocess
+    import sys as _sys
+
+    import api.server as server_mod
+
+    calls = {}
+
+    class FakeProc:
+        pid = 424243
+
+    def fake_popen(cmd, **kwargs):
+        calls["cmd"] = cmd
+        calls["kwargs"] = kwargs
+        return FakeProc()
+
+    monkeypatch.setattr(server_mod.subprocess, "Popen", fake_popen)
+
+    resp = client.post("/api/system/travel/return")
+    script = server_mod.IHIM_DIR.parent / "scripts" / "travel-return.cmd"
+
+    if _sys.platform == "win32" and script.is_file():
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["pid"] == 424243
+        assert calls["cmd"][-1].endswith("travel-return.cmd")
+        assert calls["kwargs"]["creationflags"] & subprocess.CREATE_NEW_CONSOLE
+        assert "stdout" not in calls["kwargs"]
+    else:
+        assert resp.status_code == 501
+        assert not calls

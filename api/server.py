@@ -95,24 +95,23 @@ async def server_status(request: Request):
     }
 
 
-@router.post("/api/system/travel")
-async def launch_travel(request: Request):
-    """Launch the drive-backup script (scripts/travel.cmd in the parent
-    workspace) in its own console window — the desktop tile is a shortcut,
-    nothing more. The script is interactive (progress output + a final
-    pause), so it MUST get a visible console and its output must never be
+def _launch_operator_script(request: Request, filename: str, label: str):
+    """Launch an operator script (scripts/<filename> in the parent workspace)
+    in its own console window — the Travel window's buttons are shortcuts,
+    nothing more. The scripts are interactive (progress output + a final
+    pause), so they MUST get a visible console and their output must never be
     captured; CREATE_NEW_CONSOLE gives the child a fresh console even though
     this server runs windowless. Fire-and-forget: the operator watches the
     console, not the API response."""
     if sys.platform != "win32":
-        return problem(501, "Travel backup is only supported on Windows",
+        return problem(501, f"{label} is only supported on Windows",
                        instance=request.url.path)
 
-    script = IHIM_DIR.parent / "scripts" / "travel.cmd"
+    script = IHIM_DIR.parent / "scripts" / filename
     if not script.is_file():
         # Deployments carved away from the parent workspace don't ship the
-        # backup script — the tile exists, the action honestly says so.
-        return problem(501, "travel.cmd not present in this deployment",
+        # operator scripts — the button exists, the action honestly says so.
+        return problem(501, f"{filename} not present in this deployment",
                        instance=request.url.path)
 
     try:
@@ -122,11 +121,23 @@ async def launch_travel(request: Request):
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
     except Exception as e:
-        logger.error("Travel launch failed: %s", e)
-        return problem(500, f"Travel launch failed: {e}", instance=request.url.path)
+        logger.error("%s launch failed: %s", label, e)
+        return problem(500, f"{label} launch failed: {e}", instance=request.url.path)
 
-    logger.info("Travel backup launched (pid %d): %s", proc.pid, script)
-    return ok(message="Travel backup launched", pid=proc.pid)
+    logger.info("%s launched (pid %d): %s", label, proc.pid, script)
+    return ok(message=f"{label} launched", pid=proc.pid)
+
+
+@router.post("/api/system/travel")
+async def launch_travel(request: Request):
+    """The LEAVING leg: refresh the drive mirror before ejecting."""
+    return _launch_operator_script(request, "travel.cmd", "Travel backup")
+
+
+@router.post("/api/system/travel/return")
+async def launch_travel_return(request: Request):
+    """The RETURNING leg: pull Mac work + transcripts back off the drive."""
+    return _launch_operator_script(request, "travel-return.cmd", "Travel return")
 
 
 @router.post("/api/server/restart")

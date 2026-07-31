@@ -13,6 +13,12 @@ and trigger the pipeline.
 post-sleep or errors on mic start leaves the listener idle, so the
 lock key can never lock a recording that doesn't exist (the "fast
 lock after cold press" dead-hotkey ghost state).
+
+``is_live`` is the reverse channel: the owner reports whether a
+recording is genuinely capturing right now. The listener's own flag
+can desync from reality (the stale-key guard clearing a live
+dictation), and ground truth from the mic outranks event-timing
+heuristics on both the guard and the release path.
 """
 
 import logging
@@ -51,10 +57,12 @@ class HotkeyListener:
         lock_key: Optional[str] = None,
         stop_key: Optional[str] = None,
         on_locked: Optional[Callable[[], None]] = None,
+        is_live: Optional[Callable[[], bool]] = None,
     ):
         self._on_start = on_start
         self._on_stop = on_stop
         self._on_locked = on_locked
+        self._is_live = is_live
         self._hotkey = hotkey
         self._is_chord = isinstance(hotkey, (tuple, list))
         self._lock_key_str = lock_key
@@ -151,8 +159,20 @@ class HotkeyListener:
                 )
                 with self._lock:
                     if self._recording and not self._locked and not is_action_key:
-                        logger.info("Stale-key guard: cleared stuck recording state")
-                        self._recording = False
+                        # A live mic outranks the timing heuristic: a cold-start
+                        # model load blocks the hook thread for seconds inside
+                        # on_start, so the queued duplicate press of a held
+                        # chord key arrives >2s after the last event and looks
+                        # exactly like stale state — clearing here killed the
+                        # release (mute stuck, dictation never processed) until
+                        # the next chord press re-acked (2026-07-31).
+                        if self._is_live is not None and self._is_live():
+                            logger.debug(
+                                "Stale-key guard: mic is live — keeping recording state"
+                            )
+                        else:
+                            logger.info("Stale-key guard: cleared stuck recording state")
+                            self._recording = False
             self._last_key_time = now
             self._current_keys.add(key)
 
@@ -197,11 +217,18 @@ class HotkeyListener:
             # If locked, releasing chord keys does NOT stop recording
             if self._locked:
                 return
-            # Normal: if recording and ANY target key released → stop
+            # Normal: ANY target key released → stop if a recording is live.
+            # is_live is the backstop for a desynced _recording flag: whatever
+            # cleared it, releasing the chord over a live mic must still stop,
+            # unmute, and process — the owner's stop path claims the mic
+            # atomically, so a duplicate stop is a no-op there.
             if key in self._target_keys:
                 with self._lock:
-                    if self._recording:
-                        self._recording = False
+                    live = self._recording or (
+                        self._is_live is not None and self._is_live()
+                    )
+                    self._recording = False
+                    if live:
                         self._on_stop()
         except Exception as e:
             logger.debug("Hotkey on_release error: %s", e)

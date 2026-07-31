@@ -23,13 +23,21 @@ CONFIG = {"model": "test-model", "idle_timeout_s": 600}
 class FakeMic:
     def __init__(self):
         self.started = 0
+        self.stops = 0
+        self._recording = False
 
     def start(self):
         self.started += 1
+        self._recording = True
+
+    def stop(self):
+        self.stops += 1
+        self._recording = False
+        return ([], 16000)
 
     @property
     def is_recording(self):
-        return self.started > 0
+        return self._recording
 
 
 class FakeStreamer:
@@ -200,6 +208,43 @@ class TestSingleFlightModelLoad:
         assert len(errors) == 1
         assert len(results) == 1
         assert results[0] is not None
+
+
+class TestAtomicStopClaim:
+    """_on_record_stop claims the mic on the listener thread.
+
+    After the first stop the mic reads not-recording, so a duplicate stop
+    (second chord key released, or the listener's is_live backstop firing)
+    can never spawn a second pipeline over the same audio.
+    """
+
+    def test_duplicate_stop_spawns_one_pipeline(self, engine, monkeypatch):
+        runs = []
+        monkeypatch.setattr(
+            engine, "_run_pipeline",
+            lambda blocks, rate: runs.append((blocks, rate)),
+        )
+        engine._mic.start()
+
+        engine._on_record_stop()
+        engine._on_record_stop()  # duplicate release — must be a no-op
+
+        deadline = time.time() + 5
+        while len(runs) < 1 and time.time() < deadline:
+            time.sleep(0.01)
+        time.sleep(0.05)  # would catch a second spawn racing in
+        assert engine._mic.stops == 1
+        assert len(runs) == 1
+
+    def test_stop_without_recording_is_noop(self, engine, monkeypatch):
+        runs = []
+        monkeypatch.setattr(
+            engine, "_run_pipeline",
+            lambda blocks, rate: runs.append((blocks, rate)),
+        )
+        engine._on_record_stop()
+        assert engine._mic.stops == 0
+        assert runs == []
 
 
 class TestUnloadModelNow:

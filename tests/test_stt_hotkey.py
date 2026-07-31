@@ -18,12 +18,13 @@ CTRL_R = keyboard.Key.ctrl_r
 
 
 class Harness:
-    """Listener with resolved keys and scripted on_start acks."""
+    """Listener with resolved keys, scripted on_start acks, scripted mic liveness."""
 
     def __init__(self, ack=True):
         self.starts = 0
         self.stops = 0
         self.locks = 0
+        self.live = False  # what is_live reports (the engine's mic ground truth)
         self._ack = ack
         self.listener = HotkeyListener(
             on_start=self._on_start,
@@ -32,6 +33,7 @@ class Harness:
             lock_key="Key.ctrl_r",
             stop_key="Key.ctrl_r",
             on_locked=self._on_locked,
+            is_live=lambda: self.live,
         )
         self.listener._resolve_keys()
 
@@ -154,7 +156,8 @@ class TestLockMode:
 
     def test_stale_guard_still_clears_on_non_action_key(self):
         # Sleep recovery path: after a long dead gap, a chord key press
-        # (not an action key) clears the stuck recording state.
+        # (not an action key) clears the stuck recording state — but only
+        # when the mic is NOT live (is_live False = genuinely stuck).
         h = Harness(ack=True)
         h.press(CTRL_L, CMD)
         assert h.listener.is_recording
@@ -162,3 +165,60 @@ class TestLockMode:
         h.press(CTRL_L)  # ordinary key after the stale gap
         # Guard cleared the stuck state; a fresh full chord re-acks.
         assert h.starts >= 1
+
+
+class TestColdStartGuardMisfire:
+    """THE cold-start dead-release bug (2026-07-31).
+
+    A cold press blocks the hook thread ~4s inside on_start (mic device
+    open under model-load load); the queued duplicate press of a held
+    chord key then lands >2s after the last key event and trips the
+    stale-key guard, clearing _recording while the mic is live. The
+    release then did nothing: mute stuck, dictation never processed,
+    until the next chord press+release re-acked and swept everything.
+    Same root kills lock mode — _recording cleared before the lock key
+    processes, so the lock never engages and the stop key falls through.
+    """
+
+    def test_stale_guard_spares_live_recording(self):
+        h = Harness(ack=True)
+        h.press(CTRL_L, CMD)
+        h.live = True  # mic capturing — the engine's ground truth
+        h.listener._last_key_time = time.time() - 5.0  # hook thread starved
+        h.press(CMD)  # queued duplicate of a held chord key
+        assert h.listener.is_recording  # guard must NOT clear a live dictation
+        h.release(CTRL_L)
+        assert h.stops == 1  # release still processes
+
+    def test_lock_still_engages_after_guard_window(self):
+        # Lock-mode variant: duplicate chord press in the stale window,
+        # then the real lock press — lock must engage, stop must work.
+        h = Harness(ack=True)
+        h.press(CTRL_L, CMD)
+        h.live = True
+        h.listener._last_key_time = time.time() - 5.0
+        h.press(CMD)  # queued duplicate
+        h.press(CTRL_R)  # lock
+        assert h.listener.is_locked
+        h.release(CTRL_L, CMD)
+        h.listener._last_toggle_time = time.time() - 1.0
+        h.press(CTRL_R)  # stop
+        assert h.stops == 1
+
+    def test_release_stops_live_mic_even_when_flag_desynced(self):
+        # Backstop: whatever cleared _recording, releasing the chord over
+        # a live mic must still stop (the engine claims the mic atomically,
+        # so a duplicate stop is a no-op on its side).
+        h = Harness(ack=True)
+        h.press(CTRL_L, CMD)
+        h.live = True
+        h.listener._recording = False  # any desync path
+        h.release(CTRL_L)
+        assert h.stops == 1
+
+    def test_release_with_idle_mic_stays_noop(self):
+        # Normal typing: a bare ctrl release with nothing recording must
+        # not invoke the stop path at all.
+        h = Harness(ack=True)
+        h.release(CTRL_L)
+        assert h.stops == 0

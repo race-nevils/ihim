@@ -252,6 +252,7 @@ class STTEngine:
             lock_key=self._cfg.get("lock_key"),
             stop_key=self._cfg.get("stop_key"),
             on_locked=self._on_record_locked,
+            is_live=lambda: self._mic.is_recording,
         )
 
     @property
@@ -567,30 +568,39 @@ class STTEngine:
         self._apply_dictation_mute(False)  # unmute on same thread where mute worked
         if not self._mic.is_recording:
             return
+        # Claim the audio HERE, on the listener thread — after this call the
+        # mic reads not-recording, so a duplicate stop (second chord key
+        # released, or the listener's is_live backstop firing) can never
+        # spawn a second pipeline over the same audio.
+        try:
+            blocks, rate = self._mic.stop()
+        except Exception:
+            # WAL stays on disk — the boot sweep recovers the audio.
+            logger.error("Mic stop failed on release", exc_info=True)
+            self._set_status("error")
+            return
         threading.Thread(
             target=self._run_pipeline,
+            args=(blocks, rate),
             daemon=True,
             name="stt-pipeline",
         ).start()
 
-    def _run_pipeline(self) -> None:
+    def _run_pipeline(self, blocks: list, rate: int) -> None:
         """Full dictation pipeline: transcribe → cleanup → inject → log."""
         self._set_status("processing")
         start_time = time.time()
         dictation_id = uuid.uuid4().hex[:8]
         wav_path: Optional[Path] = None
-        blocks: list = []
-        rate = 0
         keep_wal = False  # leave the inflight WAL on disk for the boot sweep
 
         try:
             model_name = self._cfg.get("model", "large-v3-turbo")
 
-            # 1. Freeze the audio at release — everything after is dead air.
-            blocks, rate = self._mic.stop()
+            # Audio was frozen at release (mic claimed on the listener thread).
             duration_s = sum(len(b) for b in blocks) / rate if rate else 0.0
 
-            # 2. Transcribe: banked chunks + one bounded final window.
+            # 1. Transcribe: banked chunks + one bounded final window.
             # Deadline watchdog: a wedged GPU hangs encode() forever with no
             # exception (post-sleep CUDA UB, 2026-07-16 — stuck at PROCESSING
             # with 8 minutes of speech). A hung thread can't be killed, so on
@@ -653,23 +663,23 @@ class STTEngine:
                     logger.info("Empty transcript, skipping")
                 return
 
-            # 3. Deterministic cleanup (no LLM, no VRAM) — context-aware
+            # 2. Deterministic cleanup (no LLM, no VRAM) — context-aware
             from tools.stt.cleanup import cleanup_transcript
             cleaned_text = cleanup_transcript(raw_text, context=self._app_context)
 
-            # 4. Inject text into active window
+            # 3. Inject text into active window
             from tools.stt.inject import inject_text
             method = self._cfg.get("injection", {}).get("method", "auto")
             inject_text(cleaned_text, method=method)
 
-            # 5. Success sound
+            # 4. Success sound
             try:
                 from tools.stt.sounds import play_success
                 play_success(self._cfg)
             except Exception:
                 pass
 
-            # 6. Retain audio for voice model training
+            # 5. Retain audio for voice model training
             audio_path = None
             if self._cfg.get("audio_retention", {}).get("enabled", False):
                 if wav_path is None:
@@ -678,7 +688,7 @@ class STTEngine:
                     wav_path, dictation_id, duration_s, self._cfg
                 )
 
-            # 7. Log to JSONL + manifest
+            # 6. Log to JSONL + manifest
             latency_ms = int((time.time() - start_time) * 1000)
             from tools.stt.logger import log_dictation
             record = log_dictation(

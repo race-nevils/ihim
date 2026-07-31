@@ -90,3 +90,39 @@ def test_security_headers_present(client):
 def test_api_responses_not_cached(client):
     resp = client.get("/api/health")
     assert "no-store" in resp.headers.get("Cache-Control", "")
+
+
+def test_travel_launch(client, monkeypatch):
+    """Travel tile endpoint: spawns travel.cmd in a NEW visible console when
+    the script exists beside the workspace, honest 501 when it doesn't.
+    Popen is faked — a test run must never launch the real backup."""
+    import subprocess
+    import sys as _sys
+
+    import api.server as server_mod
+
+    calls = {}
+
+    class FakeProc:
+        pid = 424242
+
+    def fake_popen(cmd, **kwargs):
+        calls["cmd"] = cmd
+        calls["kwargs"] = kwargs
+        return FakeProc()
+
+    monkeypatch.setattr(server_mod.subprocess, "Popen", fake_popen)
+
+    resp = client.post("/api/system/travel")
+    script = server_mod.IHIM_DIR.parent / "scripts" / "travel.cmd"
+
+    if _sys.platform == "win32" and script.is_file():
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["pid"] == 424242
+        assert calls["cmd"][-1].endswith("travel.cmd")
+        # Interactive script: needs its own console, output never captured
+        assert calls["kwargs"]["creationflags"] & subprocess.CREATE_NEW_CONSOLE
+        assert "stdout" not in calls["kwargs"]
+    else:
+        assert resp.status_code == 501
+        assert not calls

@@ -31,6 +31,19 @@ export const TILES = [
     { id: 'meeting_recorder', name: 'Meeting Recorder', icon: 'mic', run: () => panel('recorder-window')?.toggle() },
     { id: 'todo', name: 'To-Do', icon: 'list-todo', run: () => panel('todo-window')?.toggle() },
     { id: 'yt_transcriber', name: 'YT Transcriber', icon: 'play', run: () => panel('yt-window')?.toggle() },
+    // Pure action tile — no window. The server opens travel.cmd in its own
+    // console; that console IS the feedback, the response only carries errors.
+    {
+        id: 'travel', name: 'Travel Backup', icon: 'hard-drive',
+        run: () => fetch('/api/system/travel', { method: 'POST' })
+            .then(async (r) => {
+                if (!r.ok) {
+                    const doc = await r.json().catch(() => ({}));
+                    console.error('Travel launch failed:', r.status, doc.detail || '');
+                }
+            })
+            .catch((err) => console.error('Travel launch failed:', err)),
+    },
 ];
 
 class IhimDesktop extends HTMLElement {

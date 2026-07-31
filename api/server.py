@@ -95,6 +95,40 @@ async def server_status(request: Request):
     }
 
 
+@router.post("/api/system/travel")
+async def launch_travel(request: Request):
+    """Launch the drive-backup script (scripts/travel.cmd in the parent
+    workspace) in its own console window — the desktop tile is a shortcut,
+    nothing more. The script is interactive (progress output + a final
+    pause), so it MUST get a visible console and its output must never be
+    captured; CREATE_NEW_CONSOLE gives the child a fresh console even though
+    this server runs windowless. Fire-and-forget: the operator watches the
+    console, not the API response."""
+    if sys.platform != "win32":
+        return problem(501, "Travel backup is only supported on Windows",
+                       instance=request.url.path)
+
+    script = IHIM_DIR.parent / "scripts" / "travel.cmd"
+    if not script.is_file():
+        # Deployments carved away from the parent workspace don't ship the
+        # backup script — the tile exists, the action honestly says so.
+        return problem(501, "travel.cmd not present in this deployment",
+                       instance=request.url.path)
+
+    try:
+        proc = subprocess.Popen(
+            ["cmd.exe", "/c", str(script)],
+            cwd=str(script.parent),
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+    except Exception as e:
+        logger.error("Travel launch failed: %s", e)
+        return problem(500, f"Travel launch failed: {e}", instance=request.url.path)
+
+    logger.info("Travel backup launched (pid %d): %s", proc.pid, script)
+    return ok(message="Travel backup launched", pid=proc.pid)
+
+
 @router.post("/api/server/restart")
 async def restart_server(request: Request):
     """Restart the live instance via the out-of-tree scheduled task."""

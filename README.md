@@ -1,25 +1,32 @@
-# iHIM — Intelligent Heads-Up Interface Module
+# iHIM: Intelligent Heads-Up Interface Module
 
-Local-first personal dashboard: STT dictation (WASAPI audio stack), meeting recorder, to-dos, YT transcription. FastAPI backend; the frontend is native Web Components end-to-end (every widget is a custom element — windows subclass `IhimPanel`), everything served from one process on `127.0.0.1:7777`.
+A local-first command center for your own machine. Anything you would otherwise run from a terminal, or from a scattered pile of scripts, becomes a window on one desktop. One Python process on `127.0.0.1:7777` serves all of it. No cloud, no account, no build step.
 
-Rebuilt from scratch 2026-06-10 (design + audit: `design-notes/ihim/refactor-2026-06/`). Pre-refactor code archived at `archive/ihim-pre-refactor-20260609/`.
+Today it runs dictation, a meeting recorder, a to-do list and a YouTube transcriber, because those are the things worth not doing by hand. The surface is the point: a widget is one Web Component plus one router, so the next one is a small file rather than a project.
+
+## Stack
+
+- **Backend:** FastAPI, single process, no reloader in normal operation (one process, one PID).
+- **Frontend:** native Web Components end to end. Every widget is a custom element; every window subclasses `IhimPanel`. No framework, no bundler, no transpile. The browser loads the source you wrote.
+- **State:** per-widget JSON file stores under `data/local/`. Window positions, sizes and icon layout mirror to the server, so every client (browser tab or desktop shell) shares one desktop.
+- **GPU:** dictation always wins. Background transcription waits for an idle mic, and unloads its weights mid-job if you start talking.
 
 ## Run
 
 ```powershell
-# canonical (idempotent — no-op if already healthy)
-powershell -File scripts\server.ps1 start            # port 7777
-powershell -File scripts\server.ps1 restart -Port 7778   # test instance
+# canonical (idempotent: no-op if already healthy)
+powershell -File scripts\server.ps1 start                 # port 7777
+powershell -File scripts\server.ps1 restart -Port 7778    # test instance
 powershell -File scripts\server.ps1 status|stop
 
 # direct
-python run.py [--port 7777] [--dev]    # --dev = auto-reload (development only)
+python run.py [--port 7777] [--dev]     # --dev = auto-reload, development only
 ```
 
-- **No reloader in normal operation** — one process, one PID. `--dev` opts in.
-- Test instances: set `IHIM_STT_AUTOSTART=0` so they never grab the global dictation hotkey or GPU.
-- Login autostart: `ihim-master.ahk` (shell:startup) → `server.ps1 start`.
-- Server console: `data/server-console.log` · lifecycle log: `data/server-lifecycle.log`.
+- Login autostart: `start_ihim.vbs` in `shell:startup`, or the resume watchdog (`scripts\install-resume-watchdog.ps1`, run once per machine) which also self-heals a dead port after sleep.
+- Desktop app: `cd desktop && npm install && npm start` runs the Electron shell, which attaches to a running server or spawns one. `npm run make-shortcut` produces a pinnable branded shortcut.
+- Test instances: set `IHIM_STT_AUTOSTART=0` so they never grab the global dictation hotkey or the GPU.
+- Logs: `data/server-console.log` (console) and `data/server-lifecycle.log` (start/stop/restart).
 
 ## Layout
 
@@ -27,39 +34,37 @@ python run.py [--port 7777] [--dev]    # --dev = auto-reload (development only)
 run.py / run_silent.py     entry + silent shim (startup .vbs contract)
 scripts/server.ps1         the ONLY start/stop/restart/status tool
 api/
-  main.py                  app factory — explicit router registration
+  main.py                  app factory, explicit router registration
   runtime.py middleware.py errors.py responses.py site.py server.py
   stt/ recorder/         dictation + meeting recorder (shared whisper core)
   yt/ preferences.py todos.py
-tools/stt/               dictation engine (hotkey→capture→transcribe→inject)
-                           data/ = dictation history + voice-training audio
+tools/stt/               dictation engine (hotkey -> capture -> transcribe -> inject)
 data/local/                per-widget file stores (todos.json, yt/ job sidecars,
-                           brain/Meetings/ JSON-LD written by the recorder)
+                           meeting JSON-LD written by the recorder)
+desktop/                   thin Electron shell (attach or spawn, tray, watchdog)
 ui/                        index.html + static/js (components/ = all widgets) + style.css
 tests/                     pytest
 ```
 
 ## Widgets
 
-STT (speech-to-text dictation — history/copy/correct/vocab, SSE status; engine subsystem stays `stt` in paths/APIs) · Meeting Recorder (taskbar chip shows a red outline while recording) · To-Do (quick-capture list grouped by category — `data/local/todos.json`) · YT Transcriber · CPU/RAM bar · Taskbar (Windows-style bottom-bar chip per open window — click to minimize/restore, drag to reorder, state persists across reloads) · top-right ⋮ options menu (screen-level actions: Restart Server). *Stopwatch and Health both deleted 2026-07-27; Health took `api/health/` with it, orphaned markdown content remains at `data/health/`.*
-
-*Vault deleted 2026-07-17: widget, `api/vault/`, and the task_status query layer — replaced by the To-Do widget.*
-
-*Google Calendar deleted 2026-07-17: widget, `api/calendar/`, brain auto-push, and the rebuild GCal executor.*
-
-*Brain ingestion pipeline deleted 2026-07-27: `api/brain/`, `api/graph/`, `handlers/`, `adapters/`, `orchestrator/`, and the `data/` code modules (`database.py`, `ingest.py`, `jsonld.py`, `rebuild/`, ...). Verified consumer-free before removal: no widget called `/api/brain` or `/api/graph`, and the meeting recorder writes its JSON-LD self-contained. Data files under `data/` (brain.db, data/local/brain/) left on disk untouched.*
-
-*agent node deleted 2026-07-17: bar chip, window, and `api/agentnode/` proxy. The agent node itself and its blueprint (`agent-node-blueprint/`) are untouched — this removed only the in-app control surface.*
+- **Dictation** (speech to text): hold a chord, talk, text lands in the focused field. History, copy, correction and a custom vocabulary; live status over SSE. The engine subsystem is named `stt` in paths and APIs.
+- **Meeting Recorder:** captures mic and system audio, transcribes locally, writes a self-contained JSON-LD record per meeting. The taskbar chip carries a red outline while recording.
+- **To-Do:** quick-capture list grouped by category.
+- **YouTube Transcriber:** queue a URL, get a local transcript. FIFO queue, one GPU job at a time, transcript text copied out by path.
+- **CPU/RAM bar** and a Windows-style **taskbar**: one chip per open window, click to minimize or restore, drag to reorder, state persists across reloads.
+- **Options menu** (top right): screen-level actions such as Restart Server.
 
 ## Architecture notes
 
-- **Zero WebSockets.** STT status = SSE (`/api/stt/status/stream`); everything else polls. Nothing to leak or drop.
-- Errors are RFC 9457 `application/problem+json`; success uses `{"success": true}` envelopes.
-- CSP/security headers on every response (report-only CSP while UI stabilizes).
-- Frontend cache busting: per-boot `BOOT_ID` importmap + 3s `/api/boot-id` polling → edits to ui/ hot-reload the page without a server restart.
+- **Zero WebSockets.** Dictation status is SSE (`/api/stt/status/stream`); everything else polls. Nothing to leak or drop.
+- Errors are RFC 9457 `application/problem+json`. Successes use `{"success": true}` envelopes.
+- Security headers on every response, including a report-only CSP while the UI stabilizes.
+- Cache busting without a build: a per-boot `BOOT_ID` importmap plus a 3s `/api/boot-id` poll, so edits under `ui/` reload the page without restarting the server.
+- The desktop surface never scrolls. Scrolling lives inside windows only, and icon positions are stored as fractions of the desktop's usable travel so a resize preserves the layout.
 
-## Test gates
+## Tests
 
 ```powershell
-cd IHIM && python -m pytest                          # route + guard tests
+python -m pytest        # route, guard and dictation-engine tests
 ```

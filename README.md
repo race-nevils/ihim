@@ -1,13 +1,13 @@
 # iHIM: Intelligent Heads-Up Interface Module
 
-A local-first command center for your own machine. Anything you would otherwise run from a terminal, or from a scattered pile of scripts, becomes a window on one desktop. One Python process on `127.0.0.1:7777` serves all of it. No cloud, no account, no build step.
+A local-first command center for your own machine. Anything you would otherwise run from a terminal, or from a scattered pile of scripts, becomes a window on one desktop. One Python process on `127.0.0.1:7777` serves all of it.
 
-Today it runs dictation, a meeting recorder, a to-do list and a YouTube transcriber, because those are the things worth not doing by hand. The surface is the point: a widget is one Web Component plus one router, so the next one is a small file rather than a project.
+Today it runs dictation, a meeting recorder, a to-do list and a YouTube transcriber. A widget is one Web Component plus one router, so adding the next one is a small file rather than a project.
 
 ## Stack
 
-- **Backend:** FastAPI, single process, no reloader in normal operation (one process, one PID).
-- **Frontend:** native Web Components end to end. Every widget is a custom element; every window subclasses `IhimPanel`. No framework, no bundler, no transpile. The browser loads the source you wrote.
+- **Backend:** FastAPI, with no reloader in normal operation. One process, one PID.
+- **Frontend:** native Web Components end to end. Every widget is a custom element; every window subclasses `IhimPanel`. The browser loads the source files as written, with no build step between the repo and the running app.
 - **State:** per-widget JSON file stores under `data/local/`. Window positions, sizes and icon layout mirror to the server, so every client (browser tab or desktop shell) shares one desktop.
 - **GPU:** dictation always wins. Background transcription waits for an idle mic, and unloads its weights mid-job if you start talking.
 
@@ -48,7 +48,7 @@ tests/                     pytest
 
 ## Widgets
 
-- **Dictation** (speech to text): hold a chord, talk, text lands in the focused field. History, copy, correction and a custom vocabulary; live status over SSE. The engine subsystem is named `stt` in paths and APIs.
+- **Dictation** (speech to text): hold a chord, talk, text lands in the focused field. History, copy, correction and a custom vocabulary, with live status over SSE.
 - **Meeting Recorder:** captures mic and system audio, transcribes locally, writes a self-contained JSON-LD record per meeting. The taskbar chip carries a red outline while recording.
 - **To-Do:** quick-capture list grouped by category.
 - **YouTube Transcriber:** queue a URL, get a local transcript. FIFO queue, one GPU job at a time, transcript text copied out by path.
@@ -57,9 +57,9 @@ tests/                     pytest
 
 ## Architecture notes
 
-- **Zero WebSockets.** Dictation status is SSE (`/api/stt/status/stream`); everything else polls. Nothing to leak or drop.
+- **Push is SSE, not WebSockets.** Dictation status streams from `/api/stt/status/stream`; everything else polls.
 - Errors are RFC 9457 `application/problem+json`. Successes use `{"success": true}` envelopes.
-- Security headers on every response, including a report-only CSP while the UI stabilizes.
+- Security headers on every response, including a report-only CSP.
 - Cache busting without a build: a per-boot `BOOT_ID` importmap plus a 3s `/api/boot-id` poll, so edits under `ui/` reload the page without restarting the server.
 - The desktop surface never scrolls. Scrolling lives inside windows only, and icon positions are stored as fractions of the desktop's usable travel so a resize preserves the layout.
 

@@ -2,7 +2,7 @@
 
 A personal app platform and control plane for local tooling. Each tool runs as a widget in its own window on a browser desktop, and one Python process on localhost serves all of it.
 
-It currently holds dictation, a meeting recorder, a to-do list, a YouTube transcriber, and a Travel tile that runs the two scripts I use to carry work between machines on an external drive. Each widget is one Web Component and one router, so the next one takes a single file.
+A widget is one Web Component, straight off the MDN standard, plus one router, so the next one takes a single file. Any local tool or script can live here. Mine run Whisper models locally for a STT Flow inspired dictation app, a meeting recorder and a YouTube transcriber, and a Travel tile fronts the pair of scripts I use to carry work between machines on an external drive. The repetitive things I do by hand keep turning into widgets.
 
 ## Stack
 

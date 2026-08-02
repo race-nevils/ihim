@@ -1,6 +1,6 @@
 # iHIM: Intelligent Heads-Up Interface Module
 
-A personal app platform and control plane for local tooling. Each tool runs as a widget in its own window on a browser desktop, and one Python process on `127.0.0.1:7777` serves all of it.
+A personal app platform and control plane for local tooling. Each tool runs as a widget in its own window on a browser desktop, and one Python process on localhost serves all of it.
 
 It currently holds dictation, a meeting recorder, a to-do list, a YouTube transcriber, and a Travel tile that runs the two scripts I use to carry work between machines on an external drive. Each widget is one Web Component and one router, so the next one takes a single file.
 

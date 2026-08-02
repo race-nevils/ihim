@@ -2,7 +2,7 @@
 
 A personal app platform and control plane for local tooling. Each tool runs as a widget in its own window on a browser desktop, and one Python process on `127.0.0.1:7777` serves all of it.
 
-Today it runs dictation, a meeting recorder, a to-do list and a YouTube transcriber. A widget is one Web Component plus one router, so the next one is a small file.
+It currently holds dictation, a meeting recorder, a to-do list, a YouTube transcriber, and a Travel tile that runs the two scripts I use to carry work between machines on an external drive. Each widget is one Web Component and one router, so the next one takes a single file.
 
 ## Stack
 
@@ -52,6 +52,7 @@ tests/                     pytest
 - **Meeting Recorder:** captures mic and system audio, transcribes locally, writes a self-contained JSON-LD record per meeting. The taskbar chip carries a red outline while recording.
 - **To-Do:** quick-capture list grouped by category.
 - **YouTube Transcriber:** queue a URL, get a local transcript. FIFO queue, one GPU job at a time, transcript text copied out by path.
+- **Travel:** two buttons over the scripts for moving work between machines on an external drive. Leaving refreshes the drive and ejects it; Returning pulls the work back in. Each launches its script in its own console, so that console is the feedback.
 - **CPU/RAM bar** and a Windows-style **taskbar**: one chip per open window, click to minimize or restore, drag to reorder, state persists across reloads.
 - **Options menu** (top right): screen-level actions such as Restart Server.
 

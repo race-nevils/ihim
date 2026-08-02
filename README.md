@@ -1,6 +1,6 @@
 # iHIM: Intelligent Heads-Up Interface Module
 
-A local-first command center for your own machine. Anything you would otherwise run from a terminal, or from a scattered pile of scripts, becomes a window on one desktop. One Python process on `127.0.0.1:7777` serves all of it.
+A personal app platform and control plane for local tooling. Anything you would otherwise run from a terminal, or from a scattered pile of scripts, becomes a window on one desktop. One Python process on `127.0.0.1:7777` serves all of it.
 
 Today it runs dictation, a meeting recorder, a to-do list and a YouTube transcriber. A widget is one Web Component plus one router, so adding the next one is a small file rather than a project.
 

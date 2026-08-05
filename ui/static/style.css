@@ -144,70 +144,20 @@ body {
        lives INSIDE windows (stt history, recorder lists, etc.) only. */
     overflow: hidden;
 
-    /* ARC REACTOR RADIATING ENERGY BACKGROUND */
+    /* Ember corners over a vertical fade: the crimson corner gradient
+       on the top-right, mirrored on the top-left, both fading toward
+       the middle; the fade underneath shows through the center wedge
+       between them. One continuous surface. */
     background:
-        /* Outer energy ring - subtle crimson glow */
-        radial-gradient(ellipse at 50% 50%,
-            transparent 0%,
-            transparent 40%,
-            rgba(139, 0, 0, 0.08) 60%,
-            rgba(80, 0, 0, 0.15) 80%,
-            rgba(40, 0, 0, 0.2) 100%),
-        /* Middle energy pulse - orange/gold power */
-        radial-gradient(ellipse at 50% 50%,
-            rgba(180, 80, 20, 0.05) 0%,
-            rgba(139, 50, 10, 0.08) 30%,
-            transparent 60%),
-        /* Core intensity - deep red center */
-        radial-gradient(circle at 50% 50%,
-            rgba(100, 20, 20, 0.1) 0%,
-            rgba(60, 10, 10, 0.05) 20%,
-            transparent 40%),
-        /* Electric static noise texture */
-        repeating-radial-gradient(circle at 50% 50%,
-            transparent 0px,
-            transparent 2px,
-            rgba(80, 30, 30, 0.03) 2px,
-            rgba(80, 30, 30, 0.03) 4px),
-        /* Base - void black */
-        radial-gradient(ellipse at 50% 50%,
-            #0d0808 0%,
-            #080505 50%,
-            #050303 100%);
+        linear-gradient(215deg, rgba(220, 20, 60, 0.07) 0%, transparent 35%),
+        linear-gradient(145deg, rgba(220, 20, 60, 0.07) 0%, transparent 35%),
+        linear-gradient(180deg, #121212 0%, #0a0a0a 45%, #060606 100%);
 
     background-attachment: fixed;
 }
 
-/* === Scanline Overlay === */
-body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: repeating-linear-gradient(0deg,
-            transparent 0px,
-            transparent 2px,
-            rgba(0, 0, 0, 0.03) 2px,
-            rgba(0, 0, 0, 0.03) 4px);
-    pointer-events: none;
-    z-index: 1;
-}
-
-@keyframes gridBreathe {
-
-    0%,
-    100% {
-        opacity: 0.4;
-        background-size: 60px 60px;
-    }
-
-    50% {
-        opacity: 0.7;
-        background-size: 62px 62px;
-    }
-}
-
 /* ============================================ */
-/* HUD CORNER DECORATIONS                       */
+/* DESKTOP-SHELL TITLE BAR                      */
 /* ============================================ */
 /* Desktop-shell title bar — rendered ONLY in the Electron app ([data-shell]
    is stamped by index.html when the shell preload is present).
@@ -262,95 +212,6 @@ body::after {
 [data-shell] ihim-options {
     top: 62px;
 }
-
-/* The HUD frame hugs the viewport (fixed, inset 0) — in-shell its top edge
-   must start below the strip or the top corners clip under it */
-[data-shell] .hud-corners {
-    top: 36px;
-}
-
-.hud-corners {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 5;
-}
-
-.hud-corner {
-    position: absolute;
-    width: 60px;
-    height: 60px;
-    border-color: #4a4a4a;
-    /* Gunmetal - hard metallic border */
-    border-style: solid;
-    border-width: 0;
-    opacity: 0.5;
-    transition: opacity var(--duration-normal) ease;
-}
-
-.hud-corner::before {
-    content: '';
-    position: absolute;
-    width: 8px;
-    height: 8px;
-    background: #555555;
-    /* Metallic highlight, not glow */
-    opacity: 0.7;
-}
-
-.hud-corner-tl {
-    top: 16px;
-    left: 16px;
-    border-top-width: 2px;
-    border-left-width: 2px;
-    /* No animation - static metallic frame */
-}
-
-.hud-corner-tl::before {
-    top: -1px;
-    left: -1px;
-}
-
-.hud-corner-tr {
-    top: 16px;
-    right: 16px;
-    border-top-width: 2px;
-    border-right-width: 2px;
-    /* No animation - static metallic frame */
-}
-
-.hud-corner-tr::before {
-    top: -1px;
-    right: -1px;
-}
-
-.hud-corner-bl {
-    bottom: 52px;
-    left: 16px;
-    border-bottom-width: 2px;
-    border-left-width: 2px;
-    /* No animation - static metallic frame */
-}
-
-.hud-corner-bl::before {
-    bottom: -1px;
-    left: -1px;
-}
-
-.hud-corner-br {
-    bottom: 52px;
-    right: 16px;
-    border-bottom-width: 2px;
-    border-right-width: 2px;
-    /* No animation - static metallic frame */
-}
-
-.hud-corner-br::before {
-    bottom: -1px;
-    right: -1px;
-}
-
-/* Corner pulse animations removed - static metallic frame instead */
 
 .container {
     position: relative;
@@ -1259,16 +1120,6 @@ ihim-options {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
-    }
-
-    body::before,
-    body::after {
-        animation: none;
-    }
-
-    .hud-corner {
-        animation: none;
-        opacity: 0.4;
     }
 
     .action-btn {

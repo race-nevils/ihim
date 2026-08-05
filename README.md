@@ -52,7 +52,7 @@ tests/                     pytest
 - **Meeting Recorder:** captures mic and system audio, transcribes locally, writes a self-contained JSON-LD record per meeting. The taskbar chip carries a red outline while recording.
 - **To-Do:** quick-capture list grouped by category.
 - **YouTube Transcriber:** queue a URL, get a local transcript. FIFO queue, one GPU job at a time, transcript text copied out by path.
-- **Travel:** two buttons over the scripts for moving work between machines on an external drive. Leaving refreshes the drive and ejects it; Returning pulls the work back in. Each launches its script in its own console, so that console is the feedback.
+- **Sneakernet:** two buttons over the scripts for moving work between machines on an external drive. Leaving refreshes the drive and ejects it; Returning pulls the work back in. Each asks for confirmation, then launches its script in its own console, so that console is the feedback.
 - **CPU/RAM bar** and a Windows-style **taskbar**: one chip per open window, click to minimize or restore, drag to reorder, state persists across reloads.
 - **Options menu** (top right): screen-level actions such as Restart Server.
 

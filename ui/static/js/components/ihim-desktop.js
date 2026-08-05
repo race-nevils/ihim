@@ -31,7 +31,7 @@ export const TILES = [
     { id: 'meeting_recorder', name: 'Meeting Recorder', icon: 'mic', run: () => panel('recorder-window')?.toggle() },
     { id: 'todo', name: 'To-Do', icon: 'list-todo', run: () => panel('todo-window')?.toggle() },
     { id: 'yt_transcriber', name: 'YT Transcriber', icon: 'play', run: () => panel('yt-window')?.toggle() },
-    { id: 'travel', name: 'Travel', icon: 'hard-drive', run: () => panel('travel-window')?.toggle() },
+    { id: 'offline sync', name: 'Sneakernet', icon: 'hard-drive', run: () => panel('offline sync-window')?.toggle() },
 ];
 
 class IhimDesktop extends HTMLElement {

@@ -1675,12 +1675,14 @@ ihim-options {
 
 
 /* ============================================ */
-/* TRAVEL WINDOW                                */
+/* SNEAKERNET WINDOW                            */
 /* ============================================ */
 
 /* Two operator actions (Leaving / Returning) — each launches its script in
-   its own console; the window closes on launch, so it stays a chooser. */
-.travel-window {
+   its own console; the window closes on launch, so it stays a chooser.
+   min-* floor: a persisted inline size can never shrink the glass below
+   its content (the selector-list rule below). */
+.offline sync-window {
     position: fixed;
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur));
@@ -1689,15 +1691,17 @@ ihim-options {
     border-radius: var(--radius-md);
     padding: var(--space-3);
     width: 320px;
+    min-width: 320px;
+    min-height: max-content;
 }
 
-.travel-body {
+.offline sync-body {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
 }
 
-.travel-action {
+.offline sync-action {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -1711,21 +1715,21 @@ ihim-options {
     transition: border-color var(--duration-fast) ease;
 }
 
-.travel-action:hover {
+.offline sync-action:hover {
     border-color: var(--accent-red);
 }
 
-.travel-action-name {
+.offline sync-action-name {
     color: var(--text-primary);
     font-weight: 600;
 }
 
-.travel-action-desc {
+.offline sync-action-desc {
     color: var(--text-tertiary);
     font-size: 0.8rem;
 }
 
-.travel-error {
+.offline sync-error {
     color: var(--status-error);
     font-size: 0.8rem;
     padding: var(--space-1) var(--space-2);
@@ -1741,24 +1745,24 @@ ihim-options {
    prevent collapse. Stacking order is managed by click-to-focus in
    ihim-panel.js (pointerdown raises). A new window element MUST join this list. */
 ihim-panel, ihim-stt, ihim-recorder,
-ihim-todo, ihim-yt, ihim-travel { position: fixed; z-index: 100; -webkit-app-region: no-drag; }
+ihim-todo, ihim-yt, ihim-offline sync { position: fixed; z-index: 100; -webkit-app-region: no-drag; }
 /* Fixed overlays that can reach the shell's top-bar drag strip opt out too
    (ihim-options carries no-drag in its own block) */
 .bottom-bar { -webkit-app-region: no-drag; }
 ihim-panel:not([open]), ihim-stt:not([open]), ihim-recorder:not([open]),
-ihim-todo:not([open]), ihim-yt:not([open]), ihim-travel:not([open]) { display: none; }
+ihim-todo:not([open]), ihim-yt:not([open]), ihim-offline sync:not([open]) { display: none; }
 ihim-panel[open], ihim-stt[open], ihim-recorder[open],
-ihim-todo[open], ihim-yt[open], ihim-travel[open] { display: flex; flex-direction: column; }
+ihim-todo[open], ihim-yt[open], ihim-offline sync[open] { display: flex; flex-direction: column; }
 /* Minimized: still "running" ([open] kept, taskbar chip shown) but hidden */
 ihim-panel[open].minimized, ihim-stt[open].minimized, ihim-recorder[open].minimized,
-ihim-todo[open].minimized, ihim-yt[open].minimized, ihim-travel[open].minimized { display: none; }
+ihim-todo[open].minimized, ihim-yt[open].minimized, ihim-offline sync[open].minimized { display: none; }
 
 /* Maximized fills the desktop above the bottom bar. Percentages/vh resolve
    against the viewport on a fixed-position element, so a viewport resize
    tracks free — and the !important lets the attribute win over the inline
    drag/resize geometry, which stays untouched underneath for restore. */
 ihim-panel[maximized], ihim-stt[maximized], ihim-recorder[maximized],
-ihim-todo[maximized], ihim-yt[maximized], ihim-travel[maximized] {
+ihim-todo[maximized], ihim-yt[maximized], ihim-offline sync[maximized] {
     left: 0 !important;
     top: 0 !important;
     width: 100vw !important;
@@ -1770,7 +1774,7 @@ ihim-todo[maximized], ihim-yt[maximized], ihim-travel[maximized] {
 [data-shell] ihim-panel[maximized], [data-shell] ihim-stt[maximized],
 [data-shell] ihim-recorder[maximized],
 [data-shell] ihim-todo[maximized], [data-shell] ihim-yt[maximized],
-[data-shell] ihim-travel[maximized] {
+[data-shell] ihim-offline sync[maximized] {
     top: 36px !important;
     height: calc(100vh - 72px) !important;
 }

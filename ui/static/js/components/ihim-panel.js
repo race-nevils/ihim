@@ -174,8 +174,14 @@ export class IhimPanel extends HTMLElement {
             for (const entry of entries) {
                 // Viewport-fill is not a size choice — don't overwrite the saved size
                 if (this.hasAttribute('maximized')) continue;
-                const w = Math.round(entry.contentRect.width);
-                const h = Math.round(entry.contentRect.height);
+                // Border-box, NOT contentRect: the saved size is re-applied as
+                // style.width/height, which under the global border-box sizing
+                // sets the border box — persisting the (padding-excluded)
+                // contentRect shrank every window by its padding per cycle
+                // until content overflowed the glass.
+                const box = entry.borderBoxSize?.[0];
+                const w = Math.round(box ? box.inlineSize : entry.target.getBoundingClientRect().width);
+                const h = Math.round(box ? box.blockSize : entry.target.getBoundingClientRect().height);
                 if (w === 0 || h === 0) continue;
                 const c = clamp(w, h);
                 persist(sizeKey, JSON.stringify(c));

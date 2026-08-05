@@ -97,7 +97,7 @@ async def server_status(request: Request):
 
 def _launch_operator_script(request: Request, filename: str, label: str):
     """Launch an operator script (scripts/<filename> in the parent workspace)
-    in its own console window — the Travel window's buttons are shortcuts,
+    in its own console window — the Sneakernet window's buttons are shortcuts,
     nothing more. The scripts are interactive (progress output + a final
     pause), so they MUST get a visible console and their output must never be
     captured; CREATE_NEW_CONSOLE gives the child a fresh console even though
@@ -131,13 +131,13 @@ def _launch_operator_script(request: Request, filename: str, label: str):
 @router.post("/api/system/travel")
 async def launch_travel(request: Request):
     """The LEAVING leg: refresh the drive mirror before ejecting."""
-    return _launch_operator_script(request, "travel.cmd", "Travel backup")
+    return _launch_operator_script(request, "travel.cmd", "Leaving")
 
 
 @router.post("/api/system/travel/return")
 async def launch_travel_return(request: Request):
     """The RETURNING leg: pull Mac work + transcripts back off the drive."""
-    return _launch_operator_script(request, "travel-return.cmd", "Travel return")
+    return _launch_operator_script(request, "travel-return.cmd", "Returning")
 
 
 @router.post("/api/server/restart")

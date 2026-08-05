@@ -93,7 +93,7 @@ def test_api_responses_not_cached(client):
 
 
 def test_travel_launch(client, monkeypatch):
-    """Travel tile endpoint: spawns travel.cmd in a NEW visible console when
+    """Sneakernet Leaving endpoint: spawns travel.cmd in a NEW visible console when
     the script exists beside the workspace, honest 501 when it doesn't.
     Popen is faked — a test run must never launch the real backup."""
     import subprocess

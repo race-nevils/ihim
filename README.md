@@ -1,6 +1,6 @@
 # iHIM: Intelligent Heads-Up Interface Module
 
-iHIM is an Electron desktop app served end to end by one Python process on localhost. Each tool runs as a widget in its own window on the dashboard.
+iHIM is a dashboard of custom tools, each running as a widget in its own window. It's an Electron desktop app served end to end by one Python process on localhost.
 
 A widget is a Web Component with an API behind it. Any local tool or script can live here. My dictation app, meeting recorder, and YouTube transcriber all run Whisper locally. Another widget wraps the two scripts I use to move work between machines on an external drive.
 

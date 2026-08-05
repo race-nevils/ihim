@@ -1,13 +1,13 @@
 # iHIM: Intelligent Heads-Up Interface Module
 
-A local-first command center for your own machine. Anything you would otherwise run from a terminal, or from a scattered pile of scripts, becomes a window on one desktop. One Python process on `127.0.0.1:7777` serves all of it. No cloud, no account, no build step.
+A personal app platform and control plane for local tooling. Each tool runs as a widget in its own window on a browser desktop, and one Python process on localhost serves all of it.
 
-Today it runs dictation, a meeting recorder, a to-do list and a YouTube transcriber, because those are the things worth not doing by hand. The surface is the point: a widget is one Web Component plus one router, so the next one is a small file rather than a project.
+A widget is a Web Component with an API behind it. Any local tool or script can live here. My dictation app, meeting recorder, and YouTube transcriber all run Whisper locally. Another widget wraps the two scripts I use to move work between machines on an external drive.
 
 ## Stack
 
-- **Backend:** FastAPI, single process, no reloader in normal operation (one process, one PID).
-- **Frontend:** native Web Components end to end. Every widget is a custom element; every window subclasses `IhimPanel`. No framework, no bundler, no transpile. The browser loads the source you wrote.
+- **Backend:** FastAPI on a single process with a stable PID. The reloader is a development flag.
+- **Frontend:** native Web Components end to end. Every widget is a custom element; every window subclasses `IhimPanel`. The browser loads the source files straight from the repo.
 - **State:** per-widget JSON file stores under `data/local/`. Window positions, sizes and icon layout mirror to the server, so every client (browser tab or desktop shell) shares one desktop.
 - **GPU:** dictation always wins. Background transcription waits for an idle mic, and unloads its weights mid-job if you start talking.
 
@@ -25,7 +25,7 @@ python run.py [--port 7777] [--dev]     # --dev = auto-reload, development only
 
 - Login autostart: `start_ihim.vbs` in `shell:startup`, or the resume watchdog (`scripts\install-resume-watchdog.ps1`, run once per machine) which also self-heals a dead port after sleep.
 - Desktop app: `cd desktop && npm install && npm start` runs the Electron shell, which attaches to a running server or spawns one. `npm run make-shortcut` produces a pinnable branded shortcut.
-- Test instances: set `IHIM_STT_AUTOSTART=0` so they never grab the global dictation hotkey or the GPU.
+- Test instances: set `IHIM_STT_AUTOSTART=0` to leave the global dictation hotkey and the GPU to the main instance.
 - Logs: `data/server-console.log` (console) and `data/server-lifecycle.log` (start/stop/restart).
 
 ## Layout
@@ -48,20 +48,21 @@ tests/                     pytest
 
 ## Widgets
 
-- **Dictation** (speech to text): hold a chord, talk, text lands in the focused field. History, copy, correction and a custom vocabulary; live status over SSE. The engine subsystem is named `stt` in paths and APIs.
+- **Dictation** (speech to text): hold a chord, talk, text lands in the focused field. History, copy, correction and a custom vocabulary, with live status over SSE.
 - **Meeting Recorder:** captures mic and system audio, transcribes locally, writes a self-contained JSON-LD record per meeting. The taskbar chip carries a red outline while recording.
 - **To-Do:** quick-capture list grouped by category.
 - **YouTube Transcriber:** queue a URL, get a local transcript. FIFO queue, one GPU job at a time, transcript text copied out by path.
+- **Travel:** two buttons over the scripts for moving work between machines on an external drive. Leaving refreshes the drive and ejects it; Returning pulls the work back in. Each launches its script in its own console, so that console is the feedback.
 - **CPU/RAM bar** and a Windows-style **taskbar**: one chip per open window, click to minimize or restore, drag to reorder, state persists across reloads.
 - **Options menu** (top right): screen-level actions such as Restart Server.
 
 ## Architecture notes
 
-- **Zero WebSockets.** Dictation status is SSE (`/api/stt/status/stream`); everything else polls. Nothing to leak or drop.
+- **Push is SSE.** Dictation status streams from `/api/stt/status/stream`; everything else polls.
 - Errors are RFC 9457 `application/problem+json`. Successes use `{"success": true}` envelopes.
-- Security headers on every response, including a report-only CSP while the UI stabilizes.
-- Cache busting without a build: a per-boot `BOOT_ID` importmap plus a 3s `/api/boot-id` poll, so edits under `ui/` reload the page without restarting the server.
-- The desktop surface never scrolls. Scrolling lives inside windows only, and icon positions are stored as fractions of the desktop's usable travel so a resize preserves the layout.
+- Security headers on every response, including a report-only CSP.
+- Cache busting: a per-boot `BOOT_ID` importmap plus a 3s `/api/boot-id` poll. Edits under `ui/` reload the page while the server keeps running.
+- Scrolling lives inside windows. Icon positions are stored as fractions of the desktop's usable travel, so a resize preserves the layout.
 
 ## Tests
 

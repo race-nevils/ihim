@@ -1,4 +1,4 @@
-"""Dashboard shell serving: root HTML, PWA assets, boot-id cache busting.
+"""Dashboard shell serving: root HTML + boot-id cache busting.
 
 Cache-busting model (carried from the proven pre-refactor design):
 - BOOT_ID regenerates per server start; an inline importmap rewrites every
@@ -23,8 +23,6 @@ router = APIRouter(tags=["site"])
 
 _STATIC_DIR = UI_DIR / "static"
 _INDEX_PATH = UI_DIR / "index.html"
-_MANIFEST_PATH = UI_DIR / "manifest.json"
-_SW_PATH = UI_DIR / "sw.js"
 
 
 def _build_import_map(boot_id: str) -> str:
@@ -73,23 +71,3 @@ async def root():
 async def boot_id():
     """Boot ID + static fingerprint; the frontend polls this to self-reload."""
     return {"boot_id": BOOT_ID, "static_fp": _static_fingerprint()}
-
-
-@router.get("/manifest.json")
-async def manifest():
-    """W3C Web App Manifest (PWA installability)."""
-    if not _MANIFEST_PATH.exists():
-        return problem(404, "manifest.json not found")
-    return Response(content=_MANIFEST_PATH.read_bytes(), media_type="application/manifest+json")
-
-
-@router.get("/sw.js")
-async def service_worker():
-    """Service worker, served from root scope."""
-    if not _SW_PATH.exists():
-        return problem(404, "sw.js not found")
-    return Response(
-        content=_SW_PATH.read_bytes(),
-        media_type="application/javascript",
-        headers={"Service-Worker-Allowed": "/"},
-    )

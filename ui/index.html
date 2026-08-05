@@ -8,8 +8,6 @@
     <!-- Lucide Icons (self-hosted, pinned to v1.14.0) -->
     <script src="/static/js/vendor/lucide.min.js?v=__BOOT_ID__"></script>
     <link rel="stylesheet" href="/static/style.css?v=__BOOT_ID__">
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#00d4ff">
 </head>
 
 <body>
@@ -143,10 +141,16 @@
     })();
     </script>
 
-    <!-- Service Worker registration (PWA) -->
+    <!-- No service worker — the reload contract is the boot-id poll above.
+         Deleting a worker's file does NOT clear registrations already
+         installed in a profile (the last fetched worker stays active), so
+         clear any left by the retired PWA lane, plus its shell cache. -->
     <script>
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
+        navigator.serviceWorker.getRegistrations()
+            .then(function(regs) { regs.forEach(function(r) { r.unregister(); }); })
+            .catch(function() {});
+        if (window.caches) caches.delete('ihim-shell-v1').catch(function() {});
     }
     </script>
 

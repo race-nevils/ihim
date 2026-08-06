@@ -99,16 +99,14 @@
     --glass-border: rgba(255, 255, 255, 0.06);
     --glass-blur: 12px;
 
-    /* === Shadows & Glows (Metallic Hard Shadows) === */
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+    /* === Shadows (Metallic Hard Shadows) ===
+       BAN: no blurred/diffuse box-shadow halos on any surface — on this dark
+       UI a wide blur reads as a glow ring. Edge treatment is the 1px border.
+       Short directional shadows below are the allowed ceiling; never add a
+       --shadow-* elevation halo back here. */
     --glow-red: 0 2px 4px rgba(139, 0, 0, 0.5);
     /* Sharp shadow, not glow */
-    --glow-red-strong: 0 4px 8px rgba(139, 0, 0, 0.6);
     --glow-red-subtle: 0 1px 2px rgba(139, 0, 0, 0.3);
-    --glow-gold: 0 2px 4px rgba(184, 134, 11, 0.4);
-    --glow-gold-strong: 0 4px 8px rgba(184, 134, 11, 0.5);
 
     /* === Animation Timings === */
     --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
@@ -838,7 +836,6 @@ header .subtitle {
 
 .status-dot.active {
     background: var(--status-success);
-    box-shadow: 0 0 8px var(--status-success);
 }
 
 .status-dot.active::after {
@@ -1578,9 +1575,13 @@ ihim-arc-menu {
    ihim-panel.js (pointerdown raises). A new window element MUST join this list.
 
    This rule IS the window chrome: every open window shares the one glass
-   shell (background, border, radius, padding, shadow). Per-window classes
+   shell (background, border, radius, padding). Per-window classes
    carry only dimensions and resize behavior — never surface styling, so
-   the windows can't drift apart again. */
+   the windows can't drift apart again.
+
+   NO box-shadow here, ever: a blurred shadow around a rounded card on this
+   dark desktop renders as a glow halo (standing ban, 2026-07-18). The
+   1px border IS the edge treatment. */
 ihim-panel, ihim-stt, ihim-recorder,
 ihim-todo, ihim-yt, ihim-offline sync {
     position: fixed;
@@ -1592,7 +1593,6 @@ ihim-todo, ihim-yt, ihim-offline sync {
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     padding: var(--space-3);
-    box-shadow: var(--shadow-lg);
     overflow: hidden;
 }
 /* Fixed overlays opt out of the shell's drag regions (the arc menu carries

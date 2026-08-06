@@ -921,38 +921,45 @@ header .subtitle {
 /* ============================================ */
 /* ARC MENU (bottom-left system menu)           */
 /* ============================================ */
-/* Start-menu-style anchor at the left end of the bottom bar; the button is
-   the Mark-I arc reactor itself (inline SVG in ihim-arc-menu.js — colors
-   mirror the tokens: gunmetal housing, dark-copper coils, crimson core) */
+/* Start-menu-style anchor at the left end of the bottom bar; the button is a
+   bare three-dot glyph. The box is narrow so the dots sit toward the left of
+   the bar's leading edge, and it carries a transparent border that only takes
+   a color on hover — the outline appears without the glyph shifting. */
 ihim-arc-menu {
     position: relative;
     display: flex;
     align-items: center;
+    margin-left: -4px;
     margin-right: var(--space-2);
     -webkit-app-region: no-drag;
 }
 
 .arc-btn {
-    width: 30px;
-    height: 30px;
+    width: 22px;
+    height: 26px;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     background: transparent;
-    border: none;
-    border-radius: 50%;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
     cursor: pointer;
+    transition: border-color var(--duration-fast) ease,
+                color var(--duration-fast) ease;
 }
 
 .arc-btn svg {
-    width: 26px;
-    height: 26px;
+    width: 16px;
+    height: 16px;
     display: block;
 }
 
-.arc-btn:hover svg {
-    filter: brightness(1.18);
+.arc-btn:hover,
+.arc-btn[aria-expanded="true"] {
+    border-color: var(--border-dim);
+    color: var(--text-primary);
 }
 
 /* Shared HUD menu surface — the arc dropdown + the taskbar context menu */

@@ -5,8 +5,8 @@ is generated rather than converted: the bare reactor device on a transparent
 canvas — no plate or rounded square behind it, the symbol IS the icon. A
 gunmetal housing ring, ten dark-copper coil segments, a crimson tick ring and
 a hot crimson core with the Y-strut, in the UI's HUD palette (gunmetal
-#4A5568, dark copper #6B3A1F/#8E4F2E, crimson #DC143C). Matches the in-app
-<ihim-arc-menu> reactor mark. Sized edge-to-edge at FILL 1.00, the same knob
+#4A5568, dark copper #6B3A1F/#8E4F2E, crimson #DC143C).
+Sized edge-to-edge at FILL 1.00, the same knob
 and value the EdgeFlow icon uses, so the two sit at equal weight in the
 taskbar. Pillow-only, fully deterministic — re-run any time.
 

@@ -3,13 +3,14 @@
 // The whole app: attach to the iHIM server if it's already up (the usual case —
 // the resume watchdog keeps :7777 alive), otherwise start it via
 // scripts/server.ps1 (the ONE sanctioned lifecycle tool — identity-verified
-// kill, hidden python, console log), show the server's own UI in a window, and
-// on quit stop the server ONLY if this shell started it. STT's global hotkey
-// and every mesh consumer keep talking to http://127.0.0.1:7777 exactly as
-// before — the shell displays, it never proxies.
+// kill, hidden python, console log) and show the server's own UI in a window.
+// The server is an always-on service owned by the watchdog task (logon +
+// resume + hourly): quitting the shell NEVER stops it — dictation and every
+// mesh consumer keep talking to http://127.0.0.1:7777 whether the window is
+// open or not. The shell displays, it never proxies.
 
 const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, ipcMain } = require('electron');
-const { execFile } = require('child_process');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -36,7 +37,6 @@ const ICON = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.ico
 
 let win = null;
 let tray = null;
-let didSpawn = false;   // this shell started the server → this shell stops it
 let watchdog = null;
 
 function isUp() {
@@ -47,13 +47,22 @@ function isUp() {
 
 // server.ps1 start is idempotent (healthy instance already listening → exit 0),
 // and its kill path only touches identity-verified iHIM processes.
+// stdio MUST be 'ignore', and completion MUST key on 'exit', not stdio close:
+// server.ps1 starts the server via Start-Process -Redirect*, which leaks
+// inheritable pipe handles into the long-lived python process — a piped stdio
+// here would never close, so an execFile-style callback waits forever and the
+// shell hangs windowless at the await (holding the single-instance lock).
+// Diagnostics live in data\server-lifecycle.log, not in captured output.
 function lifecycle(verb) {
   return new Promise((resolve, reject) => {
-    execFile(
+    const p = spawn(
       'powershell.exe',
       ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', LIFECYCLE, verb, '-Port', String(PORT)],
-      { windowsHide: true },
-      (err, stdout, stderr) => (err ? reject(new Error(`${verb}: ${stderr || stdout || err.message}`)) : resolve(stdout))
+      { windowsHide: true, stdio: 'ignore' }
+    );
+    p.on('error', reject);
+    p.on('exit', (code) =>
+      code === 0 ? resolve() : reject(new Error(`${verb}: server.ps1 exited ${code} — see IHIM\\data\\server-lifecycle.log`))
     );
   });
 }
@@ -123,7 +132,6 @@ function createWindow() {
 }
 
 async function restartBackend() {
-  didSpawn = true; // after an app-initiated restart, the shell owns the server
   try { await lifecycle('restart'); } catch (e) { dialog.showErrorBox('Restart failed', String(e.message)); return; }
   await waitUp();
   if (win) win.loadURL(BASE);
@@ -184,7 +192,6 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     if (!(await isUp())) {
-      didSpawn = true;
       try { await lifecycle('start'); } catch (e) {
         dialog.showErrorBox('iHIM', `Backend failed to start.\n\n${e.message}`);
         app.exit(1);
@@ -201,14 +208,7 @@ if (!gotLock) {
     startWatchdog();
   });
 
-  let stopping = false;
-  app.on('before-quit', (e) => {
-    if (stopping || !didSpawn) return;
-    stopping = true;
-    e.preventDefault();
-    clearInterval(watchdog);
-    lifecycle('stop').catch(() => {}).finally(() => app.exit(0));
-  });
-
+  // Quit is window-only: the watchdog task owns the server's lifecycle, so
+  // closing the shell must leave :7777 (and the dictation hotkey) running.
   app.on('window-all-closed', () => app.quit());
 }

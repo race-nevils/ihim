@@ -6,14 +6,18 @@
 # Registers two Task Scheduler tasks:
 #
 # 1. "iHIM Resume Watchdog" -- runs "server.ps1 start" (idempotent: healthy
-#    server = no-op, dead port = fresh start) on resume-from-sleep plus an
-#    hourly heartbeat that self-heals any other death cause. (A
+#    server = no-op, dead port = fresh start) at logon, on resume-from-sleep,
+#    plus an hourly heartbeat that self-heals any other death cause. (A
 #    workstation-unlock trigger was tried and dropped: session state-change
-#    triggers require elevation to register; these two do not.)
+#    triggers require elevation to register; these three do not -- a
+#    user-scoped logon trigger registers unelevated, probe-verified
+#    2026-08-05.)
 #    Why: the server process can die during a suspend transition (2026-07-02:
 #    CTranslate2 destructor raised a raw C++ exception 0xe06d7363 mid-suspend
-#    and killed PID 20088). The AHK launcher only starts the server at LOGIN,
-#    so on an always-on machine a sleep-death left port 7777 dead for days.
+#    and killed PID 20088). The logon trigger (2026-08-05) makes the app
+#    self-starting at boot -- the global dictation hotkey lives in the server
+#    process, and login-start previously rode an external launcher script the
+#    app should not depend on.
 #
 # 2. "iHIM Restart" -- NO triggers; fired on demand (schtasks /run) by the
 #    server itself: the post-sleep CUDA-hygiene restart, the transcription
@@ -90,6 +94,12 @@ $heartbeatTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
     -RepetitionInterval (New-TimeSpan -Hours 1) `
     -RepetitionDuration (New-TimeSpan -Days 3650)
 
+# Trigger 3: logon (2026-08-05) -- the app self-starts at boot (the global
+# dictation hotkey lives in the server process; login-start previously rode
+# an external launcher script). User-scoped; registers unelevated.
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$logonTrigger.Delay = 'PT20S'
+
 # Silent launchers: window style 0, wait for exit. VBS escapes " by doubling.
 if (-not (Test-Path $WrapperDir)) {
     New-Item -ItemType Directory -Path $WrapperDir -Force | Out-Null
@@ -117,11 +127,11 @@ $settings = New-ScheduledTaskSettingsSet `
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
 
 Register-ScheduledTask -TaskName $TaskName `
-    -Trigger @($resumeTrigger, $heartbeatTrigger) `
+    -Trigger @($logonTrigger, $resumeTrigger, $heartbeatTrigger) `
     -Action $action -Settings $settings -Principal $principal -Force | Out-Null
 
 Write-Host "Registered scheduled task '$TaskName':"
-Write-Host "  on resume-from-sleep (+20s) and hourly heartbeat"
+Write-Host "  at logon (+20s), on resume-from-sleep (+20s), and hourly heartbeat"
 Write-Host "  -> server.ps1 start (idempotent) using $ServerPs1"
 
 # --- "iHIM Restart": demand-only, fired by the server via schtasks /run ---

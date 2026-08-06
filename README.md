@@ -27,7 +27,7 @@ powershell -File scripts\server.ps1 status|stop
 python run.py [--port 7777] [--dev]     # --dev = auto-reload, development only
 ```
 
-- Login autostart: `start_ihim.vbs` in `shell:startup`, or the resume watchdog (`scripts\install-resume-watchdog.ps1`, run once per machine) which also self-heals a dead port after sleep.
+- Autostart + self-heal: `scripts\install-resume-watchdog.ps1` (run once per machine) registers a task that starts the server at logon, after sleep, and hourly.
 - Test instances: set `IHIM_STT_AUTOSTART=0` to leave the global dictation hotkey and the GPU to the main instance.
 - Logs: `data/server-console.log` (console) and `data/server-lifecycle.log` (start/stop/restart).
 

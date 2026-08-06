@@ -15,6 +15,11 @@
  * drag-to-reorder (native HTML5 DnD), saved as an id array under
  * ihim_taskbar_order via ui-state.js so every client shares the layout.
  *
+ * Right-click on a chip opens a context menu (Close window) — one owned
+ * element that survives the wholesale innerHTML re-renders by being
+ * re-appended after each one. It positions fixed at the cursor, opening
+ * upward (the bar sits at the bottom of the screen).
+ *
  * Usage: <ihim-taskbar id="taskbar" class="taskbar"></ihim-taskbar>
  */
 
@@ -94,6 +99,38 @@ class IhimTaskbar extends HTMLElement {
             this._render();
         });
 
+        // Right-click context menu — built once, re-appended after re-renders.
+        this._ctx = document.createElement('div');
+        this._ctx.className = 'hud-menu taskbar-ctx';
+        this._ctx.setAttribute('role', 'menu');
+        this._ctx.hidden = true;
+        this._ctx.innerHTML = `
+            <button type="button" class="hud-menu-item" role="menuitem" data-action="close">
+                <i data-lucide="x"></i>Close window
+            </button>`;
+        this._ctx.querySelector('[data-action="close"]').addEventListener('click', () => {
+            const win = document.getElementById(this._ctx.dataset.target || '');
+            this._closeCtx();
+            if (win) win.close();
+        });
+        this.appendChild(this._ctx);
+
+        this.addEventListener('contextmenu', (e) => {
+            const chip = e.target.closest('.taskbar-chip');
+            if (!chip) return;
+            e.preventDefault();
+            this._openCtx(chip.dataset.target, e.clientX, e.clientY);
+        });
+
+        this._onDocPointer = (e) => {
+            if (!this._ctx.hidden && !this._ctx.contains(e.target)) this._closeCtx();
+        };
+        this._onDocKey = (e) => {
+            if (e.key === 'Escape' && !this._ctx.hidden) this._closeCtx();
+        };
+        document.addEventListener('pointerdown', this._onDocPointer);
+        document.addEventListener('keydown', this._onDocKey);
+
         // Panels restore their persisted open state in deferred microtasks;
         // a first paint after the current frame catches any that upgraded
         // (and opened) before this element's listeners attached.
@@ -104,6 +141,24 @@ class IhimTaskbar extends HTMLElement {
         for (const ev of PANEL_EVENTS) {
             document.removeEventListener(ev, this._onPanelEvent);
         }
+        document.removeEventListener('pointerdown', this._onDocPointer);
+        document.removeEventListener('keydown', this._onDocKey);
+    }
+
+    _openCtx(targetId, x, y) {
+        this._ctx.dataset.target = targetId;
+        this._ctx.hidden = false;
+        // Clamp so the menu never runs off the right edge; anchor its bottom
+        // just above the cursor so it opens upward.
+        const w = this._ctx.offsetWidth || 160;
+        this._ctx.style.left = `${Math.min(x, window.innerWidth - w - 8)}px`;
+        this._ctx.style.bottom = `${window.innerHeight - y + 4}px`;
+        requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
+    }
+
+    _closeCtx() {
+        this._ctx.hidden = true;
+        delete this._ctx.dataset.target;
     }
 
     _order() {
@@ -112,6 +167,7 @@ class IhimTaskbar extends HTMLElement {
     }
 
     _render() {
+        if (this._ctx && !this._ctx.hidden) this._closeCtx();
         const order = this._order();
         const rank = (el) => {
             const i = order.indexOf(el.id);
@@ -135,6 +191,7 @@ class IhimTaskbar extends HTMLElement {
                     <span>${escapeHtml(label)}</span>
                 </button>`;
         }).join('');
+        if (this._ctx) this.appendChild(this._ctx);
         requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
     }
 }

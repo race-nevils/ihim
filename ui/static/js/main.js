@@ -28,7 +28,7 @@ await Promise.all([
 
     // Standalone components
     import('./components/ihim-desktop.js'),
-    import('./components/ihim-options.js'),
+    import('./components/ihim-arc-menu.js'),
     import('./components/ihim-system-monitor.js'),
     import('./components/ihim-taskbar.js'),
 ]);

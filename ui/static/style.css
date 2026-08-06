@@ -228,10 +228,6 @@ body {
     top: 36px;
 }
 
-[data-shell] ihim-options {
-    top: 62px;
-}
-
 .container {
     position: relative;
     z-index: 5;
@@ -923,50 +919,61 @@ header .subtitle {
 }
 
 /* ============================================ */
-/* OPTIONS MENU (top-right system ⋮)            */
+/* ARC MENU (bottom-left system menu)           */
 /* ============================================ */
-/* Nests inside the top-right HUD corner bracket (60×60 at 16px inset,
-   pointer-events: none — purely decorative, no collision) */
-ihim-options {
-    position: fixed;
-    top: 26px;
-    right: 26px;
-    z-index: 60;
-    display: block;
+/* Start-menu-style anchor at the left end of the bottom bar; the button is
+   the Mark-I arc reactor itself (inline SVG in ihim-arc-menu.js — colors
+   mirror the tokens: gunmetal housing, gold coils, crimson core) */
+ihim-arc-menu {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-right: var(--space-2);
     -webkit-app-region: no-drag;
 }
 
-.options-btn {
-    width: 40px;
-    height: 40px;
+.arc-btn {
+    width: 30px;
+    height: 30px;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(145deg,
-            rgba(17, 17, 17, 0.9) 0%,
-            rgba(10, 10, 10, 0.95) 100%);
-    border: 1px solid var(--border-dim);
-    border-radius: var(--radius-md);
-    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: 50%;
     cursor: pointer;
 }
 
-.options-btn svg,
-.options-btn i {
-    width: 20px;
-    height: 20px;
+.arc-btn svg {
+    width: 26px;
+    height: 26px;
+    display: block;
 }
 
-.options-btn:hover,
-.options-btn[aria-expanded="true"] {
-    border-color: var(--accent-red);
-    color: var(--accent-red);
+.arc-btn:hover svg {
+    filter: brightness(1.18);
 }
 
-.options-dropdown {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
+/* The coil ring spins while hovered or while the menu is open */
+.arc-coils {
+    transform-box: view-box;
+    transform-origin: center;
+}
+
+.arc-btn:hover .arc-coils,
+.arc-btn[aria-expanded="true"] .arc-coils {
+    animation: arcSpin 14s linear infinite;
+}
+
+@keyframes arcSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Shared HUD menu surface — the arc dropdown + the taskbar context menu */
+.hud-menu {
     min-width: 180px;
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur));
@@ -974,9 +981,10 @@ ihim-options {
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
     padding: var(--space-2);
+    z-index: 300;
 }
 
-.options-item {
+.hud-menu-item {
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -991,16 +999,32 @@ ihim-options {
     white-space: nowrap;
 }
 
-.options-item:hover {
+.hud-menu-item:hover {
     background: rgba(255, 255, 255, 0.06);
     color: var(--text-primary);
 }
 
-.options-item svg,
-.options-item i {
+.hud-menu-item svg,
+.hud-menu-item i {
     width: 16px;
     height: 16px;
     color: var(--color-danger);
+}
+
+/* The arc dropdown opens upward from the bar */
+.arc-menu-dropdown {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+}
+
+/* Taskbar right-click menu — anchored just above the cursor.
+   (position: fixed resolves against .bottom-bar — its backdrop-filter makes
+   it the containing block — but the bar spans the full viewport width at the
+   screen bottom, so viewport left/bottom coordinates land identically.) */
+.taskbar-ctx {
+    position: fixed;
+    min-width: 150px;
 }
 
 
@@ -1581,8 +1605,8 @@ ihim-todo, ihim-yt, ihim-offline sync {
     box-shadow: var(--shadow-lg);
     overflow: hidden;
 }
-/* Fixed overlays that can reach the shell's top-bar drag strip opt out too
-   (ihim-options carries no-drag in its own block) */
+/* Fixed overlays opt out of the shell's drag regions (the arc menu carries
+   no-drag in its own block) */
 .bottom-bar { -webkit-app-region: no-drag; }
 ihim-panel:not([open]), ihim-stt:not([open]), ihim-recorder:not([open]),
 ihim-todo:not([open]), ihim-yt:not([open]), ihim-offline sync:not([open]) { display: none; }

@@ -28,11 +28,10 @@
          and desktop shell). The CSS background stays as first-paint fallback. -->
     <script src="/static/js/bg-bake.js?v=__BOOT_ID__"></script>
 
-    <!-- System options menu (top-right ⋮ — screen-level actions, no tile) -->
-    <ihim-options id="options-menu"></ihim-options>
-
-    <!-- Bottom Status Bar -->
+    <!-- Bottom Status Bar — the arc-reactor system menu anchors the left end
+         (start-menu style; screen-level actions like Restart Server) -->
     <nav id="bottom-bar" class="bottom-bar" aria-label="System Status">
+        <ihim-arc-menu id="arc-menu"></ihim-arc-menu>
         <ihim-taskbar id="taskbar" class="taskbar"></ihim-taskbar>
         <div class="bar-spacer"></div>
         <ihim-system-monitor id="system-monitor" class="bar-widget"></ihim-system-monitor>

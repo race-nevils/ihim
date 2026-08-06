@@ -20,7 +20,7 @@ import { restartServer } from '../app.js';
 
 // Mark-I reactor, viewBox 64: housing ring → 10 copper coil segments (stroke
 // dasharray = circumference/10 minus the gap) → crimson tick ring → radial
-// core → Y-strut + hub. Coils are dark copper (#8E4F2E / #B87333 edge) — the
+// core → Y-strut + hub. Coils are dark copper (#6B3A1F / #8E4F2E edge) — the
 // winding the current runs through, muted so it sits INTO the dark HUD rather
 // than popping off it; #4A5568 gunmetal, #DC143C crimson, #0b0b0d surface.
 const REACTOR_SVG = `
@@ -35,12 +35,10 @@ const REACTOR_SVG = `
     </defs>
     <circle cx="32" cy="32" r="30" fill="#0b0b0d" stroke="#4A5568" stroke-width="2.5"/>
     <circle cx="32" cy="32" r="26.5" fill="none" stroke="rgba(74, 85, 104, 0.55)" stroke-width="1"/>
-    <g class="arc-coils">
-        <circle cx="32" cy="32" r="21.5" fill="none" stroke="#8E4F2E" stroke-width="7"
-                stroke-dasharray="9.8 3.709"/>
-        <circle cx="32" cy="32" r="24.2" fill="none" stroke="#B87333" stroke-width="1.2"
-                stroke-dasharray="11.03 4.175" opacity="0.55"/>
-    </g>
+    <circle cx="32" cy="32" r="21.5" fill="none" stroke="#6B3A1F" stroke-width="7"
+            stroke-dasharray="9.8 3.709"/>
+    <circle cx="32" cy="32" r="24.2" fill="none" stroke="#8E4F2E" stroke-width="1.2"
+            stroke-dasharray="11.03 4.175" opacity="0.5"/>
     <circle cx="32" cy="32" r="15" fill="none" stroke="#DC143C" stroke-width="1.6"
             stroke-dasharray="2.2 3.036" opacity="0.85"/>
     <circle cx="32" cy="32" r="12" fill="url(#ihim-arc-core)"/>

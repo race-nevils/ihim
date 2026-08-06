@@ -955,23 +955,6 @@ ihim-arc-menu {
     filter: brightness(1.18);
 }
 
-/* The coil ring spins while hovered or while the menu is open */
-.arc-coils {
-    transform-box: view-box;
-    transform-origin: center;
-}
-
-.arc-btn:hover .arc-coils,
-.arc-btn[aria-expanded="true"] .arc-coils {
-    animation: arcSpin 14s linear infinite;
-}
-
-@keyframes arcSpin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
 /* Shared HUD menu surface — the arc dropdown + the taskbar context menu */
 .hud-menu {
     min-width: 180px;

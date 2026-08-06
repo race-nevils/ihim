@@ -1,10 +1,11 @@
 """Generate the iHIM desktop icon — a Mark-I arc-reactor mark, drawn in code.
 
 iHIM has no raster logo (the UI's icons are inline lucide SVGs), so the icon
-is generated rather than converted: a gunmetal housing ring, ten dark-copper
-coil segments, a crimson tick ring and a hot crimson core with the Y-strut,
-on a dark rounded square — the UI's HUD palette (bg #0a0a0a, gunmetal
-#4A5568, copper #8E4F2E/#B87333, crimson #DC143C). Matches the in-app
+is generated rather than converted: the bare reactor device on a transparent
+canvas — no plate or rounded square behind it, the symbol IS the icon. A
+gunmetal housing ring, ten dark-copper coil segments, a crimson tick ring and
+a hot crimson core with the Y-strut, in the UI's HUD palette (gunmetal
+#4A5568, dark copper #6B3A1F/#8E4F2E, crimson #DC143C). Matches the in-app
 <ihim-arc-menu> reactor mark. Pillow-only, fully deterministic — re-run any
 time.
 
@@ -25,20 +26,14 @@ SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 S = 1024  # master canvas, downsampled to each size
 
-BG = (10, 10, 10, 255)         # #0a0a0a — the UI body surface
 FACE = (11, 11, 13, 255)       # #0b0b0d — reactor face
 METAL = (74, 85, 104)          # #4A5568 gunmetal housing
 METAL_DARK = (26, 29, 36)      # struts / hub
-COPPER = (142, 79, 46)         # #8E4F2E dark-copper coil segments
-COPPER_BRIGHT = (184, 115, 51) # #B87333 coil edge highlight
+COPPER = (107, 58, 31)         # #6B3A1F dark-copper coil segments
+COPPER_BRIGHT = (142, 79, 46)  # #8E4F2E coil edge highlight
 RED = (220, 20, 60)            # #DC143C crimson
 RED_HOT = (255, 93, 120)       # core mid
 RED_WHITE = (255, 224, 230)    # core center
-
-
-def rounded_square(draw: ImageDraw.ImageDraw) -> None:
-    r = S * 0.22
-    draw.rounded_rectangle([0, 0, S - 1, S - 1], radius=r, fill=BG)
 
 
 def ring(draw, cx, cy, radius, width, color, alpha=255):
@@ -59,58 +54,59 @@ def seg_ring(draw, cx, cy, radius, width, color, alpha, count, gap_deg):
 def make_master() -> Image.Image:
     img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    rounded_square(draw)
 
     cx = cy = S / 2
 
-    # Soft crimson halo behind the device so small sizes still read "energy".
-    glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    gd.ellipse([cx - S * 0.28, cy - S * 0.28, cx + S * 0.28, cy + S * 0.28],
-               fill=(*RED, 55))
-    glow = glow.filter(ImageFilter.GaussianBlur(S * 0.07))
-    img.alpha_composite(glow)
-
-    # Reactor face + gunmetal housing (double ring so the rim reads metallic).
-    draw.ellipse([cx - S * 0.385, cy - S * 0.385, cx + S * 0.385, cy + S * 0.385],
+    # The device fills the canvas edge to edge (small margin so the housing
+    # stroke never clips). Everything stays inside the face circle — no halo
+    # bleeding onto whatever the icon sits over.
+    draw.ellipse([cx - S * 0.478, cy - S * 0.478, cx + S * 0.478, cy + S * 0.478],
                  fill=FACE)
-    ring(draw, cx, cy, S * 0.372, S * 0.026, METAL)
-    ring(draw, cx, cy, S * 0.340, S * 0.008, (110, 124, 148), 200)
+    ring(draw, cx, cy, S * 0.461, S * 0.032, METAL)
+    ring(draw, cx, cy, S * 0.422, S * 0.010, (110, 124, 148), 200)
 
     # Ten dark-copper coil segments + a subtle bright edge just outside them.
-    seg_ring(draw, cx, cy, S * 0.272, S * 0.072, COPPER, 255, 10, 10)
-    seg_ring(draw, cx, cy, S * 0.318, S * 0.012, COPPER_BRIGHT, 120, 10, 10)
+    seg_ring(draw, cx, cy, S * 0.337, S * 0.089, COPPER, 255, 10, 10)
+    seg_ring(draw, cx, cy, S * 0.394, S * 0.015, COPPER_BRIGHT, 100, 10, 10)
 
     # Crimson tick ring between the coils and the core.
-    seg_ring(draw, cx, cy, S * 0.190, S * 0.014, RED, 185, 20, 12)
+    seg_ring(draw, cx, cy, S * 0.236, S * 0.017, RED, 185, 20, 12)
 
     # Hot core: blurred crimson bloom, then concentric hot centers.
     core_glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     cgd = ImageDraw.Draw(core_glow)
-    cgd.ellipse([cx - S * 0.155, cy - S * 0.155, cx + S * 0.155, cy + S * 0.155],
+    cgd.ellipse([cx - S * 0.192, cy - S * 0.192, cx + S * 0.192, cy + S * 0.192],
                 fill=(*RED, 235))
-    core_glow = core_glow.filter(ImageFilter.GaussianBlur(S * 0.022))
+    core_glow = core_glow.filter(ImageFilter.GaussianBlur(S * 0.027))
     img.alpha_composite(core_glow)
 
     core = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     cd = ImageDraw.Draw(core)
-    for r, color in [(0.125, RED), (0.085, RED_HOT), (0.048, RED_WHITE)]:
+    for r, color in [(0.155, RED), (0.105, RED_HOT), (0.060, RED_WHITE)]:
         cd.ellipse([cx - S * r, cy - S * r, cx + S * r, cy + S * r],
                    fill=(*color, 255))
-    core = core.filter(ImageFilter.GaussianBlur(S * 0.010))
+    core = core.filter(ImageFilter.GaussianBlur(S * 0.012))
     img.alpha_composite(core)
+
+    # The blurred bloom spills a little past the face — clip everything back
+    # to the device circle so the transparent canvas stays truly transparent.
+    mask = Image.new("L", (S, S), 0)
+    md = ImageDraw.Draw(mask)
+    md.ellipse([cx - S * 0.478, cy - S * 0.478, cx + S * 0.478, cy + S * 0.478],
+               fill=255)
+    img.putalpha(Image.composite(img.getchannel("A"), mask.point(lambda _: 0), mask))
 
     # Y-strut over the core + center hub (the Mark-I signature).
     draw = ImageDraw.Draw(img)
     for ang in (90, 210, 330):
         a = math.radians(ang)
-        x = cx + math.cos(a) * S * 0.125
-        y = cy - math.sin(a) * S * 0.125
-        draw.line([cx, cy, x, y], fill=(*METAL_DARK, 255), width=int(S * 0.022))
-    hub = S * 0.030
+        x = cx + math.cos(a) * S * 0.155
+        y = cy - math.sin(a) * S * 0.155
+        draw.line([cx, cy, x, y], fill=(*METAL_DARK, 255), width=int(S * 0.027))
+    hub = S * 0.037
     draw.ellipse([cx - hub, cy - hub, cx + hub, cy + hub],
                  fill=(*METAL_DARK, 255), outline=(*METAL, 255),
-                 width=int(S * 0.008))
+                 width=int(S * 0.010))
     return img
 
 

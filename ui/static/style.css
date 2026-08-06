@@ -923,7 +923,7 @@ header .subtitle {
 /* ============================================ */
 /* Start-menu-style anchor at the left end of the bottom bar; the button is
    the Mark-I arc reactor itself (inline SVG in ihim-arc-menu.js — colors
-   mirror the tokens: gunmetal housing, gold coils, crimson core) */
+   mirror the tokens: gunmetal housing, dark-copper coils, crimson core) */
 ihim-arc-menu {
     position: relative;
     display: flex;

@@ -1,10 +1,10 @@
 """Generate the iHIM desktop icon — a Mark-I arc-reactor mark, drawn in code.
 
 iHIM has no raster logo (the UI's icons are inline lucide SVGs), so the icon
-is generated rather than converted: a gunmetal housing ring, ten gold coil
-segments, a crimson tick ring and a hot crimson core with the Y-strut, on a
-dark rounded square — the UI's red/gold HUD palette (bg #0a0a0a, gunmetal
-#4A5568, gold #DAA520/#FFD700, crimson #DC143C). Matches the in-app
+is generated rather than converted: a gunmetal housing ring, ten dark-copper
+coil segments, a crimson tick ring and a hot crimson core with the Y-strut,
+on a dark rounded square — the UI's HUD palette (bg #0a0a0a, gunmetal
+#4A5568, copper #8E4F2E/#B87333, crimson #DC143C). Matches the in-app
 <ihim-arc-menu> reactor mark. Pillow-only, fully deterministic — re-run any
 time.
 
@@ -29,8 +29,8 @@ BG = (10, 10, 10, 255)         # #0a0a0a — the UI body surface
 FACE = (11, 11, 13, 255)       # #0b0b0d — reactor face
 METAL = (74, 85, 104)          # #4A5568 gunmetal housing
 METAL_DARK = (26, 29, 36)      # struts / hub
-GOLD = (218, 165, 32)          # #DAA520 coil segments
-GOLD_BRIGHT = (255, 215, 0)    # #FFD700 coil edge highlight
+COPPER = (142, 79, 46)         # #8E4F2E dark-copper coil segments
+COPPER_BRIGHT = (184, 115, 51) # #B87333 coil edge highlight
 RED = (220, 20, 60)            # #DC143C crimson
 RED_HOT = (255, 93, 120)       # core mid
 RED_WHITE = (255, 224, 230)    # core center
@@ -77,9 +77,9 @@ def make_master() -> Image.Image:
     ring(draw, cx, cy, S * 0.372, S * 0.026, METAL)
     ring(draw, cx, cy, S * 0.340, S * 0.008, (110, 124, 148), 200)
 
-    # Ten gold coil segments + a subtle bright edge just outside them.
-    seg_ring(draw, cx, cy, S * 0.272, S * 0.072, GOLD, 255, 10, 10)
-    seg_ring(draw, cx, cy, S * 0.318, S * 0.012, GOLD_BRIGHT, 150, 10, 10)
+    # Ten dark-copper coil segments + a subtle bright edge just outside them.
+    seg_ring(draw, cx, cy, S * 0.272, S * 0.072, COPPER, 255, 10, 10)
+    seg_ring(draw, cx, cy, S * 0.318, S * 0.012, COPPER_BRIGHT, 120, 10, 10)
 
     # Crimson tick ring between the coils and the core.
     seg_ring(draw, cx, cy, S * 0.190, S * 0.014, RED, 185, 20, 12)

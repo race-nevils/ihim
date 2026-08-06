@@ -21,7 +21,6 @@ class DictationRecord(BaseModel):
     cleanup_model: str = Field("llama3.2:3b", description="LLM cleanup model used")
     latency_ms: int = Field(..., description="Total pipeline latency in ms")
     correction: Optional[CorrectionDetail] = Field(None, description="User correction if applied")
-    flagged: bool = Field(False, description="Whether this dictation is flagged for review")
 
 
 class HistoryResponse(BaseModel):
@@ -33,7 +32,6 @@ class HistoryResponse(BaseModel):
 class StatsResponse(BaseModel):
     total: int = Field(0, description="Total dictation count")
     corrections: int = Field(0, description="Number of corrected dictations")
-    flagged: int = Field(0, description="Number of flagged dictations")
     avg_latency_ms: int = Field(0, description="Average pipeline latency in ms")
     total_words: int = Field(0, description="Total words dictated")
 

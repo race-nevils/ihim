@@ -2375,9 +2375,6 @@ button:focus-visible {
 .stt-history-item:hover {
     background: rgba(255, 255, 255, 0.05);
 }
-.stt-history-item.flagged {
-    border-left: 3px solid var(--status-warning);
-}
 
 .stt-history-meta {
     display: flex;
@@ -2435,10 +2432,6 @@ button:focus-visible {
 .stt-action-btn:hover {
     color: var(--accent-red);
     border-color: var(--accent-red);
-}
-.stt-action-btn.active {
-    color: var(--status-warning);
-    border-color: rgba(245, 158, 11, 0.4);
 }
 
 /* Edit mode */

@@ -50,7 +50,6 @@ def log_dictation(
         "latency_ms": latency_ms,
         "audio_path": audio_path,
         "correction": None,
-        "flagged": False,
     }
 
     with DICTATIONS_FILE.open("a", encoding="utf-8") as f:
@@ -143,42 +142,13 @@ def mark_correction(dictation_id: str, corrected_text: str) -> Optional[dict]:
     return updated_record
 
 
-def toggle_flag(dictation_id: str) -> Optional[dict]:
-    """Toggle the flagged status of a dictation record."""
-    if not DICTATIONS_FILE.exists():
-        return None
-
-    lines = DICTATIONS_FILE.read_text(encoding="utf-8").splitlines()
-    updated_record = None
-    new_lines = []
-
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            record = json.loads(line)
-            if record.get("id") == dictation_id:
-                record["flagged"] = not record.get("flagged", False)
-                updated_record = record
-            new_lines.append(json.dumps(record))
-        except json.JSONDecodeError:
-            new_lines.append(line)
-
-    if updated_record:
-        DICTATIONS_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-
-    return updated_record
-
-
 def get_stats() -> dict:
     """Compute dictation stats."""
     if not DICTATIONS_FILE.exists():
-        return {"total": 0, "corrections": 0, "flagged": 0}
+        return {"total": 0, "corrections": 0}
 
     total = 0
     corrections = 0
-    flagged = 0
     total_latency = 0
     total_words = 0
 
@@ -191,8 +161,6 @@ def get_stats() -> dict:
             total += 1
             if record.get("correction"):
                 corrections += 1
-            if record.get("flagged"):
-                flagged += 1
             total_latency += record.get("latency_ms", 0)
             text = record.get("cleaned_text") or record.get("raw_transcript") or ""
             total_words += len(text.split())
@@ -202,7 +170,6 @@ def get_stats() -> dict:
     return {
         "total": total,
         "corrections": corrections,
-        "flagged": flagged,
         "avg_latency_ms": round(total_latency / total) if total else 0,
         "total_words": total_words,
     }

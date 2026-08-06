@@ -128,20 +128,6 @@ async def stt_correct(dictation_id: str, body: CorrectionRequest, request: Reque
     return DictationRecord(**record)
 
 
-@router.post("/flag/{dictation_id}", response_model=DictationRecord)
-async def stt_flag(dictation_id: str, request: Request):
-    """Toggle flag on a dictation."""
-    from tools.stt.logger import toggle_flag
-
-    loop = asyncio.get_event_loop()
-    record = await loop.run_in_executor(None, lambda: toggle_flag(dictation_id))
-
-    if record is None:
-        return problem(404, f"Dictation '{dictation_id}' not found", instance=request.url.path)
-
-    return DictationRecord(**record)
-
-
 @router.get("/stats", response_model=StatsResponse)
 async def stt_stats():
     """Dictation statistics."""

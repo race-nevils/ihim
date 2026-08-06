@@ -254,9 +254,8 @@ class IhimSTT extends IhimPanel {
                 const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 const text = d.correction ? d.correction.text : d.cleaned_text;
                 const hasCorrection = !!d.correction;
-                const flagged = d.flagged;
 
-                return `<div class="stt-history-item${flagged ? ' flagged' : ''}" data-id="${escapeHtml(d.id)}">
+                return `<div class="stt-history-item" data-id="${escapeHtml(d.id)}">
                     <div class="stt-history-meta">
                         <span class="stt-history-time">${dateStr} ${timeStr}</span>
                         <span class="stt-history-latency">${d.latency_ms}ms</span>
@@ -266,9 +265,6 @@ class IhimSTT extends IhimPanel {
                     <div class="stt-history-actions">
                         <button class="stt-action-btn stt-copy-btn" data-id="${escapeHtml(d.id)}" title="Copy to clipboard" aria-label="Copy dictation">
                             <i data-lucide="copy" style="width:14px;height:14px;"></i>
-                        </button>
-                        <button class="stt-action-btn stt-flag-btn${flagged ? ' active' : ''}" data-id="${escapeHtml(d.id)}" title="Flag for review" aria-label="Flag dictation">
-                            <i data-lucide="flag" style="width:14px;height:14px;"></i>
                         </button>
                         <button class="stt-action-btn stt-edit-btn" data-id="${escapeHtml(d.id)}" title="Edit / Correct" aria-label="Edit dictation">
                             <i data-lucide="pencil" style="width:14px;height:14px;"></i>
@@ -292,16 +288,6 @@ class IhimSTT extends IhimPanel {
             setTimeout(() => el.classList.remove('stt-copied'), 1000);
         } catch (e) {
             console.warn('Clipboard write failed:', e);
-        }
-    }
-
-    async _flagDictation(id) {
-        try {
-            const res = await fetch(`${API}/api/stt/flag/${encodeURIComponent(id)}`, { method: 'POST' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            this._loadHistory();
-        } catch (e) {
-            this._showError(`Failed to flag: ${e.message}`);
         }
     }
 
@@ -470,9 +456,6 @@ class IhimSTT extends IhimPanel {
             // History actions
             const copyBtn = e.target.closest('.stt-copy-btn');
             if (copyBtn) { this._copyDictation(copyBtn.dataset.id); return; }
-
-            const flagBtn = e.target.closest('.stt-flag-btn');
-            if (flagBtn) { this._flagDictation(flagBtn.dataset.id); return; }
 
             const editBtn = e.target.closest('.stt-edit-btn');
             if (editBtn) { this._startEditDictation(editBtn.dataset.id); return; }

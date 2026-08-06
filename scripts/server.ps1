@@ -152,13 +152,11 @@ function Invoke-Start {
         Start-Sleep -Seconds 3
     }
     $py = Get-PythonExe
-    $argList = @("`"$(Join-Path $IhimDir 'run.py')`"", '--port', $Port, '--log-level', 'error')
-    if ($Dev) { $argList += '--dev' }
     $consoleLog = Join-Path $IhimDir 'data\server-console.log'
-    # Rotate before the redirect overwrites: keep two prior generations so a
+    # Rotate before the redirect truncates: keep two prior generations so a
     # recovery restart followed by a manual one cannot destroy the incident
     # window (the 07-27 diagnosis lost its pre-restart evidence exactly this
-    # way -- Start-Process redirection cannot append).
+    # way).
     foreach ($base in @($consoleLog, ($consoleLog -replace '\.log$', '.out.log'))) {
         try {
             $prev1 = $base -replace '\.log$', '.prev1.log'
@@ -173,11 +171,25 @@ function Invoke-Start {
     # So: confirm health, wait out the crash window, re-confirm — and on a
     # confirmed boot crash, retry once instead of reporting a false Healthy.
     # Bug note: 2026-07-27_portaudiowpatch-access-violation-on-boot.
+    # Launch through cmd /c with cmd-side redirection, NOT Start-Process
+    # -RedirectStandard*: the redirect params force UseShellExecute=$false,
+    # which (a) silently drops -WindowStyle Hidden for console apps and
+    # (b) makes the server inherit ALL of PowerShell's handles -- including
+    # any pipe a CALLER of this script is reading (hook stdout, the desktop
+    # shell's child-process wait). That pipe never EOFs while the server
+    # lives, so every piped caller hung until the server died (bug notes:
+    # 2026-07-10_stop-hook-hang-start-process-handle-inheritance,
+    # 2026-08-06_shell-quit-stopped-server-relaunch-hung-windowless).
+    # `call` guards cmd /c's outer-quote stripping on a quoted exe path.
+    # cmd stays alive while python runs, so HasExited/ExitCode on the cmd
+    # process still detect startup death (call propagates the errorlevel).
+    $runPy = Join-Path $IhimDir 'run.py'
+    $outLog = $consoleLog -replace '\.log$', '.out.log'
+    $cmdLine = "call `"$py`" `"$runPy`" --port $Port --log-level error$(if ($Dev) { ' --dev' }) > `"$outLog`" 2> `"$consoleLog`""
     foreach ($attempt in 1, 2) {
         Write-Log "Starting: $py run.py --port $Port$(if ($Dev) { ' --dev' }) (console -> $consoleLog)$(if ($attempt -gt 1) { " [attempt $attempt]" })"
-        $proc = Start-Process -FilePath $py -ArgumentList $argList -WorkingDirectory $IhimDir `
-            -WindowStyle Hidden -PassThru -RedirectStandardError $consoleLog `
-            -RedirectStandardOutput ($consoleLog -replace '\.log$', '.out.log')
+        $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $cmdLine `
+            -WorkingDirectory $IhimDir -WindowStyle Hidden -PassThru
         # Health-check loop (up to ~60s -- a cold first boot imports faster-whisper etc.)
         $healthy = $false
         for ($i = 0; $i -lt 120; $i++) {

@@ -34,7 +34,7 @@ python run.py [--port 7777] [--dev]     # --dev = auto-reload, development only
 ## Layout
 
 ```
-run.py / run_silent.py     entry + silent shim (startup .vbs contract)
+run.py                     entry point
 scripts/server.ps1         the ONLY start/stop/restart/status tool
 api/
   main.py                  app factory, explicit router registration

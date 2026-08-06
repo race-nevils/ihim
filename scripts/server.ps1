@@ -9,8 +9,8 @@
 # force_kill.ps1 + the WMIC temp-script restart endpoint):
 #   - The server runs WITHOUT a reloader, so the port listener is the one and
 #     only process; taskkill /T on it also reaps transcription worker children.
-#   - Kill only verified iHIM processes (python + run.py/run_silent/api.main
-#     in the command line). A foreign port squatter is reported, never killed.
+#   - Kill only verified iHIM processes (python + run.py/api.main in the
+#     command line). A foreign port squatter is reported, never killed.
 #   - start is idempotent: if a healthy iHIM instance already listens, report
 #     and exit 0 -- no duplicate servers.
 
@@ -59,7 +59,7 @@ function Test-IsIhimProcess([int]$ProcessId) {
     $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
     if (-not $proc) { return $false }
     if ($proc.Name -notmatch 'python') { return $false }
-    return ($proc.CommandLine -match 'run\.py|run_silent\.py|api\.main|uvicorn')
+    return ($proc.CommandLine -match 'run\.py|api\.main|uvicorn')
 }
 
 function Get-HealthStatus {

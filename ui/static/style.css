@@ -36,6 +36,9 @@
     --accent-red-30: rgba(220, 20, 60, 0.3);
     --accent-red-15: rgba(220, 20, 60, 0.15);
     --accent-red-08: rgba(220, 20, 60, 0.08);
+    /* Glyph ink: same crimson hue sunk to the ember register — full-strength
+       #DC143C reads neon at icon stroke sizes against the dark surfaces */
+    --accent-red-deep: #A0142F;
     --accent-gold: #DAA520;
     --accent-gold-bright: #FFD700;
     --accent-gold-50: rgba(218, 165, 32, 0.5);
@@ -801,7 +804,7 @@ header .subtitle {
 .taskbar-chip svg {
     width: 12px;
     height: 12px;
-    color: var(--accent-red);
+    color: var(--accent-red-deep);
 }
 
 .taskbar-chip.minimized {
@@ -1075,7 +1078,7 @@ ihim-options {
 .desktop-icon-image i {
     width: 32px;
     height: 32px;
-    color: var(--accent-red);
+    color: var(--accent-red-deep);
 }
 
 .desktop-icon-label {

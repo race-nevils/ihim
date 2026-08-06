@@ -140,20 +140,36 @@ body {
     min-height: 100vh;
     padding-bottom: 44px;
     position: relative;
-    /* Desktop surface, not a document: the page
+    /* Desktop surface, not a document (ruling 2026-07-18): the page
        NEVER scrolls. Every interactive layer (desktop grid, windows, bars,
        the options menu) is position: fixed; anything in normal flow that
        would exceed the viewport gets clipped, never a scrollbar. Scrolling
        lives INSIDE windows (stt history, recorder lists, etc.) only. */
     overflow: hidden;
 
-    /* Ember corners over a vertical fade: the crimson corner gradient
-       on the top-right, mirrored on the top-left, both fading toward
-       the middle; the fade underneath shows through the center wedge
-       between them. One continuous surface. */
+    /* Ember corners over a vertical fade: a subtle crimson tint smolders
+       in each top corner and fades out by 45% of its run; the vertical
+       gunmetal fade underneath is the star — it shows through the tint
+       and owns the whole middle of the screen. The ember is a whisper
+       over the fade, never a wash: the two combine, neither replaces the
+       other. The bare percentage in each corner gradient is an
+       interpolation hint holding the blend's midpoint at 22% of the run
+       (matching the bake's raised-cosine curve below).
+
+       8-bit ramps quantize — a step can draw a contour line ("crease")
+       across the glow, and engine rasterization of these gradients
+       banded on some surfaces (the desktop shell drew a contour the
+       plain browser smoothed — same CSS, different pipeline). The
+       authoritative render is therefore the #bg-bake canvas
+       (static/js/bg-bake.js): the same composition baked in float math
+       with a raised-cosine falloff (zero slope at both ends, so no
+       terminal kink) and per-pixel triangular dither (invisible as
+       texture, but quantization steps can never align into a line),
+       covering this stack one frame after first paint. This CSS block
+       is the pre-JS fallback — keep the two in lockstep. */
     background:
-        linear-gradient(215deg, rgba(220, 20, 60, 0.07) 0%, transparent 35%),
-        linear-gradient(145deg, rgba(220, 20, 60, 0.07) 0%, transparent 35%),
+        linear-gradient(215deg, rgba(220, 20, 60, 0.12) 0%, 22%, transparent 45%),
+        linear-gradient(145deg, rgba(220, 20, 60, 0.12) 0%, 22%, transparent 45%),
         linear-gradient(180deg, #121212 0%, #0a0a0a 45%, #060606 100%);
 
     background-attachment: fixed;
@@ -244,9 +260,6 @@ header h1 {
     letter-spacing: 0.4em;
     color: var(--text-primary);
     margin-bottom: var(--space-2);
-    text-shadow:
-        0 0 30px var(--accent-red-50),
-        0 0 60px var(--accent-red-30);
     position: relative;
     display: inline-block;
 }
@@ -431,35 +444,15 @@ header .subtitle {
     }
 }
 
-/* Glow layer (hidden by default) */
-.action-btn::after {
-    content: '';
-    position: absolute;
-    inset: -4px;
-    border-radius: var(--radius-lg);
-    background: radial-gradient(ellipse at center,
-            var(--accent-red-30) 0%,
-            transparent 70%);
-    opacity: 0;
-    transition: opacity var(--duration-normal) ease;
-    z-index: -1;
-    filter: blur(12px);
-}
-
 /* === HOVER STATE === */
 .action-btn:hover {
     border-color: var(--accent-red-30);
     transform: translateY(-3px) scale(1.02);
-    box-shadow: var(--glow-red);
 }
 
 .action-btn:hover::before {
     opacity: 1;
     animation-play-state: running;
-}
-
-.action-btn:hover::after {
-    opacity: 0.4;
 }
 
 /* === ACTIVE/PRESSED STATE === */
@@ -472,9 +465,7 @@ header .subtitle {
 .action-btn:focus-visible {
     outline: none;
     border-color: var(--accent-red);
-    box-shadow:
-        var(--glow-red),
-        0 0 0 3px var(--accent-red-15);
+    box-shadow: 0 0 0 3px var(--accent-red-15);
 }
 
 /* === ICON CONTAINER === */
@@ -516,7 +507,6 @@ header .subtitle {
 
 .action-btn:hover .icon svg {
     color: var(--text-primary);
-    filter: drop-shadow(0 0 6px var(--accent-red));
 }
 
 /* === BUTTON TEXT === */
@@ -1065,11 +1055,11 @@ ihim-options {
     backdrop-filter: blur(8px);
     border: 1px solid var(--border-dim);
     border-radius: var(--radius-lg);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     transition: all var(--duration-normal) var(--ease-out-expo);
 }
 
-/* Hover = red accent ring on the icon box, no movement */
+/* Hover = red accent ring on the icon box, no movement (review ruling
+   2026-07-27 — tiles must not shift under the cursor) */
 .desktop-icon:hover .desktop-icon-image {
     border-color: var(--accent-red);
 }
@@ -1103,13 +1093,11 @@ ihim-options {
     cursor: move;
     z-index: 1000;
     transform: scale(1.08);
-    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
-    transition: transform 0.1s ease, filter 0.1s ease;
+    transition: transform 0.1s ease;
 }
 
 .desktop-icon.dragging .desktop-icon-image {
     border-color: var(--accent-red);
-    box-shadow: var(--glow-red);
 }
 
 /* ============================================ */
@@ -1474,7 +1462,8 @@ ihim-options {
 
 .yt-ts { color: var(--text-tertiary); }
 
-/* Own scroll region, capped at exactly 5 rows — the transcript pane (.yt-log) scrolls independently above.
+/* Own scroll region, capped at exactly 5 rows (review ruling
+   2026-07-27) — the transcript pane (.yt-log) scrolls independently above.
    Fixed row height makes the 5-row cap exact. */
 .yt-history {
     --yt-row-h: 26px;
@@ -1633,7 +1622,8 @@ ihim-todo[maximized], ihim-yt[maximized], ihim-offline sync[maximized] {
     height: calc(100vh - 72px) !important;
 }
 
-/* Standard window titlebar: one bare strip, controls only (− □ ✕) — no icon, no title
+/* Standard window titlebar (shared desktop convention): one bare strip,
+   controls only (− □ ✕) — no icon, no title
    text, no border or fill of its own (seamless with the window surface).
    Injected by IhimPanel; subclasses never author their own header. Window
    identity lives on the taskbar chip + control aria-labels. A subclass

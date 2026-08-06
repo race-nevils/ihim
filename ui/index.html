@@ -23,6 +23,11 @@
         if (window.ihimShell) document.documentElement.setAttribute('data-shell', '1');
     </script>
 
+    <!-- Background bake: replaces the engine-rasterized CSS gradients with a
+         float-precision, dithered canvas render (identical pixels in browser
+         and desktop shell). The CSS background stays as first-paint fallback. -->
+    <script src="/static/js/bg-bake.js?v=__BOOT_ID__"></script>
+
     <!-- System options menu (top-right ⋮ — screen-level actions, no tile) -->
     <ihim-options id="options-menu"></ihim-options>
 

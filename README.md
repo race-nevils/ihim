@@ -4,6 +4,8 @@ iHIM is a dashboard of custom tools, each running as a widget in its own window.
 
 A widget is a Web Component with an API behind it. Any local tool or script can live here. My dictation app, meeting recorder, and YouTube transcriber all run Whisper locally. Another widget wraps the two scripts I use to move work between machines on an external drive.
 
+![demo](docs/demo.gif)
+
 ## Stack
 
 - A thin Electron shell is the app. It attaches to a running server or spawns one, and carries the tray icon and watchdog.

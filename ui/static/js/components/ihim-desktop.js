@@ -131,7 +131,7 @@ class IhimDesktop extends HTMLElement {
 
         window.addEventListener('resize', () => this._applyPositions(), { signal });
 
-        requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
+        if (window.lucide) lucide.createIcons();
         this._saveLayout();
     }
 

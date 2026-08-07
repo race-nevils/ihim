@@ -153,7 +153,7 @@ class IhimTaskbar extends HTMLElement {
         const w = this._ctx.offsetWidth || 160;
         this._ctx.style.left = `${Math.min(x, window.innerWidth - w - 8)}px`;
         this._ctx.style.bottom = `${window.innerHeight - y + 4}px`;
-        requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
+        if (window.lucide) lucide.createIcons();
     }
 
     _closeCtx() {
@@ -192,7 +192,11 @@ class IhimTaskbar extends HTMLElement {
                 </button>`;
         }).join('');
         if (this._ctx) this.appendChild(this._ctx);
-        requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
+        // Synchronous, not rAF-deferred: lucide is a sync <head> script, and a
+        // deferred pass leaves one painted frame of icon-less chips whenever a
+        // re-render lands in animation-frame timing (visible as a taskbar
+        // blink — chips snap narrower while the icon slots are empty).
+        if (window.lucide) lucide.createIcons();
     }
 }
 

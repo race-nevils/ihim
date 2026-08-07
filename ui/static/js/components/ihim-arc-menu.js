@@ -51,7 +51,7 @@ class IhimArcMenu extends HTMLElement {
             if (e.key === 'Escape' && !this._menu.hidden) { this.close(); this._btn.focus(); }
         }, { signal });
 
-        requestAnimationFrame(() => { if (window.lucide) lucide.createIcons(); });
+        if (window.lucide) lucide.createIcons();
     }
 
     disconnectedCallback() {

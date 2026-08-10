@@ -1,17 +1,19 @@
 # iHIM: Intelligent Heads-Up Interface Module
 
-iHIM is a dashboard of custom tools, each running as a widget in its own window. It's an Electron desktop app served end to end by one Python process on localhost.
+iHIM is a dashboard of custom apps.
 
-A widget is a Web Component with an API behind it. Any local tool or script can live here. My dictation app, meeting recorder, and YouTube transcriber all run Whisper locally. Another widget wraps the two scripts I use to move work between machines on an external drive.
+It's an Electron app that runs off a local Python server.
+
+Each app is a Web Component with an API behind it. Any local tool or script can live here. My dictation app, meeting recorder, and YouTube transcriber all run Whisper locally. Another app wraps the two scripts I use to move work between machines on an external drive.
 
 ![demo](docs/demo.gif)
 
 ## Stack
 
-- A thin Electron shell is the app. It attaches to a running server or spawns one, and carries the tray icon and watchdog.
-- FastAPI backend. One Python process with a stable PID.
-- Native Web Components frontend with no build step. Every widget is a custom element, every window subclasses `IhimPanel`, and the files on disk are the files the app runs.
-- Widget data lives in JSON files under `data/local/`. Window layout is saved through the API, so the dashboard comes back exactly as you left it.
+- The iHIM app is a thin Electron shell that attaches to a running server or spawns one.
+- One FastAPI process serves everything.
+- The frontend is native Web Components (part of the WHATWG HTML and DOM standards). Every app is a custom element and every window subclasses `IhimPanel`.
+- Each app keeps its data in JSON files under `data/local/`. Window layout is saved through the API, so the dashboard comes back in the same state as you left it.
 
 ## Run
 
@@ -44,22 +46,26 @@ api/
   stt/ recorder/         dictation + meeting recorder (shared whisper core)
   yt/ preferences.py todos.py
 tools/stt/               dictation engine (hotkey -> capture -> transcribe -> inject)
-data/local/                per-widget file stores (todos.json, yt/ job sidecars,
+data/local/                per-app file stores (todos.json, yt/ job sidecars,
                            meeting JSON-LD written by the recorder)
 desktop/                   thin Electron shell (attach or spawn, tray, watchdog)
-ui/                        index.html + static/js (components/ = all widgets) + style.css
+ui/                        index.html + static/js (components/ = all apps) + style.css
 tests/                     pytest
 ```
 
-## Widgets
+## Apps
 
 - **Dictation** (speech to text): hold a chord, talk, text lands in the focused field. History, copy, correction and a custom vocabulary, with live status over SSE.
 - **Meeting Recorder:** captures mic and system audio, transcribes locally, writes a self-contained JSON-LD record per meeting. The taskbar chip carries a red outline while recording.
 - **To-Do:** quick-capture list grouped by category.
 - **YouTube Transcriber:** queue a URL, get a local transcript. FIFO queue, one GPU job at a time, transcript text copied out by path.
 - **Sneakernet:** two buttons over the scripts for moving work between machines on an external drive. Leaving refreshes the drive and ejects it; Returning pulls the work back in. Each asks for confirmation, then launches its script in its own console, so that console is the feedback.
-- **CPU/RAM bar** and a Windows-style **taskbar**: one chip per open window, click to minimize or restore, drag to reorder, state persists across reloads.
-- **Options menu** (top right): screen-level actions such as Restart Server.
+
+## Also on screen
+
+- A Windows-style taskbar carries one chip per open app. Click a chip to minimize or restore, drag to reorder, and the state persists across reloads.
+- A CPU/RAM widget sits in the same bar.
+- **Options menu** (bottom left): screen-level actions such as Restart Server.
 
 ## Architecture notes
 

@@ -36,7 +36,7 @@ from api import runtime
 from api.errors import register_exception_handlers
 from api.middleware import register_middleware
 from api.site import router as site_router
-from api.server import router as server_router, start_cpu_sampler, stop_cpu_sampler
+from api.server import router as server_router
 from api.preferences import router as preferences_router
 from api.todos import router as todos_router
 from api.yt.routes import router as yt_router
@@ -62,7 +62,6 @@ STT_AUTOSTART = os.environ.get("IHIM_STT_AUTOSTART", "1") == "1"
 async def lifespan(app: FastAPI):
     runtime.mark_started()
     _write_pid_file()
-    start_cpu_sampler()
 
     # Recover recordings orphaned by a crash mid-capture
     if recorder_router is not None:
@@ -100,7 +99,6 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutdown: cleaning up")
-    await stop_cpu_sampler()
     if stt_router is not None and STT_AUTOSTART:
         try:
             from tools.stt.engine import get_engine

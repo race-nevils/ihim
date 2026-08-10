@@ -9,6 +9,7 @@ helper cannot do this job: server.ps1's taskkill /T reaps its own helper
 sleep-defenses.md — this endpoint returned 200 and did nothing for 11 days).
 """
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -65,13 +66,61 @@ async def health():
     return result
 
 
+# CPU sampling runs on OUR cadence, never the request's. psutil.cpu_percent(
+# interval=None) reports the average since the last call *anywhere in this
+# process*, so measuring it inside the handler makes the window equal to the
+# gap between polls: the first call after boot reads 0.0, a second client
+# (Electron shell + a browser tab) halves everyone's window, and a refresh
+# burst collapses it to milliseconds — under one scheduler tick the ratio is
+# noise (measured 2026-08-10: 6.8/22.2/10.8/50.0 against a true 22-28%).
+# RAM never had the bug: virtual_memory() is a stateless instantaneous read.
+# Nothing else in the process may call psutil.cpu_percent() — it would steal
+# this sampler's window and reintroduce the same skew.
+_CPU_SAMPLE_SECONDS = 1.0
+_cpu_percent: float | None = None
+_cpu_task: asyncio.Task | None = None
+
+
+async def _sample_cpu() -> None:
+    global _cpu_percent
+    psutil.cpu_percent(interval=None)  # prime the counter; this read is always 0.0
+    while True:
+        await asyncio.sleep(_CPU_SAMPLE_SECONDS)
+        try:
+            _cpu_percent = psutil.cpu_percent(interval=None)
+        except Exception as e:
+            logger.warning("CPU sampler read failed: %s", e)
+
+
+def start_cpu_sampler() -> None:
+    """Start the fixed-cadence CPU sampler (called from the app lifespan)."""
+    global _cpu_task
+    if _cpu_task is None or _cpu_task.done():
+        _cpu_task = asyncio.create_task(_sample_cpu())
+
+
+async def stop_cpu_sampler() -> None:
+    global _cpu_task
+    if _cpu_task is not None:
+        _cpu_task.cancel()
+        try:
+            await _cpu_task
+        except asyncio.CancelledError:
+            pass
+        _cpu_task = None
+
+
 @router.get("/api/system/stats")
 async def system_stats():
-    """CPU + RAM for the bottom-bar monitor (polled every 2s)."""
+    """CPU + RAM for the bottom-bar monitor (polled every 2s).
+
+    ``cpu.percent`` is the sampler's last reading, and is null until the first
+    sample lands a second after boot — the monitor renders that as ``--``.
+    """
     memory = psutil.virtual_memory()
     return {
         "cpu": {
-            "percent": psutil.cpu_percent(interval=None),
+            "percent": _cpu_percent,
             "cores": psutil.cpu_count(logical=False),
             "threads": psutil.cpu_count(logical=True),
         },

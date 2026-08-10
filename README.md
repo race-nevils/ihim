@@ -55,11 +55,11 @@ tests/                     pytest
 
 ## Apps
 
-- **Dictation** (speech to text): hold a chord, talk, text lands in the focused field. History, copy, correction and a custom vocabulary, with live status over SSE.
-- **Meeting Recorder:** captures mic and system audio, transcribes locally, writes a self-contained JSON-LD record per meeting. The taskbar chip carries a red outline while recording.
+- **Dictation** (speech to text): hold a chord, talk, and the text lands in the focused field. It keeps a history and takes corrections. A custom vocabulary tunes the transcription, and live status streams over SSE.
+- **Meeting Recorder:** captures mic and system audio, transcribes locally, writes a self-contained JSON-LD record per meeting.
 - **To-Do:** quick-capture list grouped by category.
-- **YouTube Transcriber:** queue a URL, get a local transcript. FIFO queue, one GPU job at a time, transcript text copied out by path.
-- **Sneakernet:** two buttons over the scripts for moving work between machines on an external drive. Leaving refreshes the drive and ejects it; Returning pulls the work back in. Each asks for confirmation, then launches its script in its own console, so that console is the feedback.
+- **YouTube Transcriber:** queue a URL, get a local transcript, and the transcript text is copied out by path.
+- **Sneakernet:** two buttons over the scripts for moving work between machines on an external drive. Leaving refreshes the drive and ejects it; Returning pulls the work back in.
 
 ## Also on screen
 
@@ -69,15 +69,15 @@ tests/                     pytest
 
 ## Architecture notes
 
-- One GPU, and dictation always wins. Background transcription waits for an idle mic and unloads its weights mid-job if you start talking.
-- **Push is SSE.** Dictation status streams from `/api/stt/status/stream`; everything else polls.
+- Every Whisper load is budgeted against free VRAM. The loader reads what the GPU has left and steps down through smaller compute types. If nothing fits, it falls back to the CPU instead of running out of memory, so a second job costs speed rather than crashing.
+- Transcription doesn't wait for a whole recording. Dictation and YouTube jobs both transcribe in chunks while the audio is still coming in, so releasing the chord only leaves the last window to run and a long video's transcript fills in as it goes.
 - Errors are RFC 9457 `application/problem+json`. Successes use `{"success": true}` envelopes.
 - Security headers on every response, including a report-only CSP.
-- Cache busting: a per-boot `BOOT_ID` importmap plus a 3s `/api/boot-id` poll. Edits under `ui/` reload the page while the server keeps running.
+- Cache busting is a per-boot `BOOT_ID` importmap plus a 3s `/api/boot-id` poll. Edit anything under `ui/` and the page reloads while the server keeps running.
 - Scrolling lives inside windows. Icon positions are stored as fractions of the dashboard's usable travel, so a resize preserves the layout.
 
 ## Tests
 
 ```powershell
-python -m pytest        # route, guard and dictation-engine tests
+python -m pytest        # 105 tests: routes, guards, dictation engine, streaming, recovery
 ```

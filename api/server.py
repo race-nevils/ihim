@@ -13,6 +13,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 
 import psutil
 from fastapi import APIRouter, Request
@@ -65,13 +66,35 @@ async def health():
     return result
 
 
+# psutil.cpu_percent(interval=None) averages since the LAST call anywhere in
+# the process, so calling it on every request makes the averaging window the
+# gap between polls — 0.0 at boot, noise under a refresh burst, and a second
+# client halves everyone's window. Rate-limit the actual read to once per
+# second and serve the cached value in between: the window is always >= 1s no
+# matter who polls or how often. First read after boot is None (widget shows
+# "--"). Nothing else in the process may call psutil.cpu_percent().
+_CPU_MIN_WINDOW = 1.0
+_cpu_last_read = time.monotonic()
+_cpu_percent: float | None = None
+psutil.cpu_percent(interval=None)  # prime the counter; this read is always 0.0
+
+
+def _cpu_read() -> float | None:
+    global _cpu_last_read, _cpu_percent
+    now = time.monotonic()
+    if now - _cpu_last_read >= _CPU_MIN_WINDOW:
+        _cpu_percent = psutil.cpu_percent(interval=None)
+        _cpu_last_read = now
+    return _cpu_percent
+
+
 @router.get("/api/system/stats")
 async def system_stats():
     """CPU + RAM for the bottom-bar monitor (polled every 2s)."""
     memory = psutil.virtual_memory()
     return {
         "cpu": {
-            "percent": psutil.cpu_percent(interval=None),
+            "percent": _cpu_read(),
             "cores": psutil.cpu_count(logical=False),
             "threads": psutil.cpu_count(logical=True),
         },

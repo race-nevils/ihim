@@ -9,6 +9,7 @@ helper cannot do this job: server.ps1's taskkill /T reaps its own helper
 sleep-defenses.md — this endpoint returned 200 and did nothing for 11 days).
 """
 
+import ctypes
 import logging
 import os
 import subprocess
@@ -66,25 +67,68 @@ async def health():
     return result
 
 
-# psutil.cpu_percent(interval=None) averages since the LAST call anywhere in
-# the process, so calling it on every request makes the averaging window the
-# gap between polls — 0.0 at boot, noise under a refresh burst, and a second
-# client halves everyone's window. Rate-limit the actual read to once per
-# second and serve the cached value in between: the window is always >= 1s no
-# matter who polls or how often. First read after boot is None (widget shows
-# "--"). Nothing else in the process may call psutil.cpu_percent().
+# Task Manager's CPU number is the '% Processor Utility' PDH counter —
+# frequency-normalized work, NOT busy-time (Microsoft KB3200459, since Win8).
+# psutil wraps GetSystemTimes busy-time, a different metric that visibly
+# disagrees with Task Manager on modern CPUs (psutil #2327/#2384), so the
+# widget must read the same counter Task Manager shows. psutil stays as the
+# fallback off-Windows or if PDH ever fails.
+#
+# Reads are rate-limited to >= 1s and cached in between: below one second the
+# busy/idle delta is scheduler-tick noise, and every extra poller would
+# otherwise shrink the shared measurement window (the original bug — bug note
+# 2026-08-10). First read after boot is None (widget shows "--"). Nothing
+# else in the process may call psutil.cpu_percent().
 _CPU_MIN_WINDOW = 1.0
+_PDH_FMT_DOUBLE = 0x200
 _cpu_last_read = time.monotonic()
 _cpu_percent: float | None = None
-psutil.cpu_percent(interval=None)  # prime the counter; this read is always 0.0
+psutil.cpu_percent(interval=None)  # prime the fallback; this read is always 0.0
+
+
+class _PdhValue(ctypes.Structure):
+    _fields_ = [("CStatus", ctypes.c_ulong), ("doubleValue", ctypes.c_double)]
+
+
+def _pdh_open():
+    """Open a PDH query on '% Processor Utility'; None off-Windows or on failure."""
+    if sys.platform != "win32":
+        return None
+    try:
+        pdh = ctypes.windll.pdh
+        query = ctypes.c_void_p()
+        counter = ctypes.c_void_p()
+        if pdh.PdhOpenQueryW(None, 0, ctypes.byref(query)):
+            return None
+        if pdh.PdhAddEnglishCounterW(
+                query, r"\Processor Information(_Total)\% Processor Utility",
+                0, ctypes.byref(counter)):
+            return None
+        pdh.PdhCollectQueryData(query)  # prime; a delta needs two collects
+        return pdh, query, counter
+    except Exception:
+        return None
+
+
+_PDH = _pdh_open()
 
 
 def _cpu_read() -> float | None:
     global _cpu_last_read, _cpu_percent
     now = time.monotonic()
-    if now - _cpu_last_read >= _CPU_MIN_WINDOW:
-        _cpu_percent = psutil.cpu_percent(interval=None)
-        _cpu_last_read = now
+    if now - _cpu_last_read < _CPU_MIN_WINDOW:
+        return _cpu_percent
+    _cpu_last_read = now
+    if _PDH is not None:
+        pdh, query, counter = _PDH
+        value = _PdhValue()
+        if (pdh.PdhCollectQueryData(query) == 0
+                and pdh.PdhGetFormattedCounterValue(
+                    counter, _PDH_FMT_DOUBLE, None, ctypes.byref(value)) == 0):
+            # Utility exceeds 100 under turbo; Task Manager caps the display
+            _cpu_percent = round(min(value.doubleValue, 100.0), 1)
+            return _cpu_percent
+    _cpu_percent = psutil.cpu_percent(interval=None)
     return _cpu_percent
 
 

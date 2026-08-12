@@ -2,7 +2,7 @@
 
 iHIM is a dashboard of custom apps.
 
-It's an Electron app that runs off a local Python server.
+It's an Electron app that runs off a local Python server. It's built for Windows: the lifecycle scripts are PowerShell, and the dictation hotkey and audio capture hook into Windows directly.
 
 Each app is a Web Component with an API behind it. Any local tool or script can live here. My dictation app, meeting recorder, and YouTube transcriber all run Whisper locally. Another app wraps the two scripts I use to move work between machines on an external drive.
 

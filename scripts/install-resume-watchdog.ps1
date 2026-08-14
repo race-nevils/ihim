@@ -32,7 +32,7 @@
 # SILENT VIA WSCRIPT WRAPPER (2026-07-27). Task Scheduler launching
 # powershell.exe (console subsystem) into the interactive session flashes a
 # conhost window before -WindowStyle Hidden can apply -- the recurring
-# terminal flash the operator ordered this same watchdog DELETED for on 2026-07-07
+# terminal flash this same watchdog was once deleted outright for
 # (bug note 2026-07-07_windowstyle-hidden-ignored-console-apps-stream-
 # redirection.md addendum, which also names the correct pattern). Both tasks
 # now run wscript.exe (GUI subsystem, no console ever) with a generated .vbs
@@ -122,7 +122,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 3) `
     -StartWhenAvailable
 
-# Interactive-only principal: the server belongs to the operator's session (tray,
+# Interactive-only principal: the server belongs to the desktop session (tray,
 # hotkey, GPU); no stored credentials, no elevation.
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
 

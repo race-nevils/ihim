@@ -38,7 +38,7 @@ _STALE_AFTER_S = 2.0
 # With lock_key == stop_key the action is a toggle, so a phantom/duplicate
 # press (the pynput hook emits these under heavy load — e.g. the GPU model
 # load during a cold-start warm-up) double-toggles lock → stop and ends the
-# dictation the instant it locks. the operator never toggles this fast on purpose.
+# dictation the instant it locks. Nobody toggles this fast on purpose.
 _TOGGLE_DEBOUNCE_S = 0.4
 
 

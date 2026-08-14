@@ -330,7 +330,8 @@ async def cancel_job(job_id: str, request: Request):
 @router.delete("/jobs/{job_id}", response_model=DeleteResponse)
 async def delete_job(job_id: str, request: Request):
     """Remove a job's record, segment stream, AND its transcript .txt in
-    yt-transcriptions/. Note a `duplicate`
+    yt-transcriptions/. The widget's × is a real delete-off-disk, confirm-gated
+    in the UI, not a hide. Note a `duplicate`
     job shares its txt_file with the original job — deleting either record
     removes the one shared file."""
     if not JOB_ID_RE.match(job_id):

@@ -291,7 +291,7 @@ class STTEngine:
         """Mute for a dictation (if enabled) / undo only a mute we applied.
 
         The _muted_by_us guard means unmute paths (release, error, toggle-off)
-        never touch a mute the operator set himself outside the dictation flow.
+        never touch a mute set by hand outside the dictation flow.
         """
         if mute:
             if not self.mute_on_dictate:

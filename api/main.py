@@ -157,7 +157,7 @@ def _remove_pid_file() -> None:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="iHIM", description="the operator's command center", lifespan=lifespan)
+    app = FastAPI(title="iHIM", description="Personal command center", lifespan=lifespan)
 
     origins = [o.strip() for o in os.environ.get(
         "IHIM_CORS_ORIGINS",

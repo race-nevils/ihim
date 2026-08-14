@@ -168,8 +168,8 @@ def _launch_operator_script(request: Request, filename: str, label: str):
     nothing more. The scripts are interactive (progress output + a final
     pause), so they MUST get a visible console and their output must never be
     captured; CREATE_NEW_CONSOLE gives the child a fresh console even though
-    this server runs windowless. Fire-and-forget: the operator watches the
-    console, not the API response."""
+    this server runs windowless. Fire-and-forget: the console is where the
+    progress shows, not the API response."""
     if sys.platform != "win32":
         return problem(501, f"{label} is only supported on Windows",
                        instance=request.url.path)

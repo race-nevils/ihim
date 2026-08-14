@@ -16,7 +16,8 @@
  *       }
  *   }
  *
- * Window chrome is the STANDARD TITLEBAR: one bare strip, controls only (− □ ✕) — no icon,
+ * Window chrome is the STANDARD TITLEBAR, the same one the OS shell's
+ * windows use: one bare strip, controls only (− □ ✕) — no icon,
  * no title text. IhimPanel injects it; subclasses never author their own
  * header. Window identity lives on the taskbar chip + control aria-labels.
  * A subclass element marked [data-titlebar-slot] (e.g. stt's status
@@ -48,7 +49,8 @@ import { persist, unpersist } from '../ui-state.js';
 let topZ = 100;
 
 // 1px-stroke glyphs matching the native Windows caption cluster in the
-// shell's title strip
+// shell's title strip. Text glyphs read as cramped here; these match the
+// homepage title bar's buttons.
 const GLYPHS = {
     min: '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor" fill="none"/></svg>',
     max: '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" fill="none"/></svg>',
@@ -107,7 +109,7 @@ export class IhimPanel extends HTMLElement {
         }
     }
 
-    // Standard window chrome:
+    // Standard window chrome, shared with the OS shell's own windows:
     // one bare strip, controls only. Skipped if the subclass already has one
     // (re-connect after a DOM move).
     _buildTitlebar() {

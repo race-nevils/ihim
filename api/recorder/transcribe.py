@@ -519,7 +519,7 @@ def merge_transcripts(
 def format_transcript(segments: list[dict]) -> str:
     """Format merged segments into human-readable dialogue.
 
-    Example: [the operator 0:00]: Hello there
+    Example: [Me 0:00]: Hello there
              [Other 0:03]: Hey, how's it going?
     """
     lines = []
@@ -534,7 +534,7 @@ def format_transcript(segments: list[dict]) -> str:
 def transcribe_dual(
     mic_wav: Path,
     sys_wav: Path,
-    mic_label: str = "the operator",
+    mic_label: str = "Me",
     sys_label: str = "Other",
     model_size: str = "small",
     initial_prompt: Optional[str] = None,

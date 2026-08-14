@@ -50,8 +50,8 @@ def _deep_merge(base: dict, override: dict) -> dict:
 def load_config() -> dict:
     """Load config from stt_bar.json, falling back to defaults.
 
-    Creates stt_bar.json with defaults on first run so the operator can
-    easily customize hotkeys/timeouts/appearance.
+    Creates stt_bar.json with defaults on first run so hotkeys, timeouts
+    and appearance are easy to customize.
     """
     if CONFIG_PATH.exists():
         try:

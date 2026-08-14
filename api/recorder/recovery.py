@@ -12,6 +12,8 @@ import shutil
 import wave
 from pathlib import Path
 
+from api.preferences import owner_name
+
 logger = logging.getLogger(__name__)
 
 TARGET_RATE = 16000
@@ -91,7 +93,7 @@ def _recover_recording(rec_dir: Path, manifest: dict, recordings_dir: Path) -> d
             "mic_device": manifest.get("mic_device", "unknown"),
             "sys_device": manifest.get("sys_device", "unknown"),
         },
-        "speakers": {"mic": "the operator", "system": "Other"},
+        "speakers": {"mic": owner_name(), "system": "Other"},
         "segments": [],
         "transcript": "",
         "wav_mic": mic_path.name,

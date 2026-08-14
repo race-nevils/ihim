@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-# Transcript filenames and headers show the operator's local time; the sidecar's
+# Transcript filenames and headers show the machine's local time; the sidecar's
 # stored ISO timestamps stay UTC (iHIM standard).
 CENTRAL_TZ = ZoneInfo("America/Chicago")
 
@@ -34,6 +34,11 @@ def _to_central(dt):
 # and PYTHONPATH is unset, so `import api` fails without this. parents[2] of
 # IHIM/api/recorder/transcribe_worker.py is the IHIM root.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+# Imported AFTER the sys.path fix above, not with the stdlib imports at the top:
+# this module runs as a standalone script, so `api` is not importable until that
+# line executes.
+from api.preferences import owner_name  # noqa: E402
 
 
 def _update_sidecar(sidecar_path: Path, updates: dict) -> dict:
@@ -180,7 +185,7 @@ def main():
     model_size = task.get("model_size", "small")
     initial_prompt = task.get("initial_prompt")
     sys_label = task.get("sys_label", "Other")
-    mic_label = task.get("mic_label", "the operator")
+    mic_label = task.get("mic_label") or owner_name()
     recordings_dir = Path(task["recordings_dir"])
     brain_dir = Path(task["brain_dir"])
 
@@ -242,7 +247,7 @@ def main():
 
         if merged:
             try:
-                # Name the transcript for a human: the person the operator met with
+                # Name the transcript for a human: the person on the other end
                 # (system channel) + the date. The WAVs and sidecar keep the
                 # timestamp id — they exist before any transcript does.
                 person = speakers.get("system") or sys_label

@@ -15,13 +15,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-# Recording IDs and transcript filenames are named in the operator's local time
+# Recording IDs and transcript filenames are named in the machine's local time
 # (stored ISO timestamps stay UTC per the iHIM standard). A late-evening
 # recording was landing on "tomorrow's" date under UTC naming.
 CENTRAL_TZ = ZoneInfo("America/Chicago")
 
 from fastapi import APIRouter, Request
 from api.errors import problem
+from api.preferences import owner_name
 
 from api.recorder.models import (
     StartRequest, StartResponse, StatusResponse, DevicesResponse, DeviceInfo,
@@ -253,7 +254,7 @@ async def recorder_stop(request: Request):
             "vocab_hotwords": False,
             "initial_prompt": initial_prompt,
         },
-        "speakers": {"mic": "the operator", "system": participant_name or "Other"},
+        "speakers": {"mic": owner_name(), "system": participant_name or "Other"},
         "segments": [],
         "transcript": "",
         "wav_mic": mic_path.name,
@@ -336,7 +337,7 @@ async def transcribe_recording(recording_id: str, request: Request):
     initial_prompt = config.get("initial_prompt")
     speakers = sidecar.get("speakers", {})
     sys_label = speakers.get("system", "Other")
-    mic_label = speakers.get("mic", "the operator")
+    mic_label = speakers.get("mic") or owner_name()
 
     # Write task JSON for the worker
     task = {
@@ -744,7 +745,7 @@ def _recover_interrupted_recordings() -> None:
                     "initial_prompt": None,
                 },
                 "speakers": {
-                    "mic": "the operator",
+                    "mic": owner_name(),
                     "system": (state.get("participant_name") if matches else None) or "Other",
                 },
                 "segments": [],

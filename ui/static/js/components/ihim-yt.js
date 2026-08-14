@@ -256,7 +256,7 @@ class IhimYt extends IhimPanel {
 
     async _copyJob(jobId, btn) {
         // Copies the transcript's absolute file path — pasteable straight
-        // into an agent harness session.
+        // into an agent session.
         try {
             const data = await this._fetchText(jobId);
             await navigator.clipboard.writeText(data.txt_path);

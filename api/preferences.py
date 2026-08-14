@@ -61,3 +61,18 @@ async def put_preferences(request: Request):
     merged = _deep_merge(_read_prefs(), body)
     _write_prefs(merged)
     return merged
+
+
+# Who the microphone belongs to. The recorder used to hardcode one person's
+# name as the mic speaker, which meant every transcript on every machine was
+# labelled with it. It is the symmetric twin of recorder.participant_name (the
+# person on the other end), and it reads from the same preferences file, so the
+# name lives in local data instead of the source.
+OWNER_FALLBACK = "Me"
+
+
+def owner_name() -> str:
+    """Display name for the mic channel, from recorder.owner_name."""
+    recorder = _read_prefs().get("recorder") or {}
+    name = recorder.get("owner_name")
+    return name.strip() if isinstance(name, str) and name.strip() else OWNER_FALLBACK

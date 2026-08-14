@@ -521,10 +521,17 @@ class IhimRecorder extends IhimPanel {
                 return;
             }
 
+            // Colour by ROLE, read from the recording's own speaker map - never
+            // by a hardcoded name. The mic label is whoever owns the machine, so
+            // matching a literal only ever worked for one person.
+            const micLabel = String(data.speakers?.mic || '').toLowerCase();
+            const sysLabel = String(data.speakers?.system || 'Other').toLowerCase();
+
             body.innerHTML = data.segments.map(seg => {
+                const raw = String(seg.speaker || 'Unknown').toLowerCase();
                 const speaker = escapeHtml(seg.speaker || 'Unknown');
-                const speakerClass = speaker.toLowerCase() === 'owner' ? 'speaker-mic' :
-                                     speaker.toLowerCase() === 'other' ? 'speaker-other' : 'speaker-default';
+                const speakerClass = micLabel && raw === micLabel ? 'speaker-mic' :
+                                     raw === sysLabel || raw === 'other' ? 'speaker-other' : 'speaker-default';
                 const start = formatSegmentTime(seg.start);
                 const end = formatSegmentTime(seg.end);
                 return `<div class="recorder-segment">

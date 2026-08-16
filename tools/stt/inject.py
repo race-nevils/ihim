@@ -48,7 +48,12 @@ def _clipboard_set(text: str) -> bool:
         win32clipboard.OpenClipboard()
         try:
             win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardData(win32con.CF_UNICODETEXT, text)
+            # SetClipboardText, never SetClipboardData(CF_UNICODETEXT, str):
+            # pywin32 coerces an all-digit str to an int and hands it to
+            # Windows as a raw HGLOBAL -> 0xC0000374 heap-corruption kill with
+            # no Python traceback (pywin32 #2132; took the server down
+            # 2026-08-16 restoring a phone number from the clipboard).
+            win32clipboard.SetClipboardText(text, win32con.CF_UNICODETEXT)
         finally:
             win32clipboard.CloseClipboard()
         return True
